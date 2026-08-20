@@ -1,1 +1,2 @@
-// Stub for now — replace with real DB access when Supabase is configured
+// Stub — replace with real Drizzle client when Supabase is configured
+export const db = undefined as any; // Stubs the db export for build compatibility

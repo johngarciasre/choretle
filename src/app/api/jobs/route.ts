@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getJobsByList, createJob, updateJob } from "@/lib/db/service";
 
-// Stub — replace with real DB access when Supabase is configured
 export async function GET(request: NextRequest) {
-  return NextResponse.json([]);
+  const listId = request.headers.get("x-list-id") || "";
+  const jobs = await getJobsByList(listId);
+  return NextResponse.json(jobs);
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  return NextResponse.json({ id: crypto.randomUUID(), ...body });
+  const job = await createJob(body);
+  return NextResponse.json(job);
 }
 
 export async function PUT(request: NextRequest) {
-  return NextResponse.json({ success: true });
-}
-
-export async function DELETE(request: NextRequest) {
-  return NextResponse.json({ success: true });
+  const { id, status } = await request.json();
+  const job = await updateJob(id, { status });
+  return NextResponse.json(job);
 }

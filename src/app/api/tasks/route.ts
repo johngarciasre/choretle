@@ -1,19 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getTasksByFamily, createTask, updateTask, deleteTask } from "@/lib/db/service";
 
-// Stub — replace with real DB access when Supabase is configured
 export async function GET(request: NextRequest) {
-  return NextResponse.json([]);
+  const familyId = request.headers.get("x-family-id") || "";
+  const tasks = await getTasksByFamily(familyId);
+  return NextResponse.json(tasks);
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  return NextResponse.json({ id: crypto.randomUUID(), ...body });
+  const task = await createTask(body);
+  if (!task) throw new Error("Failed to create task");
+  return NextResponse.json(task);
 }
 
 export async function PUT(request: NextRequest) {
-  return NextResponse.json({ success: true });
+  const { id, ...updates } = await request.json();
+  const task = await updateTask(id, updates);
+  return NextResponse.json(task);
 }
 
 export async function DELETE(request: NextRequest) {
+  const { id } = await request.json();
+  await deleteTask(id);
   return NextResponse.json({ success: true });
 }

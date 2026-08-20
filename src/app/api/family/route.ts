@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createFamily } from "@/lib/db/service";
 
-// Stub — replace with real DB access when Supabase is configured
 export async function POST(request: NextRequest) {
   const { name, weekStartDay = 0 } = await request.json();
-  return NextResponse.json({ id: crypto.randomUUID(), name });
+  const family = await createFamily({ name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 50), weekStartDay });
+  if (!family) throw new Error("Failed to create family");
+  return NextResponse.json(family);
 }
