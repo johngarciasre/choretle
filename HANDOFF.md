@@ -107,12 +107,16 @@ src/
 5. **SQLite in-memory only** — Data doesn't persist across requests during development (by design).
 
 ### Next Steps
-1. **Integration tests** ✅ — Fixed by rewriting to use raw better-sqlite3 queries directly (avoided Drizzle ORM infinite recursion bug). All 127 tests passing.
+1. **Integration tests** ✅ — Fixed by rewriting to use raw better-sqlite3 queries directly (avoids Drizzle ORM infinite recursion bug). All 127 tests passing.
 2. **Error handling** ✅ — All API routes have try/catch with proper status codes.
-3. **Auth middleware** ✅ — Implemented JWT token generation/signin/signup with cookie-based auth; middleware verifies tokens and rejects unauthenticated requests (401 for API, redirect for pages).
-4. **Swap UI completion** ❌ — Rotation dropdowns still need `/api/swap-meet` GET endpoint to fetch available rotations per slate, then wire up the form.
+3. **Auth middleware** ✅ — Supabase Auth middleware now enforces JWT/session tokens on all `/api/*` routes. Replaced custom JWT system (`src/lib/auth.ts`) with `@supabase/ssr` Edge-compatible client. Signin/signup/signout routes updated.
+4. **Swap UI completion** ✅ — Rotation dropdowns wired to real API data via `/api/swap-meet`; share slate functionality added with modal; POST creates `swap_meet` entries.
 5. **SQLite persistence** ✅ — Replaced `:memory:` with file-based SQLite (`process.cwd()/.choretle-dev.sqlite`). Configure via `SQLITE_PATH` env var.
-6. **Deployment** ✅ — `.env.local` updated with clear production deployment notes and JWT_SECRET requirement.
+6. **Deployment** ✅ — `.env.local` updated with clear instructions for Supabase deployment and credentials. Removed JWT_SECRET requirement.
+7. **Reports API** ✅ — Implemented all 5 report types (daily, done, task, member, wallboard) with real data queries via Drizzle ORM.
+8. **User Profile View** ✅ — Fetches user's assigned slates, active lists, current score, completed jobs with category info and streaks.
+9. **Task/Job View Details** ✅ — Task view shows name/details/status change affordance/comments/history; Job view shows truncated task info with workflow controls and auto-point awarding on completion.
+10. **Team Management UI/API** ✅ — Teams can be created/assigned users/toggled; API endpoints for team creation, member assignment, and family settings updates.
 
 ### Commands Reference
 ```bash
