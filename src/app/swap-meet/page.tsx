@@ -1,20 +1,79 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
-interface SwapMeetItem {
-  id: string;
-  slateName: string;
-  sharingFamily: string;
-  status: string;
+interface RotationAssignment {
+  date: string;
+  userId: string;
+  isCurrent?: boolean;
+}
+
+interface SlateSchedule {
+  slateId: string;
+  assignments: RotationAssignment[];
 }
 
 export default function SwapMeetPage() {
-  const [items, setItems] = useState<SwapMeetItem[]>([
-    { id: "1", slateName: "Kitchen Cleanup", sharingFamily: "Smith Family", status: "available" },
-    { id: "2", slateName: "Weekly Chores", sharingFamily: "Johnson Family", status: "available" },
-  ]);
+  const [schedule, setSchedule] = useState<SlateSchedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [familyId, setFamilyId] = useState("");
+  const [daysAhead, setDaysAhead] = useState(30);
+
+  useEffect(() => {
+    const storedFamilyId = typeof window !== "undefined" && localStorage.getItem("familyId");
+    if (storedFamilyId) {
+      setFamilyId(storedFamilyId);
+      fetchSchedule(storedFamilyId, daysAhead);
+    } else {
+      setLoading(false);
+    }
+  }, [daysAhead]);
+
+  const fetchSchedule = async (fid: string, days: number) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/swap-meet?familyId=${fid}&daysAhead=${days}`);
+      const data = await response.json();
+      setSchedule(data.assignments || []);
+    } catch (error) {
+      console.error("Failed to fetch rotation schedule:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!familyId) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
+        <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Choretle</h1>
+          <div className="flex gap-4">
+            <Link href="/dashboard" className="hover:underline">Dashboard</Link>
+            <Link href="/swap-meet" className="hover:underline text-indigo-600 font-semibold">Swap Meet</Link>
+          </div>
+        </nav>
+
+        <main className="max-w-xl mx-auto p-8 space-y-4">
+          <h2 className="text-xl font-semibold mb-4">Set Your Family ID</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">Enter your family ID to view your rotation schedule.</p>
+          <input
+            type="text"
+            value={familyId}
+            onChange={(e) => setFamilyId(e.target.value)}
+            placeholder="Enter family ID"
+            className="border p-2 rounded w-full mb-4"
+          />
+          <button
+            onClick={() => familyId && fetchSchedule(familyId, daysAhead)}
+            className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+          >
+            Load Schedule
+          </button>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
@@ -26,25 +85,94 @@ export default function SwapMeetPage() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
+      <main className="max-w-7xl mx-auto p-8 space-y-4">
         <section>
-          <h2 className="text-xl font-semibold mb-4">Swap Meet Marketplace</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">Browse and share slates with other families.</p>
-          {items.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400">No slates available for sharing.</p>
+          <h2 className="text-xl font-semibold mb-4">Rotation Schedule</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">View your upcoming chore assignments and swap with others.</p>
+
+          {/* Days selector */}
+          <div className="mb-4 flex gap-2">
+            {[7, 14, 30, 60].map((days) => (
+              <button
+                key={days}
+                onClick={() => fetchSchedule(familyId, days)}
+                className={`px-3 py-1 rounded ${days === daysAhead ? "bg-indigo-600 text-white" : "bg-gray-200 dark:bg-gray-700"}`}
+              >
+                {days} days
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <p className="text-gray-500 dark:text-gray-400">Loading schedule...</p>
+          ) : schedule.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400">No rotation schedule found. Set up rotations in your family settings.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map((item) => (
-                <div key={item.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                  <h3 className="font-semibold">{item.slateName}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Shared by {item.sharingFamily}</p>
-                  <span className={`inline-block mt-2 px-2 py-1 rounded-full text-xs font-semibold ${item.status === "available" && "bg-green-100 dark:bg-green-900 text-green-600"}`}>
-                    {item.status}
-                  </span>
+            schedule.map((slate) => (
+              <div key={slate.slateId} className="mb-6 bg-white/90 dark:bg-gray-800 p-4 rounded-lg shadow">
+                <h3 className="font-semibold mb-2">Slate: {slate.slateId}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-7 lg:grid-cols-10 gap-1">
+                  {slate.assignments.map((assignment, index) => (
+                    <div
+                      key={index}
+                      className={`p-2 rounded text-center text-xs ${
+                        assignment.isCurrent
+                          ? "bg-indigo-100 dark:bg-indigo-900 border-2 border-indigo-500"
+                          : "bg-gray-100 dark:bg-gray-700"
+                      }`}
+                    >
+                      <div className="font-semibold">{assignment.date}</div>
+                      <div>{assignment.userId}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
+        </section>
+
+        {/* Swap section */}
+        <section className="mt-8">
+          <h2 className="text-xl font-semibold mb-4">Swap Assignments</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">Select two rotation entries to swap between users.</p>
+
+          <div className="bg-white/90 dark:bg-gray-800 p-4 rounded-lg shadow space-y-2">
+            <div>
+              <label className="block text-sm font-medium mb-1">Family ID</label>
+              <input
+                type="text"
+                value={familyId}
+                onChange={(e) => setFamilyId(e.target.value)}
+                className="border p-2 rounded w-full max-w-md"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Slate ID</label>
+              <select className="border p-2 rounded w-full max-w-md">
+                {schedule.map((slate) => (
+                  <option key={slate.slateId} value={slate.slateId}>
+                    Slate: {slate.slateId}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Rotation 1</label>
+                <input type="text" placeholder="Rotation ID" className="border p-2 rounded w-full max-w-md" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Rotation 2</label>
+                <input type="text" placeholder="Rotation ID" className="border p-2 rounded w-full max-w-md" />
+              </div>
+            </div>
+
+            <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mt-2">
+              Swap
+            </button>
+          </div>
         </section>
       </main>
     </div>

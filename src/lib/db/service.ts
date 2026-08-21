@@ -664,3 +664,103 @@ export async function getWeeklyPoints(userId: string) {
       points: j.points || 0,
     }));
 }
+
+// ─── Swap/Trade Rotations ─────────────────────────────────────────────
+
+export async function swapRotationEntries(
+  familyId: string,
+  rotationId1: string,
+  rotationId2: string,
+  userId?: string,
+): Promise<any> {
+  const db = await ensureDb();
+  if (!db) return null;
+
+  const rotation1 = await safeQuery(
+    db.select().from(schema.rotations).where({ id: rotationId1 }).first()
+  );
+  const rotation2 = await safeQuery(
+    db.select().from(schema.rotations).where({ id: rotationId2 }).first()
+  );
+
+  if (!rotation1 || !rotation2) return null;
+
+  // Verify both rotations belong to the same slate
+  if ((rotation1 as any).slateId !== (rotation2 as any).slateId) {
+    throw new Error("Cannot swap rotations from different slates");
+  }
+
+  // Swap the order values
+  const tempOrder = (rotation1 as any).order;
+  await db.update(schema.rotations)
+    .set({ order: (rotation2 as any).order })
+    .where({ id: rotationId1 });
+
+  await db.update(schema.rotations)
+    .set({ order: tempOrder })
+    .where({ id: rotationId2 });
+
+  // Create history entry
+  if (userId) {
+    await safeQuery(
+      db.insert(schema.jobHistory).values({
+        jobId: "swap",
+        action: "rotation_swap",
+        details: `Swapped rotation entries ${rotationId1} and ${rotationId2}`,
+        userId,
+      })
+    );
+  }
+
+  return { success: true };
+}
+
+export async function getRotationSchedule(
+  slateId: string,
+  startDate: Date,
+  endDate: Date,
+): Promise<any[]> {
+  const db = await ensureDb();
+  if (!db) return [];
+
+  const rotations = await safeQuery(
+    db.select().from(schema.rotations).where({ slateId })
+  );
+
+  if (!rotations || (rotations as any[]).length === 0) return [];
+
+  // Use pure rotation logic to calculate schedule
+  const { getRotationSchedule: getRotSchedule } = await import("@/lib/rotation");
+  return getRotSchedule(rotations as any[], slateId, startDate, endDate);
+}
+
+export async function getUpcomingAssignments(
+  familyId: string,
+  daysAhead: number = 30,
+): Promise<any[]> {
+  const db = await ensureDb();
+  if (!db) return [];
+
+  const slates = await safeQuery(
+    db.select().from(schema.slates).where({ familyId })
+  );
+
+  if (!slates || (slates as any[]).length === 0) return [];
+
+  const schedule: any[] = [];
+  const today = new Date();
+
+  for (const slate of slates as any[]) {
+    const rotations = await safeQuery(
+      db.select().from(schema.rotations).where({ slateId: (slate as any).id })
+    );
+
+    if (!rotations || (rotations as any[]).length === 0) continue;
+
+    const { getUpcomingAssignments: getUpcoming } = await import("@/lib/rotation");
+    const upcoming = getUpcoming(rotations as any[], (slate as any).id, today, daysAhead);
+    schedule.push({ slateId: (slate as any).id, assignments: upcoming });
+  }
+
+  return schedule;
+}
