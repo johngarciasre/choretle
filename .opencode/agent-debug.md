@@ -3,7 +3,7 @@
 ## Current Status (after restart)
 - **code-writer IS registered** in `opencode agent list` — confirmed at the bottom of the output
 - **Mode**: subagent ✓
-- **Model**: unsloth-local/unsloth/Qwen3.5-9B-MTP-GGGUF
+- **Model**: unsloth-local/unsloth/Qwen3.5-9B-MTP-GGUF
 - **Permissions**: All tools enabled ✓
 
 ## Problem
