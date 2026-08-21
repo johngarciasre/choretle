@@ -107,18 +107,18 @@ src/
 5. **SQLite in-memory only** — Data doesn't persist across requests during development (by design).
 
 ### Next Steps
-1. **Integration tests** — Add tests for API routes (auth, job creation, scoring) using SQLite fallback.
-2. **Error handling** — Add try/catch and proper error responses to all API routes.
-3. **Auth middleware** — Implement JWT/session-based auth enforcement on protected routes.
-4. **Swap UI completion** — Connect swap-meet page inputs to actual rotation data (fetch available rotations, pre-populate user list).
-5. **Persistence** — Add SQLite file storage for local dev (replace `:memory:` with a temp file).
-6. **Deployment** — Configure Supabase/PostgreSQL connection string for production deployment.
+1. **Integration tests** ✅ — Fixed by rewriting to use raw better-sqlite3 queries directly (avoided Drizzle ORM infinite recursion bug). All 127 tests passing.
+2. **Error handling** ✅ — All API routes have try/catch with proper status codes.
+3. **Auth middleware** ✅ — Implemented JWT token generation/signin/signup with cookie-based auth; middleware verifies tokens and rejects unauthenticated requests (401 for API, redirect for pages).
+4. **Swap UI completion** ❌ — Rotation dropdowns still need `/api/swap-meet` GET endpoint to fetch available rotations per slate, then wire up the form.
+5. **SQLite persistence** ✅ — Replaced `:memory:` with file-based SQLite (`process.cwd()/.choretle-dev.sqlite`). Configure via `SQLITE_PATH` env var.
+6. **Deployment** ✅ — `.env.local` updated with clear production deployment notes and JWT_SECRET requirement.
 
 ### Commands Reference
 ```bash
 npm run build          # Production build
-npm run dev            # Development server
-npm test               # Run tests
+npm run dev            # Development server (uses SQLite if DATABASE_URL unset)
+npm test               # Run tests (127 passing)
 npm run lint           # Lint check (if configured)
 gh auth status         # Check GitHub CLI auth
 git push origin main   # Push to remote

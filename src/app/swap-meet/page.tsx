@@ -14,11 +14,24 @@ interface SlateSchedule {
   assignments: RotationAssignment[];
 }
 
+interface RotationEntry {
+  id: string;
+  userId: string;
+  order: number;
+  isActive: boolean;
+}
+
 export default function SwapMeetPage() {
   const [schedule, setSchedule] = useState<SlateSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [familyId, setFamilyId] = useState("");
   const [daysAhead, setDaysAhead] = useState(30);
+
+  // Swap UI state
+  const [selectedSlateId, setSelectedSlateId] = useState("");
+  const [rotation1Id, setRotation1Id] = useState("");
+  const [rotation2Id, setRotation2Id] = useState("");
+  const [rotations, setRotations] = useState<RotationEntry[]>([]);
 
   useEffect(() => {
     const storedFamilyId = typeof window !== "undefined" && localStorage.getItem("familyId");
@@ -36,10 +49,67 @@ export default function SwapMeetPage() {
       const response = await fetch(`/api/swap-meet?familyId=${fid}&daysAhead=${days}`);
       const data = await response.json();
       setSchedule(data.assignments || []);
+
+      // Fetch rotations for the swap UI
+      if (data.assignments?.length > 0) {
+        const slateId = data.assignments[0].slateId;
+        const rotResponse = await fetch(`/api/swap-meet?familyId=${fid}&slateId=${slateId}`);
+        // Use the GET endpoint to get rotations
+      }
     } catch (error) {
       console.error("Failed to fetch rotation schedule:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSlateSelect = async (slateId: string) => {
+    setSelectedSlateId(slateId);
+    try {
+      const response = await fetch(`/api/swap-meet?familyId=${familyId}&slateId=${slateId}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      // Fetch rotations for this slate
+      const rotResponse = await fetch(`/api/family?${new URLSearchParams({ id: familyId })}`);
+      if (rotations.length === 0) {
+        // Placeholder until we have rotation data
+      }
+    } catch (error) {
+      console.error("Failed to fetch rotations:", error);
+    }
+  };
+
+  const handleSwap = async () => {
+    if (!selectedSlateId || !rotation1Id || !rotation2Id) {
+      alert("Please select a slate and two rotation entries to swap.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/swap-meet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          familyId,
+          slateId: selectedSlateId,
+          rotationId1: rotation1Id,
+          rotationId2: rotation2Id,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        alert("Rotations swapped successfully!");
+        fetchSchedule(familyId, daysAhead);
+        // Reset form
+        setRotation1Id("");
+        setRotation2Id("");
+      } else {
+        alert(data.error || "Failed to swap rotations.");
+      }
+    } catch (error) {
+      console.error("Swap failed:", error);
+      alert("An error occurred while swapping rotations.");
     }
   };
 
@@ -148,8 +218,13 @@ export default function SwapMeetPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Slate ID</label>
-              <select className="border p-2 rounded w-full max-w-md">
+              <label className="block text-sm font-medium mb-1">Slate</label>
+              <select
+                value={selectedSlateId}
+                onChange={(e) => handleSlateSelect(e.target.value)}
+                className="border p-2 rounded w-full max-w-md"
+              >
+                <option value="">Select a slate...</option>
                 {schedule.map((slate) => (
                   <option key={slate.slateId} value={slate.slateId}>
                     Slate: {slate.slateId}
@@ -161,15 +236,31 @@ export default function SwapMeetPage() {
             <div className="flex gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Rotation 1</label>
-                <input type="text" placeholder="Rotation ID" className="border p-2 rounded w-full max-w-md" />
+                <input
+                  type="text"
+                  value={rotation1Id}
+                  onChange={(e) => setRotation1Id(e.target.value)}
+                  placeholder="Enter rotation ID 1"
+                  className="border p-2 rounded w-full max-w-md"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Rotation 2</label>
-                <input type="text" placeholder="Rotation ID" className="border p-2 rounded w-full max-w-md" />
+                <input
+                  type="text"
+                  value={rotation2Id}
+                  onChange={(e) => setRotation2Id(e.target.value)}
+                  placeholder="Enter rotation ID 2"
+                  className="border p-2 rounded w-full max-w-md"
+                />
               </div>
             </div>
 
-            <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mt-2">
+            <button
+              onClick={handleSwap}
+              disabled={!selectedSlateId || !rotation1Id || !rotation2Id}
+              className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mt-2 disabled:opacity-50"
+            >
               Swap
             </button>
           </div>

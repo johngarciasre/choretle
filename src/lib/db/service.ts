@@ -26,7 +26,8 @@ export { canTransition, getValidNextStatuses, calculateJobPoints };
 async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | null> {
   try {
     return await query;
-  } catch {
+  } catch (error) {
+    console.error("safeQuery failed:", error);
     return null;
   }
 }
@@ -451,6 +452,7 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
 
   const currentStatus = (job as any).status;
   if (!canTransition(currentStatus, newStatus)) {
+    console.error(`Invalid job transition: ${currentStatus} -> ${newStatus} for job ${id}`);
     throw new Error(`Invalid transition from "${currentStatus}" to "${newStatus}"`);
   }
 
@@ -465,7 +467,11 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
   );
 
   if (updatedJob) {
-    _createJobHistory(id, "status_change", `Status changed from "${currentStatus}" to "${newStatus}"`, userId);
+    try {
+      _createJobHistory(id, "status_change", `Status changed from "${currentStatus}" to "${newStatus}"`, userId);
+    } catch (historyErr) {
+      console.error("Failed to write job history:", historyErr);
+    }
   }
 
   return updatedJob;
@@ -487,29 +493,36 @@ export async function completeJob(id: string, userId?: string) {
     await transitionJob(id, "done", userId);
   }
 
-  // Mark all uncompleted job subtasks as completed
-  const now = new Date();
-  await db.update(schema.jobSubtasks)
-    .set({ completedAt: now })
-    .where(and(eq(schema.jobSubtasks.jobId, id), sql`${schema.jobSubtasks.completedAt} IS NULL`));
+  try {
+    // Mark all uncompleted job subtasks as completed
+    const now = new Date();
+    await db.update(schema.jobSubtasks)
+      .set({ completedAt: now })
+      .where(and(eq(schema.jobSubtasks.jobId, id), sql`${schema.jobSubtasks.completedAt} IS NULL`));
 
-  // Fetch all completed subtasks for this job to calculate points
-  const completedSubtasks = await safeQuery(
-    db.select().from(schema.jobSubtasks).where({ jobId: id })
-  );
-
-  // Calculate total points: base job points + completed subtask points
-  const totalPoints = calculateJobPoints(job as any, (completedSubtasks as any[]) || []);
-
-  // Award points to user if userId provided
-  if (userId && totalPoints > 0) {
-    const user = await safeQuery(
-      db.select().from(schema.users).where({ id: userId }).first()
+    // Fetch all completed subtasks for this job to calculate points
+    const completedSubtasks = await safeQuery(
+      db.select().from(schema.jobSubtasks).where({ jobId: id })
     );
-    if (user) {
-      const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
-      await db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId });
+
+    // Calculate total points: base job points + completed subtask points
+    const totalPoints = calculateJobPoints(job as any, (completedSubtasks as any[]) || []);
+
+    // Award points to user if userId provided
+    if (userId && totalPoints > 0) {
+      const user = await safeQuery(
+        db.select().from(schema.users).where({ id: userId }).first()
+      );
+      if (user) {
+        const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
+        await safeQuery(
+          db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId })
+        );
+      }
     }
+  } catch (error) {
+    console.error("completeJob failed:", error);
+    throw error;
   }
 
   return job;
@@ -530,44 +543,53 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
   const db = await ensureDb();
   if (!db) return 0;
 
-  // Get the job to check its status
-  const job = await safeQuery(
-    db.select().from(schema.jobs).where({ id: jobId }).first()
-  );
-  if (!job) return 0;
-
-  // Subtasks can only be completed on active jobs (status !== "done")
-  if ((job as any).status === "done") {
-    throw new Error("Cannot complete subtask for a job that is already done");
-  }
-
-  // Get the subtask record to find its points
-  const subtaskRecord = await safeQuery(
-    db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.id, id), eq(schema.jobSubtasks.jobId, jobId))).first()
-  );
-  if (!subtaskRecord) return 0;
-
-  // Get the points to award
-  const pointsAwarded = (subtaskRecord as any).pointsAwarded || 0;
-
-  // Mark as completed
-  await db.update(schema.jobSubtasks).set({ completedAt: new Date() }).where({ id });
-
-  // Create history entry
-  _createJobHistory(jobId, "subtask_completed", `Subtask ${id} completed, ${pointsAwarded} points awarded`, userId);
-
-  // Award points to user if userId provided
-  if (userId && pointsAwarded > 0) {
-    const user = await safeQuery(
-      db.select().from(schema.users).where({ id: userId }).first()
+  try {
+    // Get the job to check its status
+    const job = await safeQuery(
+      db.select().from(schema.jobs).where({ id: jobId }).first()
     );
-    if (user) {
-      const newTotal = ((user as any).pointsTotal || 0) + pointsAwarded;
-      await db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId });
-    }
-  }
+    if (!job) return 0;
 
-  return pointsAwarded;
+    // Subtasks can only be completed on active jobs (status !== "done")
+    if ((job as any).status === "done") {
+      throw new Error("Cannot complete subtask for a job that is already done");
+    }
+
+    // Get the subtask record to find its points
+    const subtaskRecord = await safeQuery(
+      db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.id, id), eq(schema.jobSubtasks.jobId, jobId))).first()
+    );
+    if (!subtaskRecord) return 0;
+
+    // Get the points to award
+    const pointsAwarded = (subtaskRecord as any).pointsAwarded || 0;
+
+    // Mark as completed
+    await safeQuery(
+      db.update(schema.jobSubtasks).set({ completedAt: new Date() }).where({ id })
+    );
+
+    // Create history entry
+    _createJobHistory(jobId, "subtask_completed", `Subtask ${id} completed, ${pointsAwarded} points awarded`, userId);
+
+    // Award points to user if userId provided
+    if (userId && pointsAwarded > 0) {
+      const user = await safeQuery(
+        db.select().from(schema.users).where({ id: userId }).first()
+      );
+      if (user) {
+        const newTotal = ((user as any).pointsTotal || 0) + pointsAwarded;
+        await safeQuery(
+          db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId })
+        );
+      }
+    }
+
+    return pointsAwarded;
+  } catch (error) {
+    console.error("completeSubtask failed:", error);
+    throw error;
+  }
 }
 
 // ─── Invites ────────────────────────────────────────────────────────
@@ -676,43 +698,57 @@ export async function swapRotationEntries(
   const db = await ensureDb();
   if (!db) return null;
 
-  const rotation1 = await safeQuery(
-    db.select().from(schema.rotations).where({ id: rotationId1 }).first()
-  );
-  const rotation2 = await safeQuery(
-    db.select().from(schema.rotations).where({ id: rotationId2 }).first()
-  );
-
-  if (!rotation1 || !rotation2) return null;
-
-  // Verify both rotations belong to the same slate
-  if ((rotation1 as any).slateId !== (rotation2 as any).slateId) {
-    throw new Error("Cannot swap rotations from different slates");
-  }
-
-  // Swap the order values
-  const tempOrder = (rotation1 as any).order;
-  await db.update(schema.rotations)
-    .set({ order: (rotation2 as any).order })
-    .where({ id: rotationId1 });
-
-  await db.update(schema.rotations)
-    .set({ order: tempOrder })
-    .where({ id: rotationId2 });
-
-  // Create history entry
-  if (userId) {
-    await safeQuery(
-      db.insert(schema.jobHistory).values({
-        jobId: "swap",
-        action: "rotation_swap",
-        details: `Swapped rotation entries ${rotationId1} and ${rotationId2}`,
-        userId,
-      })
+  try {
+    const rotation1 = await safeQuery(
+      db.select().from(schema.rotations).where({ id: rotationId1 }).first()
     );
-  }
+    const rotation2 = await safeQuery(
+      db.select().from(schema.rotations).where({ id: rotationId2 }).first()
+    );
 
-  return { success: true };
+    if (!rotation1 || !rotation2) return null;
+
+    // Verify both rotations belong to the same slate
+    if ((rotation1 as any).slateId !== (rotation2 as any).slateId) {
+      console.error(`Cannot swap rotations from different slates: ${rotationId1} vs ${rotationId2}`);
+      throw new Error("Cannot swap rotations from different slates");
+    }
+
+    // Swap the order values
+    const tempOrder = (rotation1 as any).order;
+    await safeQuery(
+      db.update(schema.rotations)
+        .set({ order: (rotation2 as any).order })
+        .where({ id: rotationId1 })
+    );
+
+    await safeQuery(
+      db.update(schema.rotations)
+        .set({ order: tempOrder })
+        .where({ id: rotationId2 })
+    );
+
+    // Create history entry
+    if (userId) {
+      try {
+        await safeQuery(
+          db.insert(schema.jobHistory).values({
+            jobId: "swap",
+            action: "rotation_swap",
+            details: `Swapped rotation entries ${rotationId1} and ${rotationId2}`,
+            userId,
+          })
+        );
+      } catch (historyErr) {
+        console.error("Failed to write swap history:", historyErr);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("swapRotationEntries failed:", error);
+    throw error;
+  }
 }
 
 export async function getRotationSchedule(

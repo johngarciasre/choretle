@@ -2,26 +2,53 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTasksByFamily, createTask, updateTask, deleteTask } from "@/lib/db/service";
 
 export async function GET(request: NextRequest) {
-  const familyId = request.headers.get("x-family-id") || "";
-  const tasks = await getTasksByFamily(familyId);
-  return NextResponse.json(tasks);
+  try {
+    const familyId = request.headers.get("x-family-id") || "";
+    if (!familyId) return NextResponse.json([]);
+    const tasks = await getTasksByFamily(familyId);
+    return NextResponse.json(tasks);
+  } catch (error) {
+    console.error("Get tasks failed:", error);
+    return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const task = await createTask(body);
-  if (!task) throw new Error("Failed to create task");
-  return NextResponse.json(task);
+  try {
+    const body = await request.json();
+    if (!body?.familyId || !body?.title) {
+      return NextResponse.json({ error: "familyId and title are required" }, { status: 400 });
+    }
+    const task = await createTask(body);
+    if (!task) throw new Error("Failed to create task");
+    return NextResponse.json(task);
+  } catch (error) {
+    console.error("Create task failed:", error);
+    return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
+  }
 }
 
 export async function PUT(request: NextRequest) {
-  const { id, ...updates } = await request.json();
-  const task = await updateTask(id, updates);
-  return NextResponse.json(task);
+  try {
+    const body = await request.json();
+    if (!body?.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    const task = await updateTask(body.id, body);
+    if (!task) throw new Error("Failed to update task");
+    return NextResponse.json(task);
+  } catch (error) {
+    console.error("Update task failed:", error);
+    return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
+  }
 }
 
 export async function DELETE(request: NextRequest) {
-  const { id } = await request.json();
-  await deleteTask(id);
-  return NextResponse.json({ success: true });
+  try {
+    const body = await request.json();
+    if (!body?.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    await deleteTask(body.id);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Delete task failed:", error);
+    return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
+  }
 }
