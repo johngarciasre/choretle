@@ -6,7 +6,7 @@ export function middleware(request: NextRequest) {
 
   // If user is not authenticated, redirect to sign-in
   if (!userId && !request.url.includes("/auth/")) {
-    return NextResponse.redirect("/auth/signin");
+    return NextResponse.redirect(new URL("/auth/signin", request.url));
   }
 
   // Pass the user ID to downstream handlers
