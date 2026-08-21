@@ -1,45 +1,133 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 
-export function middleware(request: NextRequest) {
-  const response = NextResponse.next();
-  
-  // Skip auth check for auth routes and static assets
-  if (request.url.includes("/auth/") || request.url.includes("/_next/")) {
-    return response;
+// ─── Protected Routes ──────────────────────────────────────────────────
+// These routes require authentication
+
+/**
+ * List of page routes that don't require authentication
+ */
+const PUBLIC_ROUTES = [
+  "/auth/signin",
+  "/auth/signup", 
+  "/family",
+  "/api/family/join",
+  "_next/static",
+  "_next/image",
+  "/favicon.ico",
+  "/manifest.json",
+  "/apple-touch-icon.png",
+];
+
+/**
+ * List of API routes that don't require authentication (public APIs)
+ */
+const PUBLIC_API_ROUTES = [
+  "/api/auth/signin",
+  "/api/auth/signup",
+  "/api/auth/signout",
+  "/api/family/join",
+  "/api/schedules/generate",
+];
+
+/**
+ * Middleware to protect routes and validate Supabase Auth sessions
+ */
+export async function middleware(request: NextRequest) {
+  const requestUrl = new URL(request.url);
+  const pathname = requestUrl.pathname;
+
+  // ─── Check if route is public ────────────────────────────────────────
+  const isPublicRoute = PUBLIC_ROUTES.some(route => pathname.startsWith(route));
+  const isPublicApiRoute = PUBLIC_API_ROUTES.some(route => pathname.startsWith(route));
+
+  if (isPublicRoute || isPublicApiRoute) {
+    return NextResponse.next();
   }
-  
-  // Get token from cookie
+
+  // ─── Initialize Supabase client ──────────────────────────────────────
+  // This extracts auth cookies from the request and creates a typed client
+  const supabase = await getSupabaseMiddlewareClient(request);
+
+  // ─── Get current session ──────────────────────────────────────────────
   let userId: string | null = null;
+  let familyId: string | null = null;
+
+  const { data: { session } } = await supabase.auth.getSession();
   
-  const token = request.cookies.get("auth-token")?.value;
-  if (token) {
-    try {
-      const parts = token.split(".");
-      if (parts.length === 3) {
-        // Decode JWT payload (base64url encoded)
-        const payload = Buffer.from(parts[1], "base64url").toString();
-        const decoded = JSON.parse(payload);
-        
-        // Check expiration
-        if (decoded.exp && decoded.exp > Date.now() / 1000) {
-          userId = decoded.userId;
-        }
-      }
-    } catch {
-      // Token invalid, continue without auth
+  if (session) {
+    userId = session.user.id;
+    familyId = session.user.user_metadata?.family_id || null;
+    
+    // Set auth headers for downstream API routes
+    const response = NextResponse.next();
+    if (userId) {
+      response.headers.set("x-user-id", userId);
     }
-  }
-  
-  if (userId) {
-    response.headers.set("x-user-id", userId);
+    if (familyId) {
+      response.headers.set("x-family-id", familyId);
+    }
+    
     return response;
   }
 
-  // No valid token - redirect to sign-in for page requests
-  // Return 401 for API requests
-  if (request.url.includes("/api/")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // ─── Session is missing or expired ──────────────────────────────────
+  
+  // For API routes, we need to decide: redirect or 401?
+  // - Auth endpoints should allow the request (they handle auth themselves)
+  // - Other public API routes should return 200
+  // - Protected routes should return 401
+  
+  const isApiRoute = pathname.startsWith("/api/");
+
+  if (isApiRoute) {
+    // Check if this is a protected API route (not in PUBLIC_API_ROUTES)
+    // If it's not public and user isn't authenticated, return 401
+    const isProtectedApi = !isPublicApiRoute;
+    
+    if (isProtectedApi) {
+      return NextResponse.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      );
+    }
+    
+    // This is a public API route, so we allow it but don't set auth headers
+    const response = NextResponse.next();
+    return response;
   }
 
-  return NextResponse.redirect(new URL("/auth/signin", request.url));
+  // ─── For page routes (non-API) ──────────────────────────────────────
+  // If not authenticated and not on a public route, redirect to sign in
+  
+  // Check if this is an auth-related page we should redirect to
+  const isAuthPage = pathname === "/auth/signin" || 
+                    pathname === "/auth/signup" ||
+                    pathname.startsWith("/auth/");
+
+  if (!isAuthPage && !isPublicRoute) {
+    // Redirect to sign in page
+    const signInUrl = new URL("/auth/signin", request.url);
+    return NextResponse.redirect(signInUrl);
+  }
+
+  // Allow the request but without auth headers (for public pages)
+  const response = NextResponse.next();
+  return response;
 }
+
+// ─── Route Matcher Configuration ────────────────────────────────────────
+// This tells Next.js which routes should be processed by this middleware
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     */
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
