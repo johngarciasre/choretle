@@ -1,17 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
+import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 
 /**
- * Sign up a new user with email and password using Supabase Auth
- * 
- * This endpoint:
- * 1. Creates a user account in Supabase Auth
- * 2. Sends a confirmation email (if email confirmation is enabled)
- * 3. Returns the session token for subsequent requests
+ * Sign up a new user with email and password using Supabase Auth.
+ * In dev mode (AUTH_MODE=dev), uses mock users instead.
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    
+    // ─── Dev Mode: Create mock user ────────────────────────
+    if (process.env.AUTH_MODE === "dev") {
+      const email = body?.email?.toLowerCase().trim() || "";
+      const name = body?.name || "Dev User";
+      
+      let userId = "dev-user-parent-001";
+      let role = "admin";
+      
+      if (email.includes("child")) {
+        userId = "dev-user-child-001";
+        role = "child";
+      } else if (!email.includes("parent")) {
+        // Default to parent/admin role
+        userId = "dev-user-parent-001";
+        role = "admin";
+      }
+
+      const session = createDevSession({ userId });
+
+      // Create response object to set headers on
+      const response = NextResponse.json(
+        { 
+          ok: true, 
+          userId: session.user.id,
+          email: session.user.email,
+          message: "Sign up successful (dev mode)",
+          requiresEmailConfirmation: false,
+        },
+        {
+          status: 200,
+          headers: {
+            "x-user-id": session.user.id,
+            "x-email": session.user.email || "",
+          }
+        }
+      );
+
+      // Set the dev session cookie so subsequent requests are authenticated
+      setDevSessionCookie(response.headers, session);
+
+      return response;
+    }
+
+    // ─── Production Mode: Use Supabase Auth ────────────────
     
     // Validate input
     if (!body?.email || !body?.password || !body?.name) {
@@ -124,10 +166,40 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET endpoint for sign-up page (returns the current session if logged in)
+ * GET endpoint for sign-up page (returns the current session if logged in).
+ * In dev mode, checks for dev session cookie.
  */
 export async function GET(request: NextRequest) {
   try {
+    // ─── Dev Mode: Check dev session cookie ────────────────
+    if (process.env.AUTH_MODE === "dev") {
+      const cookieHeader = request.headers.get("cookie") || "";
+      const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
+
+      if (!setCookie) {
+        return NextResponse.json({ authenticated: false });
+      }
+
+      const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
+      const user = parseDevSession(value);
+
+      if (user) {
+        return NextResponse.json({
+          authenticated: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            role: user.role || "child",
+            name: user.name || "",
+          },
+        });
+      }
+
+      return NextResponse.json({ authenticated: false });
+    }
+
+    // ─── Production Mode: Use Supabase Auth ────────────────
+    
     const supabase = await getSupabaseMiddlewareClient(request);
     
     // Get the current session

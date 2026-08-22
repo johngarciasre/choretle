@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
+import {
+  createDevSession,
+  setDevSessionCookie,
+  getDevUserFromRequest,
+} from "@/lib/dev-auth";
 
 // ─── Protected Routes ──────────────────────────────────────────────────
 // These routes require authentication
@@ -31,7 +36,15 @@ const PUBLIC_API_ROUTES = [
 ];
 
 /**
- * Middleware to protect routes and validate Supabase Auth sessions
+ * Checks if dev mode auth bypass is enabled.
+ */
+function isDevMode(): boolean {
+  return process.env.AUTH_MODE === "dev";
+}
+
+/**
+ * Middleware to protect routes and validate Supabase Auth sessions.
+ * In dev mode (AUTH_MODE=dev), skips real auth and uses mock users.
  */
 export async function middleware(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -45,8 +58,40 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
+  if (isDevMode()) {
+    const devUser = getDevUserFromRequest(request);
+    
+    let userId: string | null = null;
+    let familyId: string | null = null;
+
+    // Create response object to set headers on
+    const response = NextResponse.next();
+
+    if (devUser) {
+      userId = devUser.id;
+      familyId = devUser.familyId;
+    } else {
+      // Create a default session for the user
+      const session = createDevSession();
+      setDevSessionCookie(response.headers, session);
+      userId = session.user.id;
+      familyId = session.user.familyId;
+    }
+
+    if (userId) {
+      response.headers.set("x-user-id", userId);
+    }
+    if (familyId) {
+      response.headers.set("x-family-id", familyId);
+    }
+
+    return response;
+  }
+
+  // ─── Production Mode: Use Supabase Auth ──────────────────────────
+  
   // ─── Initialize Supabase client ──────────────────────────────────────
-  // This extracts auth cookies from the request and creates a typed client
   const supabase = await getSupabaseMiddlewareClient(request);
 
   // ─── Get current session ──────────────────────────────────────────────
