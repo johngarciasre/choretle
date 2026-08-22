@@ -1,6 +1,6 @@
 "use client";
 
-import { supabaseBrowser } from "@/supabase/client";
+import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";

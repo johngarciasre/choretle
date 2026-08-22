@@ -1,5 +1,5 @@
 "use client";
-import { supabaseBrowser } from "@/supabase/client";
+import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -100,7 +100,7 @@ export default function FamilyPage() {
   }, []);
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabaseBrowser.auth.getSession();
+    const { data: { session } } = await getSupabaseBrowser().auth.getSession();
     if (!session) {
       setIsAuthenticated(false);
       return;
