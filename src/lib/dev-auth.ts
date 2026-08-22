@@ -72,13 +72,15 @@ export function parseDevSession(cookieValue?: string): DevUser | null {
   if (!cookieValue) return null;
 
   try {
-    const decoded = JSON.parse(atob(cookieValue));
+    const decoded = JSON.parse(decodeURIComponent(cookieValue));
+    // Session may be stored as full { user } wrapper or flat DevUser directly
+    const u = decoded.user || decoded;
     return {
-      id: decoded.sub,
-      email: decoded.email,
-      name: decoded.name,
-      role: decoded.role,
-      familyId: decoded.familyId,
+      id: u.sub ?? u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      familyId: u.familyId,
     };
   } catch {
     return null;
@@ -100,13 +102,13 @@ export function getDevUserFromRequest(request: Request): DevUser | null {
 
 /**
  * Sets a dev session cookie on response headers.
- * This is the proper way to set cookies in Next.js - they must be on response headers.
+ * Uses encodeURIComponent for reliable cookie values (URL-safe).
  */
 export function setDevSessionCookie(
   responseHeaders: Headers, 
   session: DevSession
 ): void {
-  const encoded = btoa(JSON.stringify(session));
+  const encoded = encodeURIComponent(JSON.stringify(session));
   responseHeaders.set(
     "set-cookie",
     `${DEV_COOKIE_NAME}=${encoded}; path=/; secure=false; httpOnly=true`
@@ -120,7 +122,7 @@ export function setDevSessionOnResponse(
   responseHeaders: Headers, 
   session: DevSession
 ): void {
-  const encoded = btoa(JSON.stringify(session));
+  const encoded = encodeURIComponent(JSON.stringify(session));
   responseHeaders.set(
     "set-cookie",
     `${DEV_COOKIE_NAME}=${encoded}; path=/; secure=false; httpOnly=true`
