@@ -1,6 +1,10 @@
+import { sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
+import { initDb } from "@/db/drizzle";
+import * as schema from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Check if Supabase credentials are properly configured.
@@ -11,7 +15,7 @@ function hasSupabaseConfig(): boolean {
 }
 
 /**
- * Sign in with email and password using Supabase Auth.
+ * Sign in user with email and password using Supabase Auth.
  * In dev mode (AUTH_MODE=dev), uses mock users instead.
  */
 export async function POST(request: NextRequest) {
@@ -19,10 +23,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // ─── Dev Mode: Use mock user ────────────────────────────────
-    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
+    if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
       
-      // Map email to a dev user
       let userId = "dev-user-admin-001";
       let role = "admin";
       
@@ -36,7 +39,6 @@ export async function POST(request: NextRequest) {
       
       const session = createDevSession({ userId });
 
-      // Set auth headers for downstream API routes
       const response = NextResponse.json(
         { 
           ok: true, 
@@ -55,14 +57,19 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      // Set the dev session cookie so subsequent requests are authenticated
       setDevSessionCookie(response.headers, session);
-
       return response;
     }
 
     // ─── Production Mode: Use Supabase Auth ──────────────────────
     
+    if (!hasSupabaseConfig()) {
+      return NextResponse.json(
+        { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
+        { status: 500 }
+      );
+    }
+
     // Validate input
     if (!body?.email || !body?.password) {
       return NextResponse.json(
@@ -71,7 +78,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize Supabase client for middleware
     const supabase = await getSupabaseMiddlewareClient(request);
 
     // Sign in with password using Supabase Auth
@@ -83,7 +89,6 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Sign in error:", error);
       
-      // Handle specific error cases
       if (error.message.includes("Invalid login credentials")) {
         return NextResponse.json(
           { error: "Invalid email or password" },
@@ -104,7 +109,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify we got a valid session
     if (!data?.session) {
       console.error("No session returned from Supabase");
       return NextResponse.json(
@@ -113,18 +117,69 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract user information from session
     const userId = data.session.user.id;
     const userEmail = data.session.user.email || null;
     const userRole = data.session.user.user_metadata?.role || "child";
 
-    // Set auth headers for downstream API routes
+    // Create or update user record in users table and ensure family membership exists
+    let familyId: string | null = null;
+    try {
+      const db = await initDb();
+      if (db) {
+        // Check if user already has a family assignment
+        const existingUserWithFamily = await db.select().from(schema.users).where(
+          eq(schema.users.id, userId),
+          sql`${schema.users.familyId} IS NOT NULL`
+        ).first();
+
+        if (!existingUserWithFamily) {
+          // Create a default family for the user
+          const familyName = userEmail ? `${userEmail.split('@')[0]}'s Family` : "My Family";
+          const familySlug = `family-${Date.now()}`;
+          
+          const [newFamily] = await db.insert(schema.families).values({
+            name: familyName,
+            slug: familySlug,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }).returning("*");
+          
+          familyId = newFamily.id;
+        } else {
+          familyId = existingUserWithFamily.familyId;
+        }
+
+        // Create or update user record in users table
+        const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, userId)).first();
+        
+        if (!existingUser) {
+          await db.insert(schema.users).values({
+            id: userId,
+            email: userEmail,
+            name: "", // Will be populated via profile endpoint later
+            role: userRole,
+            familyId: familyId || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        } else if (existingUser.familyId !== familyId) {
+          await db.update(schema.users).set({ 
+            familyId,
+            updatedAt: new Date()
+          }).where(eq(schema.users.id, existingUser.id));
+        }
+      }
+    } catch (dbError) {
+      console.error("Database operations failed after successful sign-in:", dbError);
+    }
+
     const response = NextResponse.json(
       { 
         ok: true, 
         userId,
         email: userEmail,
         role: userRole,
+        familyId: familyId || null,
         message: "Sign in successful"
       },
       {
@@ -133,6 +188,7 @@ export async function POST(request: NextRequest) {
           "x-user-id": userId,
           "x-email": userEmail || "",
           "x-role": userRole,
+          "x-family-id": familyId || "",
         }
       }
     );
@@ -141,7 +197,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Sign in failed:", error);
     
-    // Handle unexpected errors
     if (error instanceof Error) {
       return NextResponse.json(
         { 
@@ -161,12 +216,11 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET endpoint for sign-in page (returns the current session if logged in).
- * In dev mode, checks for dev session cookie.
  */
 export async function GET(request: NextRequest) {
   try {
     // ─── Dev Mode: Check dev session cookie ────────────────
-    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
+    if (process.env.AUTH_MODE === "dev") {
       const cookieHeader = request.headers.get("cookie") || "";
       const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
 
@@ -195,12 +249,14 @@ export async function GET(request: NextRequest) {
     // ─── Production Mode: Use Supabase Auth ────────────────
     
     if (!hasSupabaseConfig()) {
-      return NextResponse.json({ authenticated: false, error: "Supabase not configured" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
+        { status: 500 }
+      );
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
     
-    // Get the current session
     const { data: { session } } = await supabase.auth.getSession();
 
     if (session) {

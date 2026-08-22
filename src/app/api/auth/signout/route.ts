@@ -17,7 +17,7 @@ function hasSupabaseConfig(): boolean {
 export async function POST(request: NextRequest) {
   try {
     // ─── Dev Mode: Clear dev session cookie ────────────────
-    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
+    if (process.env.AUTH_MODE === "dev") {
       const response = NextResponse.json(
         { 
           ok: true, 
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // ─── Dev Mode: Check dev session cookie ────────────────
-    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
+    if (process.env.AUTH_MODE === "dev") {
       const cookieHeader = request.headers.get("cookie") || "";
       const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
 
