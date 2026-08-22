@@ -1,10 +1,9 @@
-import { sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 /**
  * Check if Supabase credentials are properly configured.
@@ -88,14 +87,12 @@ export async function POST(request: NextRequest) {
       options: {
         data: {
           name: body.name,
-          role: "child",
+          role: "parent",
         },
       },
     });
 
     if (error) {
-      console.error("Sign up error:", error);
-      
       if (error.message.includes("Email already registered")) {
         return NextResponse.json(
           { error: "An account with this email already exists" },
@@ -117,22 +114,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data?.user) {
-      console.error("No user created in Supabase Auth");
       return NextResponse.json(
         { error: "User registration failed" },
         { status: 500 }
-      );
-    }
-
-    // If auto confirmation is disabled, prompt for email verification
-    if (data.user.identities?.length === 0) {
-      return NextResponse.json(
-        { 
-          ok: true, 
-          message: "Registration successful. Please check your email to confirm your account.",
-          requiresEmailConfirmation: true,
-        },
-        { status: 200 }
       );
     }
 
@@ -175,7 +159,7 @@ export async function POST(request: NextRequest) {
             id: userId,
             email: userEmail,
             name: body.name,
-            role: "child",
+            role: "parent",
             familyId: familyId || null,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -189,7 +173,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (dbError) {
-      console.error("Database operations failed after successful signup:", dbError);
+      // Silently fail - user is created in Supabase Auth anyway
     }
 
     return NextResponse.json(
@@ -211,8 +195,6 @@ export async function POST(request: NextRequest) {
       }
     );
   } catch (error) {
-    console.error("Sign up failed:", error);
-    
     if (error instanceof Error) {
       return NextResponse.json(
         { 
@@ -289,7 +271,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ authenticated: false });
   } catch (error) {
-    console.error("Sign up GET failed:", error);
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }

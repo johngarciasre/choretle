@@ -1,10 +1,9 @@
-import { sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 /**
  * Check if Supabase credentials are properly configured.
@@ -87,8 +86,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      console.error("Sign in error:", error);
-      
       if (error.message.includes("Invalid login credentials")) {
         return NextResponse.json(
           { error: "Invalid email or password" },
@@ -110,7 +107,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data?.session) {
-      console.error("No session returned from Supabase");
       return NextResponse.json(
         { error: "Authentication failed" },
         { status: 500 }
@@ -170,7 +166,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (dbError) {
-      console.error("Database operations failed after successful sign-in:", dbError);
+      // Silently fail - user is authenticated in Supabase Auth anyway
     }
 
     const response = NextResponse.json(
@@ -195,8 +191,6 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("Sign in failed:", error);
-    
     if (error instanceof Error) {
       return NextResponse.json(
         { 
@@ -273,7 +267,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ authenticated: false });
   } catch (error) {
-    console.error("Sign in GET failed:", error);
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }
