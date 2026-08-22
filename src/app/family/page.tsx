@@ -1,5 +1,5 @@
 "use client";
-
+import { supabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -100,33 +100,14 @@ export default function FamilyPage() {
   }, []);
 
   const checkAuth = async () => {
-    const cookie = document.cookie.split("; ").find(row => row.startsWith("auth-token="));
-    if (!cookie) {
+    const { data: { session } } = await supabaseBrowser.auth.getSession();
+    if (!session) {
       setIsAuthenticated(false);
       return;
     }
 
     try {
-      // Verify token
-      const parts = cookie.split("=")[1].split(".");
-      if (parts.length !== 3) {
-        setIsAuthenticated(false);
-        return;
-      }
-
-      const payload = JSON.parse(atob(parts[1]));
-      const now = Math.floor(Date.now() / 1000);
-      
-      if (!payload.exp || payload.exp < now) {
-        setIsAuthenticated(false);
-        return;
-      }
-
-      // Check if user exists and get family ID
-      const response = await fetch("/api/auth/me", {
-        headers: { "Cookie": `auth-token=${cookie.split("=")[1]}` },
-      });
-      
+      const response = await fetch("/api/auth/me");
       if (response.ok) {
         const data = await response.json();
         setIsAuthenticated(true);

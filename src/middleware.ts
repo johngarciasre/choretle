@@ -63,7 +63,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
-  if (isDevMode() || !hasSupabaseConfig()) {
+  const isDevMode = process.env.AUTH_MODE === "dev";
+
+  if (isDevMode) {
     const devUser = getDevUserFromRequest(request);
     
     let userId: string | null = null;
