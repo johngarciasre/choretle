@@ -1,6 +1,3 @@
--- Enable PostgreSQL extension for UUID generation
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- ─── Families ───────────────────────────────────────────────────────
 
 CREATE TABLE families (
@@ -243,7 +240,6 @@ CREATE INDEX idx_subtasks_task_id ON subtasks(task_id);
 CREATE INDEX idx_slates_family_id ON slates(family_id);
 CREATE INDEX idx_slate_tasks_slate_id ON slate_tasks(slate_id);
 CREATE INDEX idx_lists_family_id ON lists(family_id);
-CREATE INDEX idx_lists_list_id ON lists(list_id);
 CREATE INDEX idx_jobs_list_id ON jobs(list_id);
 CREATE INDEX idx_jobs_assigned_to ON jobs(assigned_to);
 CREATE INDEX idx_comments_job_id ON comments(job_id);
