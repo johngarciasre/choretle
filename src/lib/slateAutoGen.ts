@@ -116,7 +116,7 @@ export async function generateJobsFromSlate(
         });
       }
     }
-    return [];
+    return []; // Return empty since jobs aren't assigned to users in this case
   }
 
   // Create jobs for each rotation assignment

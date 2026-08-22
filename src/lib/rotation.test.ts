@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getRotationForDate, calculateRotationAssignment } from "@/lib/rotation";
+import { getRotationForDate, calculateRotationAssignment, getRotationSchedule, canSwapRotations, swapRotations, getUpcomingAssignments } from "@/lib/rotation";
 
 describe("getRotationForDate", () => {
   it("returns null when no rotations exist", () => {
@@ -61,13 +61,47 @@ describe("getRotationForDate", () => {
     expect(result3).toBe("user-1");
   });
 
-  it("returns null when base rotation has invalid createdAt (NaN date)", () => {
+  it("uses the earliest createdAt when rotations have different start dates", () => {
+    // Rotation B (user-b, order=1) has an EARLIER createdAt than rotation A (user-a, order=0)
+    const base = new Date("2024-01-01");
     const rotations = [
-      { id: "r1", slateId: "slate-1", userId: "user-1", order: 0, intervalDays: 7, isActive: true },
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true, createdAt: new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true, createdAt: base.toISOString() },
     ];
-    // Simulate invalid createdAt by passing an object without it
-    const result = getRotationForDate(rotations, "slate-1", new Date());
-    expect(result).toBeDefined();
+
+    // Current code uses sorted[0].createdAt (day 7) as reference.
+    // It should use the EARLIEST createdAt (day 0) instead.
+    // With earliest=day 0: day 0→user-a(idx=0), day 7→user-b(idx=1), day 14→user-a(idx=0), etc.
+    const day0 = base;
+    const resultDay0 = getRotationForDate(rotations, "slate-1", day0);
+    expect(resultDay0).toBe("user-a");
+
+    const day7 = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const resultDay7 = getRotationForDate(rotations, "slate-1", day7);
+    expect(resultDay7).toBe("user-b");
+
+    const day14 = new Date(base.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const resultDay14 = getRotationForDate(rotations, "slate-1", day14);
+    expect(resultDay14).toBe("user-a");
+
+    const day21 = new Date(base.getTime() + 21 * 24 * 60 * 60 * 1000);
+    const resultDay21 = getRotationForDate(rotations, "slate-1", day21);
+    expect(resultDay21).toBe("user-b");
+  });
+
+  it("cycles through all active rotations based on days elapsed since earliest start date", () => {
+    const base = new Date("2024-06-01");
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true, createdAt: base.toISOString() },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true, createdAt: base.toISOString() },
+    ];
+
+    // Verify cycling with same createdAt for both rotations
+    const results = [0, 7, 14, 21, 28, 35].map((days) =>
+      getRotationForDate(rotations, "slate-1", new Date(base.getTime() + days * 24 * 60 * 60 * 1000))
+    );
+
+    expect(results).toEqual(["user-a", "user-b", "user-a", "user-b", "user-a", "user-b"]);
   });
 });
 
@@ -147,5 +181,137 @@ describe("calculateRotationAssignment", () => {
     expect(result.size).toBe(2);
     expect(result.get("u1")).toContain("t1");
     expect(result.get("u2")).toContain("t2");
+  });
+});
+
+describe("getRotationSchedule", () => {
+  it("returns an empty array when no rotations exist", () => {
+    const schedule = getRotationSchedule([], "slate-1", new Date(), new Date());
+    expect(schedule).toEqual([]);
+  });
+
+  it("returns one entry with same user when interval is larger than date range", () => {
+    const base = new Date("2024-01-01");
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true },
+    ];
+
+    const schedule = getRotationSchedule(rotations, "slate-1", base, new Date(base.getTime() + 3 * 24 * 60 * 60 * 1000));
+
+    // Both dates fall within the same cycle period (epoch-based)
+    expect(schedule.length).toBe(4);
+    expect(schedule.every((s) => s.userId === "user-a" || s.userId === "user-b")).toBe(true);
+  });
+
+  it("uses the correct intervalDays for scheduling", () => {
+    const base = new Date("2024-01-01");
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 14, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 14, isActive: true },
+    ];
+
+    const schedule = getRotationSchedule(rotations, "slate-1", base, new Date(base.getTime() + 5 * 24 * 60 * 60 * 1000));
+
+    // With 14-day interval, both should be same user for 7 days
+    expect(schedule.every((s) => s.userId === "user-a")).toBe(true);
+  });
+});
+
+describe("canSwapRotations", () => {
+  it("returns true when both rotations exist and are on the same slate", () => {
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true },
+    ];
+
+    expect(canSwapRotations(rotations, "slate-1", "r1", "r2")).toBe(true);
+  });
+
+  it("returns false when rotation IDs don't exist", () => {
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true },
+    ];
+
+    expect(canSwapRotations(rotations, "slate-1", "r99", "r88")).toBe(false);
+  });
+
+  it("returns false when trying to swap with yourself", () => {
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+    ];
+
+    expect(canSwapRotations(rotations, "slate-1", "r1", "r1")).toBe(false);
+  });
+
+  it("returns true when rotations have different intervals", () => {
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 14, isActive: true },
+    ];
+
+    expect(canSwapRotations(rotations, "slate-1", "r1", "r2")).toBe(true);
+  });
+});
+
+describe("swapRotations", () => {
+  it("swaps the order values of two rotations", () => {
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true },
+    ];
+
+    const swapped = swapRotations(rotations, "slate-1", "r1", "r2");
+
+    expect(swapped[0].order).toBe(1);
+    expect(swapped[1].order).toBe(0);
+  });
+
+  it("does not modify rotations when IDs don't exist", () => {
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true },
+    ];
+
+    const swapped = swapRotations(rotations, "slate-1", "r99", "r88");
+
+    expect(swapped[0].order).toBe(0);
+    expect(swapped[1].order).toBe(1);
+  });
+
+  it("preserves other rotation entries when swapping", () => {
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true },
+      { id: "r3", slateId: "slate-2", userId: "user-c", order: 0, intervalDays: 7, isActive: true },
+    ];
+
+    const swapped = swapRotations(rotations, "slate-1", "r1", "r2");
+
+    expect(swapped[2].order).toBe(0); // Unchanged slate-2 rotation
+    expect(swapped[2].userId).toBe("user-c");
+  });
+});
+
+describe("getUpcomingAssignments", () => {
+  it("returns assignments for the given date range", () => {
+    const base = new Date("2024-01-01");
+    const rotations = [
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true },
+    ];
+
+    const assignments = getUpcomingAssignments(rotations, "slate-1", base, 7);
+
+    expect(assignments.length).toBe(8);
+    expect(assignments.every((a) => a.userId === "user-a" || a.userId === "user-b")).toBe(true);
+    // First assignment should be user-a (start of cycle)
+    expect(assignments[0].userId).toBe("user-a");
+  });
+
+  it("returns an empty array when no rotations exist", () => {
+    const assignments = getUpcomingAssignments([], "slate-1", new Date(), 30);
+    expect(assignments).toEqual([]);
   });
 });

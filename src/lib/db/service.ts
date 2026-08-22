@@ -26,7 +26,8 @@ export { canTransition, getValidNextStatuses, calculateJobPoints };
 async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | null> {
   try {
     return await query;
-  } catch {
+  } catch (error) {
+    console.error("safeQuery failed:", error);
     return null;
   }
 }
@@ -34,32 +35,36 @@ async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | nu
 // ─── Families ───────────────────────────────────────────────────────
 
 export async function getFamilyById(id: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.families).where({ id }).first()
+  const res = await safeQuery(
+    db.select().from(schema.families).where({ id }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function getFamilyBySlug(slug: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.families).where({ slug }).first()
+  const res = await safeQuery(
+    db.select().from(schema.families).where({ slug }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function createFamily(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.families).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
 }
 
 export async function updateFamily(id: string, data: Partial<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.update(schema.families).set(data).where({ id }).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -68,24 +73,27 @@ export async function updateFamily(id: string, data: Partial<any>) {
 // ─── Users ──────────────────────────────────────────────────────────
 
 export async function getUserById(id: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.users).where({ id }).first()
+  const res = await safeQuery(
+    db.select().from(schema.users).where({ id }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function getUserByEmail(email: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.users).where({ email }).first()
+  const res = await safeQuery(
+    db.select().from(schema.users).where({ email }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function updateUserPoints(id: string, points: number) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.update(schema.users).set({ pointsTotal: points }).where({ id }).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -94,16 +102,18 @@ export async function updateUserPoints(id: string, points: number) {
 // ─── Teams ──────────────────────────────────────────────────────────
 
 export async function getTeamsByFamily(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.teams).where({ familyId })
+  const res = await safeQuery(
+    db.select().from(schema.teams).where({ familyId })
   );
   return (res as any[]) || [];
 }
 
 export async function createTeam(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.teams).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -112,38 +122,43 @@ export async function createTeam(data: Insertable<any>) {
 // ─── Tasks ──────────────────────────────────────────────────────────
 
 export async function getTasksByFamily(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.tasks).where({ familyId })
+  const res = await safeQuery(
+    db.select().from(schema.tasks).where({ familyId })
   );
   return (res as any[]) || [];
 }
 
 export async function getTaskById(id: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.tasks).where({ id }).first()
+  const res = await safeQuery(
+    db.select().from(schema.tasks).where({ id }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function createTask(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.tasks).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
 }
 
 export async function updateTask(id: string, data: Partial<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.update(schema.tasks).set(data).where({ id }).returning("*")
   );
   return (res as any[])?.[0] || null;
 }
 
 export async function deleteTask(id: string) {
+  const db = await ensureDb();
   if (!db) return false;
   await safeQuery(db.delete(schema.tasks).where({ id }));
   return true;
@@ -152,16 +167,18 @@ export async function deleteTask(id: string) {
 // ─── Subtasks ───────────────────────────────────────────────────────
 
 export async function getSubtasksByTask(taskId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.subtasks).where({ taskId })
+  const res = await safeQuery(
+    db.select().from(schema.subtasks).where({ taskId })
   );
   return (res as any[]) || [];
 }
 
 export async function createSubtask(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.subtasks).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -170,17 +187,19 @@ export async function createSubtask(data: Insertable<any>) {
 // ─── Slates ─────────────────────────────────────────────────────────
 
 export async function getSlatesByFamily(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.slates).where({ familyId })
+  const res = await safeQuery(
+    db.select().from(schema.slates).where({ familyId })
   );
   return (res as any[]) || [];
 }
 
 export async function getSlateById(id: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.slates).where({ id }).first()
+  const res = await safeQuery(
+    db.select().from(schema.slates).where({ id }).first()
   );
   return res as Selectable<any> | null;
 }
@@ -188,9 +207,10 @@ export async function getSlateById(id: string) {
 // ─── Slate Tasks ────────────────────────────────────────────────────
 
 export async function getSlateTasksBySlate(slateId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.slateTasks).where({ slateId })
+  const res = await safeQuery(
+    db.select().from(schema.slateTasks).where({ slateId })
   );
   return (res as any[]) || [];
 }
@@ -198,41 +218,46 @@ export async function getSlateTasksBySlate(slateId: string) {
 // ─── Jobs ───────────────────────────────────────────────────────────
 
 export async function getJobsByList(listId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ listId })
+  const res = await safeQuery(
+    db.select().from(schema.jobs).where({ listId })
   );
   return (res as any[]) || [];
 }
 
 export async function getJobsByFamily(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
   // Stub for now — jobs don't have a direct family_id relationship
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ listId: '' })
+  const res = await safeQuery(
+    db.select().from(schema.jobs).where({ listId: '' })
   );
   return (res as any[]) || [];
 }
 
 export async function getJobById(id: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ id }).first()
+  const res = await safeQuery(
+    db.select().from(schema.jobs).where({ id }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function createJob(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.jobs).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
 }
 
 export async function updateJob(id: string, data: Partial<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.update(schema.jobs).set(data).where({ id }).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -241,24 +266,27 @@ export async function updateJob(id: string, data: Partial<any>) {
 // ─── Lists ──────────────────────────────────────────────────────────
 
 export async function getListsByFamily(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.lists).where({ familyId })
+  const res = await safeQuery(
+    db.select().from(schema.lists).where({ familyId })
   );
   return (res as any[]) || [];
 }
 
 export async function getListBySlateAndDate(slateId: string, startDate: Date) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.lists).where({ slateId, startDate }).first()
+  const res = await safeQuery(
+    db.select().from(schema.lists).where({ slateId, startDate }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function createList(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.lists).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -267,16 +295,18 @@ export async function createList(data: Insertable<any>) {
 // ─── List Tasks ─────────────────────────────────────────────────────
 
 export async function getListTasksByList(listId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.listTasks).where({ listId })
+  const res = await safeQuery(
+    db.select().from(schema.listTasks).where({ listId })
   );
   return (res as any[]) || [];
 }
 
 export async function createListTask(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.listTasks).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -285,28 +315,30 @@ export async function createListTask(data: Insertable<any>) {
 // ─── Rotations ──────────────────────────────────────────────────────
 
 export async function getRotationsBySlate(slateId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.rotations).where({ slateId })
+  const res = await safeQuery(
+    db.select().from(schema.rotations).where({ slateId })
   );
   return (res as any[]) || [];
 }
 
 export async function getRotationsByFamily(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
   const familyUsers = await safeQuery(
-    db.select().dbInstance.from(schema.users).where({ familyId })
+    db.select().from(schema.users).where({ familyId })
   );
   if ((familyUsers as any[] | null)?.length === 0 || !(familyUsers as any[] | null)) return [];
 
   const slates = await safeQuery(
-    db.select().dbInstance.from(schema.slates).where({ familyId })
+    db.select().from(schema.slates).where({ familyId })
   );
   if ((slates as any[] | null)?.length === 0 || !(slates as any[] | null)) return [];
 
   const slateIds = (slates as any[]).map((s: any) => s.id);
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.rotations).where(sql`${schema.rotations.slateId} IN (${sql.join(slateIds, sql`, `)})`)
+  const res = await safeQuery(
+    db.select().from(schema.rotations).where(sql`${schema.rotations.slateId} IN (${sql.join(slateIds, sql`, `)})`)
   );
   return (res as any[]) || [];
 }
@@ -319,13 +351,14 @@ export async function upsertRotation(data: {
   intervalDays: number;
   isActive?: boolean;
 }) {
+  const db = await ensureDb();
   if (!db) return null;
   const existing = await safeQuery(
-    db.select().dbInstance.from(schema.rotations).where({ id: data.id }).first()
+    db.select().from(schema.rotations).where({ id: data.id }).first()
   );
 
   if (existing && data.id) {
-    const dbInstance = await ensureDb(); const res = await safeQuery(
+    const res = await safeQuery(
       db.update(schema.rotations)
         .set({
           slateId: data.slateId,
@@ -340,7 +373,7 @@ export async function upsertRotation(data: {
     return (res as any[])?.[0] || null;
   }
 
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.rotations).values({
       slateId: data.slateId,
       userId: data.userId,
@@ -353,12 +386,14 @@ export async function upsertRotation(data: {
 }
 
 export async function deleteRotation(id: string) {
+  const db = await ensureDb();
   if (!db) return false;
   await safeQuery(db.delete(schema.rotations).where({ id }));
   return true;
 }
 
 export async function deleteRotationsBySlate(slateId: string) {
+  const db = await ensureDb();
   if (!db) return false;
   await safeQuery(db.delete(schema.rotations).where({ slateId }));
   return true;
@@ -367,16 +402,18 @@ export async function deleteRotationsBySlate(slateId: string) {
 // ─── Comments & History ─────────────────────────────────────────────
 
 export async function getCommentsByJob(jobId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.comments).where({ jobId })
+  const res = await safeQuery(
+    db.select().from(schema.comments).where({ jobId })
   );
   return (res as any[]) || [];
 }
 
 export async function addComment(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.comments).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -385,16 +422,18 @@ export async function addComment(data: Insertable<any>) {
 // ─── Reports ────────────────────────────────────────────────────────
 
 export async function getReportsByFamily(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.reports).where({ familyId })
+  const res = await safeQuery(
+    db.select().from(schema.reports).where({ familyId })
   );
   return (res as any[]) || [];
 }
 
 export async function createReport(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.reports).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -403,15 +442,17 @@ export async function createReport(data: Insertable<any>) {
 // ─── Job Status Transitions ───────────────────────────────────────────
 
 export async function transitionJob(id: string, newStatus: string, userId?: string) {
+  const db = await ensureDb();
   if (!db) return null;
 
   const job = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ id }).first()
+    db.select().from(schema.jobs).where({ id }).first()
   );
   if (!job) return null;
 
   const currentStatus = (job as any).status;
   if (!canTransition(currentStatus, newStatus)) {
+    console.error(`Invalid job transition: ${currentStatus} -> ${newStatus} for job ${id}`);
     throw new Error(`Invalid transition from "${currentStatus}" to "${newStatus}"`);
   }
 
@@ -426,17 +467,22 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
   );
 
   if (updatedJob) {
-    _createJobHistory(id, "status_change", `Status changed from "${currentStatus}" to "${newStatus}"`, userId);
+    try {
+      _createJobHistory(id, "status_change", `Status changed from "${currentStatus}" to "${newStatus}"`, userId);
+    } catch (historyErr) {
+      console.error("Failed to write job history:", historyErr);
+    }
   }
 
   return updatedJob;
 }
 
 export async function completeJob(id: string, userId?: string) {
+  const db = await ensureDb();
   if (!db) return null;
 
   const job = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ id }).first()
+    db.select().from(schema.jobs).where({ id }).first()
   );
   if (!job) return null;
 
@@ -447,29 +493,36 @@ export async function completeJob(id: string, userId?: string) {
     await transitionJob(id, "done", userId);
   }
 
-  // Mark all uncompleted job subtasks as completed
-  const now = new Date();
-  await db.update(schema.jobSubtasks)
-    .set({ completedAt: now })
-    .where(and(eq(schema.jobSubtasks.jobId, id), sql`${schema.jobSubtasks.completedAt} IS NULL`));
+  try {
+    // Mark all uncompleted job subtasks as completed
+    const now = new Date();
+    await db.update(schema.jobSubtasks)
+      .set({ completedAt: now })
+      .where(and(eq(schema.jobSubtasks.jobId, id), sql`${schema.jobSubtasks.completedAt} IS NULL`));
 
-  // Fetch all completed subtasks for this job to calculate points
-  const completedSubtasks = await safeQuery(
-    db.select().dbInstance.from(schema.jobSubtasks).where({ jobId: id })
-  );
-
-  // Calculate total points: base job points + completed subtask points
-  const totalPoints = calculateJobPoints(job as any, (completedSubtasks as any[]) || []);
-
-  // Award points to user if userId provided
-  if (userId && totalPoints > 0) {
-    const user = await safeQuery(
-      db.select().dbInstance.from(schema.users).where({ id: userId }).first()
+    // Fetch all completed subtasks for this job to calculate points
+    const completedSubtasks = await safeQuery(
+      db.select().from(schema.jobSubtasks).where({ jobId: id })
     );
-    if (user) {
-      const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
-      await db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId });
+
+    // Calculate total points: base job points + completed subtask points
+    const totalPoints = calculateJobPoints(job as any, (completedSubtasks as any[]) || []);
+
+    // Award points to user if userId provided
+    if (userId && totalPoints > 0) {
+      const user = await safeQuery(
+        db.select().from(schema.users).where({ id: userId }).first()
+      );
+      if (user) {
+        const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
+        await safeQuery(
+          db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId })
+        );
+      }
     }
+  } catch (error) {
+    console.error("completeJob failed:", error);
+    throw error;
   }
 
   return job;
@@ -478,69 +531,82 @@ export async function completeJob(id: string, userId?: string) {
 // ─── Subtask Management ──────────────────────────────────────────────
 
 export async function getPendingSubtasks(jobId: string) {
+  const db = await ensureDb();
   if (!db) return [];
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.jobId, jobId), sql`${schema.jobSubtasks.completedAt} IS NULL`))
+  const res = await safeQuery(
+    db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.jobId, jobId), sql`${schema.jobSubtasks.completedAt} IS NULL`))
   );
   return (res as any[]) || [];
 }
 
 export async function completeSubtask(id: string, jobId: string, userId?: string) {
+  const db = await ensureDb();
   if (!db) return 0;
 
-  // Get the job to check its status
-  const job = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ id: jobId }).first()
-  );
-  if (!job) return 0;
-
-  // Subtasks can only be completed on active jobs (status !== "done")
-  if ((job as any).status === "done") {
-    throw new Error("Cannot complete subtask for a job that is already done");
-  }
-
-  // Get the subtask record to find its points
-  const subtaskRecord = await safeQuery(
-    db.select().dbInstance.from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.id, id), eq(schema.jobSubtasks.jobId, jobId))).first()
-  );
-  if (!subtaskRecord) return 0;
-
-  // Get the points to award
-  const pointsAwarded = (subtaskRecord as any).pointsAwarded || 0;
-
-  // Mark as completed
-  await db.update(schema.jobSubtasks).set({ completedAt: new Date() }).where({ id });
-
-  // Create history entry
-  _createJobHistory(jobId, "subtask_completed", `Subtask ${id} completed, ${pointsAwarded} points awarded`, userId);
-
-  // Award points to user if userId provided
-  if (userId && pointsAwarded > 0) {
-    const user = await safeQuery(
-      db.select().dbInstance.from(schema.users).where({ id: userId }).first()
+  try {
+    // Get the job to check its status
+    const job = await safeQuery(
+      db.select().from(schema.jobs).where({ id: jobId }).first()
     );
-    if (user) {
-      const newTotal = ((user as any).pointsTotal || 0) + pointsAwarded;
-      await db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId });
-    }
-  }
+    if (!job) return 0;
 
-  return pointsAwarded;
+    // Subtasks can only be completed on active jobs (status !== "done")
+    if ((job as any).status === "done") {
+      throw new Error("Cannot complete subtask for a job that is already done");
+    }
+
+    // Get the subtask record to find its points
+    const subtaskRecord = await safeQuery(
+      db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.id, id), eq(schema.jobSubtasks.jobId, jobId))).first()
+    );
+    if (!subtaskRecord) return 0;
+
+    // Get the points to award
+    const pointsAwarded = (subtaskRecord as any).pointsAwarded || 0;
+
+    // Mark as completed
+    await safeQuery(
+      db.update(schema.jobSubtasks).set({ completedAt: new Date() }).where({ id })
+    );
+
+    // Create history entry
+    _createJobHistory(jobId, "subtask_completed", `Subtask ${id} completed, ${pointsAwarded} points awarded`, userId);
+
+    // Award points to user if userId provided
+    if (userId && pointsAwarded > 0) {
+      const user = await safeQuery(
+        db.select().from(schema.users).where({ id: userId }).first()
+      );
+      if (user) {
+        const newTotal = ((user as any).pointsTotal || 0) + pointsAwarded;
+        await safeQuery(
+          db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId })
+        );
+      }
+    }
+
+    return pointsAwarded;
+  } catch (error) {
+    console.error("completeSubtask failed:", error);
+    throw error;
+  }
 }
 
 // ─── Invites ────────────────────────────────────────────────────────
 
 export async function getInviteByCode(code: string) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
-    db.select().dbInstance.from(schema.invites).where({ code }).first()
+  const res = await safeQuery(
+    db.select().from(schema.invites).where({ code }).first()
   );
   return res as Selectable<any> | null;
 }
 
 export async function createInvite(data: Insertable<any>) {
+  const db = await ensureDb();
   if (!db) return null;
-  const dbInstance = await ensureDb(); const res = await safeQuery(
+  const res = await safeQuery(
     db.insert(schema.invites).values(data).returning("*")
   );
   return (res as any[])?.[0] || null;
@@ -560,22 +626,24 @@ export interface ScoringEntry {
 }
 
 export async function getLeaderboard(familyId: string) {
+  const db = await ensureDb();
   if (!db) return [];
   const users = await safeQuery(
-    db.select().dbInstance.from(schema.users).where({ familyId })
+    db.select().from(schema.users).where({ familyId })
   );
   return ((users as any[]) || []).sort((a, b) => (b.pointsTotal || 0) - (a.pointsTotal || 0));
 }
 
 export async function getUserStats(userId: string) {
+  const db = await ensureDb();
   if (!db) return null;
   const user = await safeQuery(
-    db.select().dbInstance.from(schema.users).where({ id: userId }).first()
+    db.select().from(schema.users).where({ id: userId }).first()
   );
   if (!user) return null;
 
   const jobs = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ assignedTo: userId })
+    db.select().from(schema.jobs).where({ assignedTo: userId })
   );
   const completedJobs = ((jobs as any[]) || []).filter((j: any) => j.status === "done" && j.completedAt);
 
@@ -594,19 +662,21 @@ export async function getUserStats(userId: string) {
 }
 
 export async function getJobHistory(userId: string, limit = 20) {
+  const db = await ensureDb();
   if (!db) return [];
   const jobs = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ assignedTo: userId })
+    db.select().from(schema.jobs).where({ assignedTo: userId })
       .orderBy(sql`${schema.jobs.completedAt} DESC`).limit(limit)
   );
   return ((jobs as any[]) || []).filter((j: any) => j.status === "done");
 }
 
 export async function getWeeklyPoints(userId: string) {
+  const db = await ensureDb();
   if (!db) return [];
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const jobs = await safeQuery(
-    db.select().dbInstance.from(schema.jobs).where({ assignedTo: userId })
+    db.select().from(schema.jobs).where({ assignedTo: userId })
       .orderBy(sql`${schema.jobs.completedAt} ASC`)
   );
   return ((jobs as any[]) || [])
@@ -615,4 +685,118 @@ export async function getWeeklyPoints(userId: string) {
       date: new Date(j.completedAt).toISOString().split("T")[0],
       points: j.points || 0,
     }));
+}
+
+// ─── Swap/Trade Rotations ─────────────────────────────────────────────
+
+export async function swapRotationEntries(
+  familyId: string,
+  rotationId1: string,
+  rotationId2: string,
+  userId?: string,
+): Promise<any> {
+  const db = await ensureDb();
+  if (!db) return null;
+
+  try {
+    const rotation1 = await safeQuery(
+      db.select().from(schema.rotations).where({ id: rotationId1 }).first()
+    );
+    const rotation2 = await safeQuery(
+      db.select().from(schema.rotations).where({ id: rotationId2 }).first()
+    );
+
+    if (!rotation1 || !rotation2) return null;
+
+    // Verify both rotations belong to the same slate
+    if ((rotation1 as any).slateId !== (rotation2 as any).slateId) {
+      console.error(`Cannot swap rotations from different slates: ${rotationId1} vs ${rotationId2}`);
+      throw new Error("Cannot swap rotations from different slates");
+    }
+
+    // Swap the order values
+    const tempOrder = (rotation1 as any).order;
+    await safeQuery(
+      db.update(schema.rotations)
+        .set({ order: (rotation2 as any).order })
+        .where({ id: rotationId1 })
+    );
+
+    await safeQuery(
+      db.update(schema.rotations)
+        .set({ order: tempOrder })
+        .where({ id: rotationId2 })
+    );
+
+    // Create history entry
+    if (userId) {
+      try {
+        await safeQuery(
+          db.insert(schema.jobHistory).values({
+            jobId: "swap",
+            action: "rotation_swap",
+            details: `Swapped rotation entries ${rotationId1} and ${rotationId2}`,
+            userId,
+          })
+        );
+      } catch (historyErr) {
+        console.error("Failed to write swap history:", historyErr);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("swapRotationEntries failed:", error);
+    throw error;
+  }
+}
+
+export async function getRotationSchedule(
+  slateId: string,
+  startDate: Date,
+  endDate: Date,
+): Promise<any[]> {
+  const db = await ensureDb();
+  if (!db) return [];
+
+  const rotations = await safeQuery(
+    db.select().from(schema.rotations).where({ slateId })
+  );
+
+  if (!rotations || (rotations as any[]).length === 0) return [];
+
+  // Use pure rotation logic to calculate schedule
+  const { getRotationSchedule: getRotSchedule } = await import("@/lib/rotation");
+  return getRotSchedule(rotations as any[], slateId, startDate, endDate);
+}
+
+export async function getUpcomingAssignments(
+  familyId: string,
+  daysAhead: number = 30,
+): Promise<any[]> {
+  const db = await ensureDb();
+  if (!db) return [];
+
+  const slates = await safeQuery(
+    db.select().from(schema.slates).where({ familyId })
+  );
+
+  if (!slates || (slates as any[]).length === 0) return [];
+
+  const schedule: any[] = [];
+  const today = new Date();
+
+  for (const slate of slates as any[]) {
+    const rotations = await safeQuery(
+      db.select().from(schema.rotations).where({ slateId: (slate as any).id })
+    );
+
+    if (!rotations || (rotations as any[]).length === 0) continue;
+
+    const { getUpcomingAssignments: getUpcoming } = await import("@/lib/rotation");
+    const upcoming = getUpcoming(rotations as any[], (slate as any).id, today, daysAhead);
+    schedule.push({ slateId: (slate as any).id, assignments: upcoming });
+  }
+
+  return schedule;
 }

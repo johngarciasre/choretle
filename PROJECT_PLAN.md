@@ -7,7 +7,7 @@ Choretle is an open-source, multi user chore and habit tracking app that is host
 
 - Tasks
   - Individual units of work
-  - Cleraly defined objectives
+  - Clearly defined objectives
   - Can have subtasks
   - Archtype for Jobs
 - Subtasks

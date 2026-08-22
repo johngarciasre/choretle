@@ -81,7 +81,7 @@ CREATE TABLE subtasks (
   task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   points INTEGER NOT NULL DEFAULT 0 CHECK (points >= 0),
-  ord INTEGER NOT NULL DEFAULT 0,
+  "order" INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -108,7 +108,7 @@ CREATE TABLE slate_tasks (
   slate_id UUID NOT NULL REFERENCES slates(id) ON DELETE CASCADE,
   task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   points_override INTEGER,
-  ord INTEGER NOT NULL DEFAULT 0,
+  "order" INTEGER NOT NULL DEFAULT 0,
   CONSTRAINT slate_task_unique UNIQUE(slate_id, task_id)
 );
 
@@ -204,7 +204,7 @@ CREATE TABLE rotations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slate_id UUID NOT NULL REFERENCES slates(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  ord INTEGER NOT NULL DEFAULT 0,
+  "order" INTEGER NOT NULL DEFAULT 0,
   interval_days INTEGER NOT NULL DEFAULT 7,
   is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
