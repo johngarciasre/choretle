@@ -3,13 +3,21 @@ import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { clearDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 
 /**
+ * Check if Supabase credentials are properly configured.
+ * Requires both URL and anon key to be set.
+ */
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/**
  * Sign out user and clear session cookies.
  * In dev mode (AUTH_MODE=dev), clears the dev session cookie.
  */
 export async function POST(request: NextRequest) {
   try {
     // ─── Dev Mode: Clear dev session cookie ────────────────
-    if (process.env.AUTH_MODE === "dev" || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
       const response = NextResponse.json(
         { 
           ok: true, 
@@ -26,6 +34,16 @@ export async function POST(request: NextRequest) {
 
     // ─── Production Mode: Use Supabase Auth ────────────────
     
+    if (!hasSupabaseConfig()) {
+      return NextResponse.json(
+        { 
+          ok: true, 
+          message: "No active session to log out (dev mode)" 
+        },
+        { status: 200 }
+      );
+    }
+
     const supabase = await getSupabaseMiddlewareClient(request);
 
     // Logout from Supabase Auth (revoke refresh tokens, clear session)
@@ -59,7 +77,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // ─── Dev Mode: Check dev session cookie ────────────────
-    if (process.env.AUTH_MODE === "dev" || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
       const cookieHeader = request.headers.get("cookie") || "";
       const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
 

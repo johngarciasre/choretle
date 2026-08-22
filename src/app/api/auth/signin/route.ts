@@ -3,6 +3,14 @@ import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 
 /**
+ * Check if Supabase credentials are properly configured.
+ * Requires both URL and anon key to be set.
+ */
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/**
  * Sign in with email and password using Supabase Auth.
  * In dev mode (AUTH_MODE=dev), uses mock users instead.
  */
@@ -11,7 +19,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // ─── Dev Mode: Use mock user ────────────────────────────────
-    if (process.env.AUTH_MODE === "dev" || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
       const email = body?.email?.toLowerCase().trim() || "";
       
       // Map email to a dev user
@@ -158,7 +166,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // ─── Dev Mode: Check dev session cookie ────────────────
-    if (process.env.AUTH_MODE === "dev" || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    if (process.env.AUTH_MODE === "dev" || !hasSupabaseConfig()) {
       const cookieHeader = request.headers.get("cookie") || "";
       const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
 
@@ -186,6 +194,10 @@ export async function GET(request: NextRequest) {
 
     // ─── Production Mode: Use Supabase Auth ────────────────
     
+    if (!hasSupabaseConfig()) {
+      return NextResponse.json({ authenticated: false, error: "Supabase not configured" }, { status: 500 });
+    }
+
     const supabase = await getSupabaseMiddlewareClient(request);
     
     // Get the current session

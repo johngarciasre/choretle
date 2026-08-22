@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import {
-  createDevSession,
-  setDevSessionCookie,
-  getDevUserFromRequest,
-} from "@/lib/dev-auth";
+import { createDevSession, setDevSessionCookie, getDevUserFromRequest, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 
 // ─── Protected Routes ──────────────────────────────────────────────────
 // These routes require authentication
@@ -44,6 +40,7 @@ function isDevMode(): boolean {
 
 /**
  * Checks if Supabase credentials are configured.
+ * Requires both URL and anon key to be set.
  */
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
