@@ -46,6 +46,12 @@ export default function SignInPage() {
         <button type="submit" className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
           Sign In
         </button>
+        <div className="text-center text-sm mt-4">
+          Don&apos;t have an account?{" "}
+          <a href="/auth/signup" className="text-indigo-600 hover:text-indigo-700 font-medium">
+            Sign up
+          </a>
+        </div>
       </form>
     </div>
   );
