@@ -43,6 +43,13 @@ function isDevMode(): boolean {
 }
 
 /**
+ * Checks if Supabase credentials are configured.
+ */
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/**
  * Middleware to protect routes and validate Supabase Auth sessions.
  * In dev mode (AUTH_MODE=dev), skips real auth and uses mock users.
  */
@@ -59,7 +66,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
-  if (isDevMode()) {
+  if (isDevMode() || !hasSupabaseConfig()) {
     const devUser = getDevUserFromRequest(request);
     
     let userId: string | null = null;
