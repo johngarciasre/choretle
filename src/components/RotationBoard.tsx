@@ -10,11 +10,12 @@ interface RotationBoardProps {
   users: UserRotation[];
   slates: SlateWithRotations[];
   onSave: (assignments: RotationAssignment[]) => Promise<void>;
+  onSlatesChange: (slates: SlateWithRotations[]) => void;
 }
 
 const accentColors = ["coral", "teal", "sunny", "grape", "bubblegum", "coral", "teal"] as const;
 
-export default function RotationBoard({ familyName, users, slates, onSave }: RotationBoardProps) {
+export default function RotationBoard({ familyName, users, slates, onSave, onSlatesChange }: RotationBoardProps) {
   const [draggedUserId, setDraggedUserId] = useState<string | null>(null);
   const [dragOverSlate, setDragOverSlate] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -43,48 +44,45 @@ export default function RotationBoard({ familyName, users, slates, onSave }: Rot
     setDraggedUserId(null);
     setDragOverSlate(null);
 
-    // Find the target slate
-    const slate = slates.find((s) => s.id === slateId);
-    if (!slate) return;
+    const newSlates = slates.map((slate) => {
+      if (slate.id !== slateId) return slate;
 
-    // Check if user already has an assignment on this slate
-    const existingIndex = slate.assignments.findIndex((a) => a.userId === userId);
-    if (existingIndex >= 0) {
-      // Move the existing assignment to the end of this slate's list
-      const [moved] = slate.assignments.splice(existingIndex, 1);
-      moved.order = slate.assignments.length;
-      moved.intervalDays = moved.intervalDays || 7;
-      slate.assignments.push(moved);
+      const existingIndex = slate.assignments.findIndex((a) => a.userId === userId);
+      let newAssignments: UserRotation[];
 
-      // Re-index all assignments in this slate
-      slate.assignments.forEach((a, i) => { a.order = i + 1; });
-      return;
-    }
+      if (existingIndex >= 0) {
+        const [moved] = [...slate.assignments].splice(existingIndex, 1);
+        moved.order = slate.assignments.length;
+        moved.intervalDays = moved.intervalDays || 7;
+        newAssignments = [...slate.assignments, moved].map((a, i) => ({ ...a, order: i + 1 }));
+      } else {
+        const newUserRotation: UserRotation = {
+          id: undefined,
+          userId,
+          slateId,
+          order: slate.assignments.length + 1,
+          intervalDays: 7,
+          isActive: true,
+          userName: "",
+          userAvatarUrl: "",
+          userPointsTotal: 0,
+          userRole: "child",
+        };
+        const userData = users.find((u) => u.userId === userId);
+        if (userData) {
+          newUserRotation.userName = userData.userName;
+          newUserRotation.userAvatarUrl = userData.userAvatarUrl;
+          newUserRotation.userPointsTotal = userData.userPointsTotal;
+          newUserRotation.userRole = userData.userRole;
+        }
+        newAssignments = [...slate.assignments, newUserRotation].map((a, i) => ({ ...a, order: i + 1 }));
+      }
 
-    // Create new assignment at end of slate
-    const newUserRotation: UserRotation = {
-      id: undefined,
-      userId,
-      slateId,
-      order: slate.assignments.length + 1,
-      intervalDays: 7,
-      isActive: true,
-      userName: "",
-      userPointsTotal: 0,
-      userRole: "child",
-    };
+      return { ...slate, assignments: newAssignments };
+    });
 
-    // Find the user data from users list
-    const userData = users.find((u) => u.userId === userId);
-    if (userData) {
-      newUserRotation.userName = userData.userName;
-      newUserRotation.userAvatarUrl = userData.userAvatarUrl;
-      newUserRotation.userPointsTotal = userData.userPointsTotal;
-      newUserRotation.userRole = userData.userRole;
-    }
-
-    slate.assignments.push(newUserRotation);
-  }, [slates, users]);
+    onSlatesChange(newSlates);
+  }, [slates, users, onSlatesChange]);
 
   const handleEditInterval = useCallback((assignmentId: string | undefined, intervalDays: number) => {
     for (const slate of slates) {

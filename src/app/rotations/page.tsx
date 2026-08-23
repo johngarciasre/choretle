@@ -192,6 +192,7 @@ export default function RotationsPage() {
           users={users}
           slates={slates}
           onSave={handleSave}
+          onSlatesChange={setSlates}
         />
       </main>
     </div>
