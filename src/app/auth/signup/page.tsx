@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { PageShell } from "@/components/ui/PageShell";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { AlertCircle, Sparkles } from "lucide-react";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -26,38 +30,50 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      <form onSubmit={handleSignUp} className="space-y-4 p-8 rounded-lg shadow-lg w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center">Sign Up</h1>
-        {error && <p className="text-red-600">{error}</p>}
-        <input
-          type="text"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="w-full px-4 py-2 border rounded-lg"
-        />
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full px-4 py-2 border rounded-lg"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          className="w-full px-4 py-2 border rounded-lg"
-        />
-        <button type="submit" className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
-          Sign Up
-        </button>
-      </form>
-    </div>
+    <PageShell>
+      <main className="flex items-center justify-center min-h-[60vh]">
+        <Card accent="bubblegum" className="w-full max-w-md p-8">
+          <div className="flex items-center gap-3 mb-2">
+            <Sparkles className="text-bubblegum size-6" />
+            <h1 className="font-display text-3xl font-bold text-center text-ink">Sign Up</h1>
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 text-coral bg-coral/10 px-4 py-3 rounded-xl mb-4">
+              <AlertCircle size={18} />
+              <p className="text-sm font-bold">{error}</p>
+            </div>
+          )}
+          <form onSubmit={handleSignUp} className="space-y-4">
+            <input
+              type="text"
+              placeholder="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+            />
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+            />
+            <Button variant="primary" size="lg" className="w-full">
+              Sign Up
+            </Button>
+          </form>
+        </Card>
+      </main>
+    </PageShell>
   );
 }

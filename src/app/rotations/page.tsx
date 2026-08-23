@@ -165,23 +165,23 @@ export default function RotationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-cream to-sunny/20">
       {/* Navigation */}
       <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Choretle</h1>
+        <h1 className="text-2xl font-bold text-grape">Choretle</h1>
         <div className="flex gap-4">
           <Link href="/dashboard" className="hover:underline">Dashboard</Link>
           <Link href="/tasks" className="hover:underline">Tasks</Link>
-          <Link href="/rotations" className="hover:underline text-indigo-600 dark:text-indigo-400 font-semibold">Rotations</Link>
+          <Link href="/rotations" className="hover:underline text-grape font-semibold">Rotations</Link>
         </div>
       </nav>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto p-8 space-y-8">
         <header>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Rotation Assignment</h2>
+          <h2 className="text-2xl font-bold text-ink">Rotation Assignment</h2>
           {family && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <p className="text-sm text-ink/60 mt-1">
               Family: <span className="font-medium">{family.name}</span> &middot; {users.length} users &middot; {slates.length} slates
             </p>
           )}

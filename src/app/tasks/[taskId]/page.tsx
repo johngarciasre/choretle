@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
+import { TagPill, Button } from "@/components/ui";
 
 interface Task {
   id: string;
@@ -20,6 +22,28 @@ interface Tag {
   color?: string;
 }
 
+const fetchTask = async (id: string) => {
+  try {
+    const res = await fetch(`/api/tasks/${id}`);
+    if (!res.ok) throw new Error("Failed to fetch task");
+    return await res.json();
+  } catch (error) {
+    console.error("Fetch task failed:", error);
+    return null;
+  }
+};
+
+const fetchTags = async () => {
+  try {
+    const res = await fetch("/api/tags?familyId=test-family");
+    if (!res.ok) throw new Error("Failed to fetch tags");
+    return await res.json();
+  } catch (error) {
+    console.error("Fetch tags failed:", error);
+    return [];
+  }
+};
+
 export default function TaskPage() {
   const router = useRouter();
   const taskId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
@@ -33,35 +57,16 @@ export default function TaskPage() {
 
   useEffect(() => {
     if (!taskId) return;
-    fetchTask(taskId);
-    fetchTags();
-  }, [taskId]);
-
-  async function fetchTask(id: string) {
-    try {
-      const res = await fetch(`/api/tasks/${id}`);
-      if (!res.ok) throw new Error("Failed to fetch task");
-      const data = await res.json();
-      setTask(data);
-      setNameValue(data.name);
-      setSelectedTagIds(data.tagIds || []);
-    } catch (error) {
-      console.error("Fetch task failed:", error);
-    } finally {
+    Promise.all([fetchTask(taskId), fetchTags()]).then(([taskData, tags]) => {
+      if (taskData) {
+        setTask(taskData);
+        setNameValue(taskData.name);
+        setSelectedTagIds(taskData.tagIds || []);
+      }
+      setTags(tags);
       setLoading(false);
-    }
-  }
-
-  async function fetchTags() {
-    try {
-      const res = await fetch("/api/tags?familyId=test-family");
-      if (!res.ok) throw new Error("Failed to fetch tags");
-      const data = await res.json();
-      setTags(data);
-    } catch (error) {
-      console.error("Fetch tags failed:", error);
-    }
-  }
+    });
+  }, [taskId]);
 
   async function handleUpdateTask() {
     if (!task || !taskId) return;
@@ -99,21 +104,14 @@ export default function TaskPage() {
     );
   }
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  if (!task) return <div className="flex items-center justify-center min-h-screen">Task not found</div>;
+  if (loading) return <PageLoader label="Loading task..." />;
+  if (!task) return <EmptyState icon={<span className="text-2xl">📋</span>} title="Task not found" message="The task you're looking for doesn't exist." />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
-        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <span className="text-sm text-gray-600 dark:text-gray-300">Back to Dashboard</span>
-        </Link>
-        <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{task.name}</h1>
-      </nav>
-
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
+    <PageShell>
+      <Card accent="coral" className="space-y-6">
         {/* Task Details */}
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 space-y-4">
+        <section className="space-y-4">
           <div>
             {editingName ? (
               <input
@@ -122,11 +120,11 @@ export default function TaskPage() {
                 onChange={(e) => setNameValue(e.target.value)}
                 onBlur={() => setEditingName(false)}
                 onKeyDown={(e) => e.key === "Enter" && setEditingName(false)}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 rounded-xl border-2 border-ink/15 bg-white focus:border-grape focus:outline-none font-bold text-ink"
               />
             ) : (
               <h2 
-                className="text-2xl font-semibold cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400"
+                className="font-display text-3xl font-bold text-ink cursor-pointer hover:text-grape transition-colors"
                 onClick={() => { setEditingName(true); setNameValue(task.name); }}
               >
                 {task.name}
@@ -134,94 +132,81 @@ export default function TaskPage() {
             )}
           </div>
 
-          <p className="text-gray-500 dark:text-gray-400">{task.description}</p>
+          <p className="text-ink/60">{task.description}</p>
           
           <div className="flex items-center gap-6">
-            <span className="font-bold text-indigo-600 dark:text-indigo-400">{task.points} pts</span>
+            <Badge status="points">{task.points} pts</Badge>
             {task.archtype && (
               <>
-                <span className="text-sm text-gray-500 dark:text-gray-400">Type:</span>
-                <span className="px-2 py-1 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">{task.archtype}</span>
+                <span className="text-sm text-ink/60">Type:</span>
+                <Badge status="neutral" className="text-xs px-2 py-0.5">{task.archtype}</Badge>
               </>
             )}
           </div>
 
           {/* Tag Editor */}
-          <div className="pt-4 border-t">
-            <h3 className="text-lg font-semibold mb-3">Tags</h3>
+          <div className="pt-4 border-t border-ink/10">
+            <h3 className="font-display text-lg font-bold text-ink mb-3">Tags</h3>
             
             {tags.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">No tags available. Create tags in the app settings.</p>
+              <p className="text-sm text-ink/60">No tags available. Create tags in the app settings.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {tags.map(tag => (
-                  <button
+                  <TagPill
                     key={tag.id}
+                    active={selectedTagIds.includes(tag.id)}
                     onClick={() => toggleTag(tag.id)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      selectedTagIds.includes(tag.id)
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                    }`}
                   >
                     {tag.name}
-                  </button>
+                  </TagPill>
                 ))}
               </div>
             )}
 
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-sm text-ink/60">
               Select tags to assign to this task. Tags can be used for filtering and auto-inclusion in slates.
             </p>
           </div>
         </section>
 
         {/* Action Buttons */}
-        <section className="flex gap-4">
+        <section className="flex gap-4 pt-4 border-t border-ink/10">
           {editingName ? (
             <>
-              <button
-                onClick={handleUpdateTask}
-                className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-              >
+              <Button variant="primary" onClick={handleUpdateTask}>
                 Save Changes
-              </button>
-              <button
-                onClick={() => { setEditingName(false); setNameValue(task.name); }}
-                className="bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-6 py-2 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
-              >
+              </Button>
+              <Button variant="ghost" onClick={() => { setEditingName(false); setNameValue(task.name); }}>
                 Cancel
-              </button>
+              </Button>
             </>
           ) : (
-            <button
-              onClick={() => { setEditingName(true); setNameValue(task.name); }}
-              className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
+            <Button variant="primary" onClick={() => { setEditingName(true); setNameValue(task.name); }}>
               Edit Task Details
-            </button>
+            </Button>
           )}
           
-          <Link href="/tasks" className="px-6 py-2 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <Link href="/tasks" className="px-6 py-2 rounded-full font-bold border-2 border-ink/15 hover:bg-grape/5 hover:border-grape/40 transition-colors text-ink">
             Back to Tasks
           </Link>
         </section>
 
         {/* Comments Section */}
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Comments</h3>
-          <div className="space-y-4">
+        <Card accent="teal" className="pt-6 space-y-4">
+          <h3 className="font-display text-lg font-bold text-ink">Comments</h3>
+          <div className="space-y-3">
             <textarea 
               placeholder="Add a comment..." 
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2 rounded-xl border-2 border-ink/15 bg-cream focus:border-grape focus:outline-none font-bold text-ink"
               rows={4}
             />
-            <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+            <Button variant="primary">
               Post Comment
-            </button>
+            </Button>
           </div>
-        </section>
-      </main>
-    </div>
+        </Card>
+      </Card>
+    </PageShell>
   );
 }

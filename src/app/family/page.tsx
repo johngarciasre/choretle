@@ -3,6 +3,8 @@ import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from "@/components/ui";
+import { Star, Users, Plus, X } from "lucide-react";
 
 interface Family {
   id: string;
@@ -76,29 +78,6 @@ export default function FamilyPage() {
   const [showToggleModal, setShowToggleModal] = useState(false);
   const [enableTeams, setEnableTeams] = useState(true);
 
-  // Load family ID from storage or URL
-  useEffect(() => {
-    if (pathname.startsWith("/family/")) {
-      // Viewing a specific family
-      const id = pathname.split("/").pop();
-      if (id) {
-        loadFamilyData(id);
-        setViewingFamily(id);
-      }
-    } else if (pathname === "/family") {
-      // Create/join view
-      checkAuth();
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    const storedFamilyId = typeof window !== "undefined" && localStorage.getItem("familyId");
-    if (storedFamilyId) {
-      setFamilyId(storedFamilyId);
-      loadFamilyData(storedFamilyId);
-    }
-  }, []);
-
   const checkAuth = async () => {
     const { data: { session } } = await getSupabaseBrowser().auth.getSession();
     if (!session) {
@@ -125,7 +104,6 @@ export default function FamilyPage() {
   const loadFamilyData = async (fid: string) => {
     setLoading(true);
     try {
-      // Fetch family data
       const [familyRes, usersRes, teamsRes] = await Promise.all([
         fetch(`/api/family?${new URLSearchParams({ id: fid })}`),
         fetch(`/api/users?familyId=${fid}`),
@@ -149,6 +127,29 @@ export default function FamilyPage() {
       setLoading(false);
     }
   };
+
+  // Load family ID from storage or URL
+  useEffect(() => {
+    if (pathname.startsWith("/family/")) {
+      // Viewing a specific family
+      const id = pathname.split("/").pop();
+      if (id) {
+        loadFamilyData(id);
+        setViewingFamily(id);
+      }
+    } else if (pathname === "/family") {
+      // Create/join view
+      checkAuth();
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    const storedFamilyId = typeof window !== "undefined" && localStorage.getItem("familyId");
+    if (storedFamilyId) {
+      setFamilyId(storedFamilyId);
+      loadFamilyData(storedFamilyId);
+    }
+  }, []);
 
   const handleCreateFamily = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -275,192 +276,219 @@ export default function FamilyPage() {
 
   if (!isAuthenticated && pathname.startsWith("/family/")) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-        <div className="space-y-6 p-8 rounded-lg shadow-lg w-full max-w-md">
-          <h1 className="text-3xl font-bold text-center">Welcome to Choretle</h1>
-
-          <form onSubmit={handleCreateFamily} className="space-y-4">
-            <input
-              type="text"
-              placeholder="Family name"
-              value={familyId || ""}
-              onChange={(e) => setFamilyId(e.target.value)}
-              required
-              className="w-full px-4 py-2 border rounded-lg"
-            />
-            <button 
-              type="submit" 
-              className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              disabled={!familyId}
-            >
-              Create Family
-            </button>
-          </form>
-
-          <div className="text-center">
-            <button onClick={() => router.push("/family")} className="text-indigo-600 underline">
-              Back to home
-            </button>
-          </div>
-        </div>
-      </div>
+      <PageShell>
+        <main className="flex items-center justify-center min-h-[60vh]">
+          <EmptyState 
+            icon={<Star size={32} className="text-grape" />}
+            title="Welcome to Choretle!"
+            message="Create a family or join an existing one to get started."
+          />
+        </main>
+      </PageShell>
     );
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-        <p className="text-lg">Loading...</p>
-      </div>
+      <PageShell>
+        <Loading label="Loading family..." />
+      </PageShell>
     );
   }
 
   if (!family) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-        <p className="text-lg text-gray-500">Family not found</p>
-      </div>
+      <PageShell>
+        <main className="flex items-center justify-center min-h-[60vh]">
+          <EmptyState 
+            icon={<Star size={32} className="text-grape" />}
+            title="Family Not Found"
+            message="Sorry, we couldn&apos;t find this family."
+          />
+        </main>
+      </PageShell>
     );
   }
 
+  const accentColors = [
+    { name: "coral", border: "border-coral", bg: "bg-coral/15" },
+    { name: "teal", border: "border-teal", bg: "bg-teal/15" },
+    { name: "sunny", border: "border-sunny", bg: "bg-sunny/15" },
+    { name: "grape", border: "border-grape", bg: "bg-grape/15" },
+    { name: "bubblegum", border: "border-bubblegum", bg: "bg-bubblegum/15" },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      {/* Header */}
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
-        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <span className="text-sm text-gray-600 dark:text-gray-300">Back to Dashboard</span>
-        </Link>
-        <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{family.name}</h1>
-      </nav>
+    <PageShell>
+      <PageHeader 
+        title={viewingFamily ? family.name : "Family Settings"}
+        subtitle={viewingFamily ? `Welcome to ${family.name}!` : "Manage your family settings, teams, and members."}
+        actions={
+          viewingFamily && (
+            <Button variant="grape" href="/dashboard">
+              Back to Dashboard
+            </Button>
+          )
+        }
+      />
 
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
+      <main className="space-y-8">
         {/* Family Settings */}
-        <section className="bg-white/90 dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Family Settings</h2>
-            <button
-              onClick={() => setShowToggleModal(true)}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
-            >
-              Toggle Teams
-            </button>
-          </div>
+        <section className="space-y-4">
+          <h2 className="font-display text-xl font-bold text-ink">Family Settings</h2>
+          
+          <Card accent="coral" className="p-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-ink mb-1">Family Name</label>
+                <p className="text-ink/60">{family.name}</p>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Family Name</label>
-              <p className="text-gray-600 dark:text-gray-300">{family.name}</p>
-            </div>
+              <div>
+                <label className="block text-sm font-bold text-ink mb-1">Timezone</label>
+                <p className="text-ink/60">{family.timezone}</p>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Timezone</label>
-              <p className="text-gray-600 dark:text-gray-300">{family.timezone}</p>
-            </div>
+              <div>
+                <label className="block text-sm font-bold text-ink mb-1">Week Starts On</label>
+                <p className="text-ink/60">
+                  {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][family.weekStartDay]}
+                </p>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Week Starts On</label>
-              <p className="text-gray-600 dark:text-gray-300">
-                {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][family.weekStartDay]}
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Teams Enabled</label>
-              <p className={`text-${family.teamsEnabled ? "green" : "gray"}-600 dark:text-${family.teamsEnabled ? "green" : "gray"}-400`}>
-                {family.teamsEnabled ? "Yes" : "No"}
-              </p>
-            </div>
-          </div>
-
-          {/* Teams Toggle Modal */}
-          {showToggleModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-                <h3 className="text-xl font-semibold mb-4">Toggle Teams</h3>
-                
-                <div className="flex items-center gap-4 mb-6">
-                  <input
-                    type="checkbox"
-                    id="teamsEnabled"
-                    checked={enableTeams}
-                    onChange={(e) => setEnableTeams(e.target.checked)}
-                    className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
-                  />
-                  <label htmlFor="teamsEnabled" className="text-lg">
-                    Enable team management
-                  </label>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleToggleTeamsEnabled}
-                    className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-                  >
-                    Save Changes
-                  </button>
-                  <button
-                    onClick={() => setShowToggleModal(false)}
-                    className="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <div>
+                <label className="block text-sm font-bold text-ink mb-1">Teams Enabled</label>
+                <Badge 
+                  status={family.teamsEnabled ? "done" : "todo"}
+                >
+                  {family.teamsEnabled ? "Yes ✓" : "No"}
+                </Badge>
               </div>
             </div>
-          )}
+
+            {!viewingFamily && (
+              <div className="pt-4 border-t border-ink/10">
+                <p className="text-sm text-ink/60 mb-3">Create a new family to get started!</p>
+                <form onSubmit={handleCreateFamily} className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Enter family name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    disabled={!!viewingFamily}
+                    className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-coral focus:outline-none disabled:opacity-50"
+                  />
+                  <Button 
+                    type="submit" 
+                    variant="primary" 
+                    size="lg"
+                    className="w-full"
+                    disabled={!name.trim() || !!viewingFamily}
+                  >
+                    Create Family
+                  </Button>
+                </form>
+              </div>
+            )}
+
+            {viewingFamily && (
+              <div>
+                <p className="text-sm text-ink/60 mb-3">Join an existing family with a code!</p>
+                <form onSubmit={handleJoinFamily} className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Enter family join code"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    required={!viewingFamily}
+                    disabled={!!viewingFamily}
+                    className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none disabled:opacity-50"
+                  />
+                  <Button 
+                    type="submit" 
+                    variant="grape" 
+                    size="lg"
+                    className="w-full"
+                    disabled={!joinCode.trim() || !!viewingFamily}
+                  >
+                    Join Family
+                  </Button>
+                </form>
+              </div>
+            )}
+          </Card>
         </section>
 
         {/* Teams Section */}
         {family.teamsEnabled && (
-          <section className="bg-white/90 dark:bg-gray-800 rounded-xl shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Teams</h2>
-              <button
-                onClick={() => setShowTeamForm(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-              >
-                + Create Team
-              </button>
+          <section className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="font-display text-xl font-bold text-ink">Teams</h2>
+              {!viewingFamily && (
+                <Button onClick={() => setShowTeamForm(true)} variant="success" size="sm">
+                  <Plus size={16} className="inline mr-1" />
+                  Create Team
+                </Button>
+              )}
             </div>
 
             {teams.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No teams yet. Create your first team!</p>
+              <Card accent="bubblegum" className="p-8 text-center">
+                <EmptyState 
+                  icon={<Users size={32} />}
+                  title="No Teams Yet"
+                  message="Create your first team to organize your family members!"
+                />
+              </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                {teams.map((team) => (
-                  <div key={team.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold">{team.name}</h3>
-                      <span className="text-xs text-gray-500">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {teams.map((team, index) => (
+                  <Card 
+                    key={team.id} 
+                    accent={accentColors[index % accentColors.length].name as any}
+                    className="space-y-3"
+                  >
+                    <div className="flex justify-between items-start">
+                      <h3 className={`font-display text-xl font-bold ${accentColors[index % accentColors.length].border}`}>
+                        {team.name}
+                      </h3>
+                      <span className="text-xs text-ink/60">
                         {new Date(team.createdAt).toLocaleDateString()}
                       </span>
                     </div>
 
                     {/* Team Members */}
-                    <div className="mt-3 space-y-1">
-                      <p className="text-sm font-medium">Members:</p>
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-ink/60">Members:</p>
                       {(team as any)?.members?.length > 0 ? (
                         ((team as any).members as TeamMember[]).map((member: TeamMember) => {
                           const user = users.find(u => u.id === member.userId);
+                          const accentIndex = index % accentColors.length;
                           return (
-                            <div key={member.id} className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                            <div 
+                              key={member.id} 
+                              className={`flex items-center gap-2 ${accentColors[accentIndex].bg} rounded-full px-3 py-1.5 text-sm font-bold`}
+                            >
+                              <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs">
+                                {user?.name.charAt(0).toUpperCase()}
+                              </span>
                               {user?.name || "Unknown User"}
                             </div>
                           );
                         })
                       ) : (
-                        <p className="text-sm text-gray-400">No members yet</p>
+                        <p className="text-sm text-ink/60">No members yet</p>
                       )}
                     </div>
 
                     {/* Add Member Form */}
-                    {(team as any)?.members?.length > 0 && (
-                      <div className="mt-3 pt-3 border-t">
+                    {(team as any)?.members?.length > 0 && !viewingFamily && (
+                      <div className="pt-3 border-t border-ink/10 space-y-2">
                         <select
                           value={selectedTeamForMembers || ""}
                           onChange={(e) => setSelectedTeamForMembers(e.target.value)}
-                          className="text-sm border rounded px-2 py-1 mb-2 w-full"
+                          className="text-sm rounded-xl border-2 border-ink/15 bg-white px-3 py-2 font-bold text-ink focus:border-grape focus:outline-none"
                         >
                           <option value="">Select team...</option>
                           {teams.map(t => (
@@ -471,7 +499,7 @@ export default function FamilyPage() {
                         <select
                           value={selectedUser?.id || ""}
                           onChange={(e) => setSelectedUser(users.find(u => u.id === e.target.value) || null)}
-                          className="text-sm border rounded px-2 py-1 mb-2 w-full"
+                          className="text-sm rounded-xl border-2 border-ink/15 bg-white px-3 py-2 font-bold text-ink focus:border-grape focus:outline-none"
                         >
                           <option value="">Select user...</option>
                           {users.map(u => (
@@ -479,125 +507,183 @@ export default function FamilyPage() {
                           ))}
                         </select>
 
-                        <button
+                        <Button
                           onClick={handleAssignUserToTeam}
                           disabled={!selectedUser || !selectedTeamForMembers}
-                          className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                          variant="primary"
+                          size="sm"
+                          className="w-full"
                         >
                           Assign User
-                        </button>
+                        </Button>
                       </div>
                     )}
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}
 
             {/* Create Team Modal */}
-            {showTeamForm && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-                  <h3 className="text-xl font-semibold mb-4">Create New Team</h3>
+            {showTeamForm && !viewingFamily && (
+              <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-[60] p-4">
+                <Card accent="sunny" className="max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                  <h3 className="font-display text-2xl font-bold text-ink mb-6 flex items-center gap-2">
+                    <Plus size={24} />
+                    Create New Team
+                  </h3>
                   
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Team Name</label>
+                      <label className="block text-sm font-bold text-ink mb-1">Team Name</label>
                       <input
                         type="text"
                         value={newTeamName}
                         onChange={(e) => setNewTeamName(e.target.value)}
                         placeholder="Enter team name"
-                        className="border p-2 rounded w-full"
+                        className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-sunny focus:outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-1">Logo URL (optional)</label>
+                      <label className="block text-sm font-bold text-ink mb-1">Logo URL (optional)</label>
                       <input
                         type="text"
                         value={newTeamLogoUrl}
                         onChange={(e) => setNewTeamLogoUrl(e.target.value)}
                         placeholder="https://example.com/logo.png"
-                        className="border p-2 rounded w-full"
+                        className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-sunny focus:outline-none"
                       />
                     </div>
 
                     <div className="flex gap-2 pt-4">
-                      <button
+                      <Button
                         onClick={handleCreateTeam}
                         disabled={!newTeamName.trim()}
-                        className="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                        variant="success"
+                        size="lg"
+                        className="flex-1"
                       >
                         Create Team
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => setShowTeamForm(false)}
-                        className="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded hover:bg-gray-400"
+                        variant="ghost"
+                        size="lg"
+                        className="flex-1"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
                   </div>
-                </div>
+                </Card>
               </div>
             )}
           </section>
         )}
 
         {/* Family Members */}
-        <section className="bg-white/90 dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <h2 className="text-xl font-semibold mb-4">Family Members</h2>
+        <section className="space-y-4">
+          <h2 className="font-display text-xl font-bold text-ink">Family Members</h2>
 
           {users.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400">No members yet.</p>
+            <Card accent="grape" className="p-8 text-center">
+              <EmptyState 
+                icon={<Users size={32} />}
+                title="No Family Members Yet"
+                message="Add family members to get started with chore assignments!"
+              />
+            </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {users.map((user) => (
-                <div key={user.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                <Card key={user.id} accent="coral" className="space-y-3">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold bg-coral/15 text-coral">
                       {user.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="font-semibold">{user.name}</h3>
-                      <p className="text-sm text-gray-500">{user.email}</p>
+                      <h3 className="font-display text-lg font-bold text-ink">{user.name}</h3>
+                      <p className="text-sm text-ink/60">{user.email}</p>
                     </div>
                   </div>
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Role:</span>
-                      <span className="capitalize">{user.role}</span>
+                      <span className="text-ink/60">Role:</span>
+                      <span className="font-bold text-ink capitalize">{user.role}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Total Points:</span>
-                      <span className="font-medium text-indigo-600 dark:text-indigo-400">{user.pointsTotal}</span>
+                      <span className="text-ink/60">Total Points:</span>
+                      <Badge status="points">
+                        {user.pointsTotal.toLocaleString()} pts
+                      </Badge>
                     </div>
                   </div>
 
-                    {family.teamsEnabled && teams?.length > 0 && (
-                      <div className="mt-3 pt-3 border-t">
-                        <p className="text-sm font-medium mb-2">Teams:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {(teams as any[]).filter((t: Team) => {
-                            const teamWithMembers = (teams as any[]).find((tm: Team) => 
-                              tm.members?.some((m: TeamMember) => m.userId === user.id)
-                            );
-                            return teamWithMembers && teamWithMembers.name === t.name;
-                          }).map((team: Team) => (
-                            <span key={team.id} className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
-                              {team.name}
-                            </span>
-                          ))}
-                        </div>
+                  {family.teamsEnabled && teams?.length > 0 && (
+                    <div className="pt-3 border-t border-ink/10">
+                      <p className="text-sm font-bold text-ink/60 mb-2">Teams:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(teams as any[]).filter((t: Team) => {
+                          const teamWithMembers = (teams as any[]).find((tm: Team) => 
+                            tm.members?.some((m: TeamMember) => m.userId === user.id)
+                          );
+                          return teamWithMembers && teamWithMembers.name === t.name;
+                        }).map((team: Team) => (
+                          <Badge key={team.id} status="neutral">
+                            {team.name}
+                          </Badge>
+                        ))}
                       </div>
-                    )}
-                </div>
+                    </div>
+                  )}
+                </Card>
               ))}
             </div>
           )}
         </section>
       </main>
-    </div>
+
+      {/* Teams Toggle Modal */}
+      {showToggleModal && (
+        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-[60] p-4">
+          <Card accent="grape" className="max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+            <h3 className="font-display text-2xl font-bold text-ink mb-6">Toggle Teams</h3>
+            
+            <div className="flex items-center gap-4 mb-6">
+              <input
+                type="checkbox"
+                id="teamsEnabled"
+                checked={enableTeams}
+                onChange={(e) => setEnableTeams(e.target.checked)}
+                className="w-5 h-5 text-grape rounded focus:ring-grape"
+              />
+              <label htmlFor="teamsEnabled" className="text-lg font-bold text-ink">
+                Enable team management
+              </label>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={handleToggleTeamsEnabled}
+                variant="grape"
+                size="lg"
+                className="flex-1"
+              >
+                Save Changes
+              </Button>
+              <Button
+                onClick={() => setShowToggleModal(false)}
+                variant="ghost"
+                size="lg"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+    </PageShell>
   );
 }

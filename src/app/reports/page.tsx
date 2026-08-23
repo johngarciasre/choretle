@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { PageShell, PageHeader, Card, Badge, StatCard, EmptyState, PageLoader } from "@/components/ui";
+import { TagPill, Button } from "@/components/ui";
 
 interface ReportData {
   type: string;
@@ -59,52 +61,46 @@ export default function ReportsPage() {
     setReportData(mockData[tab]);
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Choretle</h1>
-        <div className="flex gap-4">
-          <Link href="/dashboard" className="hover:underline">Dashboard</Link>
-          <Link href="/reports" className="hover:underline text-indigo-600 font-semibold">Reports</Link>
-        </div>
-      </nav>
+  if (!reportData) {
+    return <PageLoader label="Loading reports..." />;
+  }
 
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
+  return (
+    <PageShell>
+      <PageHeader title="Reports" subtitle="View your family's chore progress and achievements" />
+
+      <main className="space-y-8">
         {/* Tab Navigation */}
         <section>
-          <h2 className="text-xl font-semibold mb-4">Reports</h2>
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-3 mb-6">
             {(["daily", "done", "task", "member"] as ReportType[]).map((tab) => (
-              <button
+              <TagPill
                 key={tab}
+                active={activeTab === tab}
                 onClick={() => handleTabChange(tab)}
-                className={`px-4 py-2 rounded-lg ${activeTab === tab ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
+              </TagPill>
             ))}
-            <button
-              onClick={() => setShowWallboard(!showWallboard)}
-              className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700"
-            >
+            <Button variant="grape" onClick={() => setShowWallboard(!showWallboard)}>
               Wallboard
-            </button>
+            </Button>
           </div>
 
           {showWallboard && (
             <section className="mb-8">
-              <h3 className="text-lg font-semibold mb-2">Wallboard</h3>
+              <h3 className="font-display text-xl font-bold text-ink mb-4">Wallboard</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
                   { name: "Alice", points: 120, jobsCompleted: 8 },
                   { name: "Bob", points: 95, jobsCompleted: 6 },
                   { name: "Charlie", points: 75, jobsCompleted: 5 },
                 ].map((entry) => (
-                  <div key={entry.name} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm text-center">
-                    <p className="font-bold">{entry.name}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{entry.points} pts</p>
-                    <p className="text-xs">{entry.jobsCompleted} jobs done</p>
-                  </div>
+                  <Card key={entry.name} accent="teal" className="text-center">
+                    <p className="font-display text-xl font-bold text-ink">{entry.name}</p>
+                    <Badge status="points" className="mt-2 mx-auto">{entry.points} pts</Badge>
+                    <p className="text-sm text-ink/60 mt-2">{entry.jobsCompleted} jobs done</p>
+                  </Card>
                 ))}
               </div>
             </section>
@@ -112,32 +108,23 @@ export default function ReportsPage() {
 
           {/* Summary */}
           {reportData && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Points Earned</p>
-                <p className="text-2xl font-bold">{reportData.totalPointsEarned}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Jobs Completed</p>
-                <p className="text-2xl font-bold">{reportData.jobsCompleted.length}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Jobs In Progress</p>
-                <p className="text-2xl font-bold">{reportData.jobsInProgress.length}</p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard icon={<span className="text-xl">⭐</span>} label="Points Earned" value={reportData.totalPointsEarned} accent="coral" />
+              <StatCard icon={<span className="text-xl">✅</span>} label="Jobs Completed" value={reportData.jobsCompleted.length} accent="teal" />
+              <StatCard icon={<span className="text-xl">🔄</span>} label="In Progress" value={reportData.jobsInProgress.length} accent="sunny" />
             </div>
           )}
 
           {/* Completed Jobs */}
           {reportData && reportData.jobsCompleted.length > 0 && (
             <section>
-              <h3 className="text-lg font-semibold mb-2">Completed Jobs</h3>
+              <h3 className="font-display text-xl font-bold text-ink mb-4">Completed Jobs</h3>
               <ul className="space-y-2">
                 {reportData.jobsCompleted.map((job) => (
-                  <li key={job.id} className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-900 rounded-lg">
-                    <span>{job.name}</span>
-                    <span className="text-sm">+{job.points} pts</span>
-                  </li>
+                  <Card key={job.id} accent="teal" className="p-4 flex justify-between items-center bg-cream">
+                    <span className="font-bold text-ink">{job.name}</span>
+                    <Badge status="done">+{job.points} pts</Badge>
+                  </Card>
                 ))}
               </ul>
             </section>
@@ -146,19 +133,19 @@ export default function ReportsPage() {
           {/* In Progress Jobs */}
           {reportData && reportData.jobsInProgress.length > 0 && (
             <section className="mt-8">
-              <h3 className="text-lg font-semibold mb-2">In Progress</h3>
+              <h3 className="font-display text-xl font-bold text-ink mb-4">In Progress</h3>
               <ul className="space-y-2">
                 {reportData.jobsInProgress.map((job) => (
-                  <li key={job.id} className="flex justify-between items-center p-3 bg-yellow-50 dark:bg-yellow-900 rounded-lg">
-                    <span>{job.name}</span>
-                    <span className="text-sm">{job.points} pts</span>
-                  </li>
+                  <Card key={job.id} accent="sunny" className="p-4 flex justify-between items-center bg-cream">
+                    <span className="font-bold text-ink">{job.name}</span>
+                    <Badge status="doing">{job.points} pts</Badge>
+                  </Card>
                 ))}
               </ul>
             </section>
           )}
         </section>
       </main>
-    </div>
+    </PageShell>
   );
 }

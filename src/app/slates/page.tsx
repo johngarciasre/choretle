@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/components/ui";
+import { TagPill, Button } from "@/components/ui";
 
 interface Task {
   id: string;
@@ -22,61 +24,60 @@ interface Slate {
   name: string;
 }
 
+const fetchSlates = async () => {
+  try {
+    const res = await fetch("/api/slates?familyId=test-family");
+    if (!res.ok) throw new Error("Failed to fetch slates");
+    return await res.json();
+  } catch (error) {
+    console.error("Fetch slates failed:", error);
+    return [];
+  }
+};
+
+const fetchTasks = async () => {
+  try {
+    const res = await fetch("/api/tasks?familyId=test-family");
+    if (!res.ok) throw new Error("Failed to fetch tasks");
+    return await res.json();
+  } catch (error) {
+    console.error("Fetch tasks failed:", error);
+    return [];
+  }
+};
+
+const fetchTags = async () => {
+  try {
+    const res = await fetch("/api/tags?familyId=test-family");
+    if (!res.ok) throw new Error("Failed to fetch tags");
+    return await res.json();
+  } catch (error) {
+    console.error("Fetch tags failed:", error);
+    return [];
+  }
+};
+
 export default function SlatesPage() {
   const [slates, setSlates] = useState<Slate[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Create slate state
   const [newSlateName, setNewSlateName] = useState("");
   
-  // Building new slate - these will be populated after creating a slate via API
   const [buildingSlateId, setBuildingSlateId] = useState<string | null>(null);
   const [buildingSlateTasks, setBuildingSlateTasks] = useState<Task[]>([]);
   const [buildingSlateExplicitTaskIds, setBuildingSlateExplicitTaskIds] = useState<string[]>([]);
   const [buildingSlateAutoIncludeTagIds, setBuildingSlateAutoIncludeTagIds] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchSlates();
-    fetchTasks();
-    fetchTags();
-  }, []);
-
-  async function fetchSlates() {
-    try {
-      const res = await fetch("/api/slates?familyId=test-family");
-      if (!res.ok) throw new Error("Failed to fetch slates");
-      const data = await res.json();
-      setSlates(data);
-    } catch (error) {
-      console.error("Fetch slates failed:", error);
-    } finally {
+    Promise.all([fetchSlates(), fetchTasks(), fetchTags()]).then(([slates, tasks, tags]) => {
+      setSlates(slates);
+      setTasks(tasks);
+      setTags(tags);
       setLoading(false);
-    }
-  }
-
-  async function fetchTasks() {
-    try {
-      const res = await fetch("/api/tasks?familyId=test-family");
-      if (!res.ok) throw new Error("Failed to fetch tasks");
-      const data = await res.json();
-      setTasks(data);
-    } catch (error) {
-      console.error("Fetch tasks failed:", error);
-    }
-  }
-
-  async function fetchTags() {
-    try {
-      const res = await fetch("/api/tags?familyId=test-family");
-      if (!res.ok) throw new Error("Failed to fetch tags");
-      const data = await res.json();
-      setTags(data);
-    } catch (error) {
-      console.error("Fetch tags failed:", error);
-    }
-  }
+    });
+  }, []);
 
   async function handleCreateSlate() {
     if (!newSlateName.trim()) return;
@@ -133,8 +134,6 @@ export default function SlatesPage() {
       if (!res.ok) throw new Error("Failed to save slate");
       
       setBuildingSlateId(null);
-      
-      // Refresh tasks to show updated assignments
       fetchTasks();
     } catch (error) {
       console.error("Save slate failed:", error);
@@ -142,9 +141,8 @@ export default function SlatesPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  if (loading) return <PageLoader label="Loading slates..." />;
 
-  // Show building mode
   if (buildingSlateId) {
     return (
       <SlateBuilderPage
@@ -169,63 +167,53 @@ export default function SlatesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
-        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <span className="text-sm text-gray-600 dark:text-gray-300">Back to Dashboard</span>
-        </Link>
-        <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Slates</h1>
-      </nav>
+    <PageShell>
+      <PageHeader title="Slates" subtitle="Create and configure chore slates with tasks and tags" />
 
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
+      <main className="space-y-8">
         {/* Create Slate */}
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Create New Slate</h2>
-          <div className="flex gap-4">
-            <input
-              type="text"
-              value={newSlateName}
-              onChange={(e) => setNewSlateName(e.target.value)}
-              placeholder="Enter slate name..."
-              className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-            />
-            <button
-              onClick={handleCreateSlate}
-              className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Create Slate
-            </button>
-          </div>
+        <section>
+          <Card accent="coral" className="p-6 space-y-4">
+            <h2 className="font-display text-xl font-bold text-ink">Create New Slate</h2>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={newSlateName}
+                onChange={(e) => setNewSlateName(e.target.value)}
+                placeholder="Enter slate name..."
+                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+              />
+              <Button variant="primary" onClick={handleCreateSlate}>
+                Create Slate
+              </Button>
+            </div>
+          </Card>
         </section>
 
         {/* Slates List */}
         <section>
-          <h2 className="text-xl font-semibold mb-4">Your Slates</h2>
+          <h2 className="font-display text-xl font-bold text-ink mb-4">Your Slates</h2>
           {slates.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400">No slates created yet. Create one to get started!</p>
+            <EmptyState icon={<span className="text-2xl">📋</span>} title="No slates yet" message="Create a slate to organize your chores!" />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {slates.map(slate => (
-                <div key={slate.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-                  <h3 className="text-lg font-semibold">{slate.name}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Click to configure tasks and tags</p>
-                  <button
-                    onClick={() => handleStartBuilding(slate.id)}
-                    className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors w-full"
-                  >
+                <Card key={slate.id} accent="sunny" className="p-6 space-y-4">
+                  <h3 className="font-display text-xl font-bold text-ink">{slate.name}</h3>
+                  <p className="text-sm text-ink/60">Click to configure tasks and tags</p>
+                  <Button variant="primary" onClick={() => handleStartBuilding(slate.id)}>
                     Configure Tasks & Tags
-                  </button>
-                </div>
+                  </Button>
+                </Card>
               ))}
             </div>
           )}
         </section>
       </main>
-    </div>
+    </PageShell>
   );
 }
 
-// Slate Builder Component
 function SlateBuilderPage({
   tasks,
   tags,
@@ -251,7 +239,6 @@ function SlateBuilderPage({
     setSelectedTasks(tasks.filter(t => explicitTaskIds.includes(t.id)));
   }, [tasks, explicitTaskIds]);
 
-  // Get tasks that match selected auto-include tags
   const getTagMatchedTasks = () => {
     if (autoIncludeTagIds.length === 0) return new Set<string>();
     
@@ -269,7 +256,6 @@ function SlateBuilderPage({
     return matchedTaskIds;
   };
 
-  // Get all effective tasks (explicit ∪ tag-matched, deduped)
   const getEffectiveTasks = () => {
     const allIds = new Set(explicitTaskIds);
     for (const task of selectedTasks) {
@@ -286,47 +272,35 @@ function SlateBuilderPage({
 
   if (!tasks.length || !tags.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-        <p className="text-gray-500 dark:text-gray-400">Loading slate builder...</p>
+      <div className="min-h-screen bg-cream flex items-center justify-center p-8">
+        <EmptyState icon={<span className="text-2xl">📋</span>} title="Loading slate builder..." message="Please wait while we prepare the editor..." />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 p-8">
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <button onClick={onCancel} className="hover:opacity-80 transition-opacity">
-            ← Back to Slates
-          </button>
-          <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Configure Slate</h1>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
+    <PageShell>
+      <Card accent="coral" className="space-y-8 p-6">
         {/* Section 1: Explicit Tasks */}
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Explicit Tasks (must be completed)</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        <section className="space-y-4">
+          <h2 className="font-display text-xl font-bold text-ink">Explicit Tasks (must be completed)</h2>
+          <p className="text-sm text-ink/60">
             These tasks are always included and must be explicitly marked as complete.
           </p>
 
           {selectedTasks.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No explicit tasks selected.</p>
+            <p className="text-sm text-ink/60">No explicit tasks selected.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {selectedTasks.map(task => (
-                <div key={task.id} className="flex items-start justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div key={task.id} className="flex items-start justify-between p-4 bg-cream rounded-xl">
                   <div>
-                    <h3 className="font-semibold">{task.name}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{task.points} pts</p>
+                    <h3 className="font-display text-lg font-bold text-ink">{task.name}</h3>
+                    <Badge status="points" className="mt-1">{task.points} pts</Badge>
                   </div>
-                  <button
-                    onClick={() => onToggleTask(task.id)}
-                    className="text-red-600 hover:text-red-700 text-sm"
-                  >
+                  <Button variant="ghost" onClick={() => onToggleTask(task.id)}>
                     Remove
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -334,79 +308,69 @@ function SlateBuilderPage({
         </section>
 
         {/* Section 2: Auto-Include by Tags */}
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Auto-Include Tasks by Tag</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        <Card accent="sunny" className="pt-6 space-y-4">
+          <h2 className="font-display text-xl font-bold text-ink">Auto-Include Tasks by Tag</h2>
+          <p className="text-sm text-ink/60 mb-4">
             Select tags to automatically include all tasks with those tags. 
             Tasks can be in both explicit and auto-included lists (explicit wins).
           </p>
 
           {tags.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No tags available.</p>
+            <p className="text-sm text-ink/60">No tags available.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {tags.map(tag => (
-                <button
+                <TagPill
                   key={tag.id}
+                  active={autoIncludeTagIds.includes(tag.id)}
                   onClick={() => onToggleTag(tag.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    autoIncludeTagIds.includes(tag.id)
-                      ? "bg-indigo-600 text-white"
-                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                  }`}
                 >
                   {tag.name}
-                </button>
+                </TagPill>
               ))}
             </div>
           )}
 
-          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-4 text-sm text-ink/60">
             {autoIncludeTagIds.length === 0 
               ? "No tags selected for auto-inclusion."
               : `Tasks with these ${autoIncludeTagIds.length} tag(s) will be automatically included.`}
           </p>
-        </section>
+        </Card>
 
         {/* Section 3: Effective Task List */}
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Effective Tasks (Total)</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        <Card accent="teal" className="pt-6 space-y-4">
+          <h2 className="font-display text-xl font-bold text-ink">Effective Tasks (Total)</h2>
+          <p className="text-sm text-ink/60 mb-4">
             This is the union of explicit tasks and tag-matched tasks.
           </p>
 
           {getEffectiveTasks().length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No tasks will be included.</p>
+            <p className="text-sm text-ink/60">No tasks will be included.</p>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
               {getEffectiveTasks().map(task => (
-                <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div key={task.id} className="flex items-center justify-between p-3 bg-cream rounded-xl">
                   <div>
-                    <h3 className="font-semibold">{task.name}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{task.points} pts</p>
+                    <h3 className="font-display text-lg font-bold text-ink">{task.name}</h3>
+                    <Badge status="points" className="mt-1">{task.points} pts</Badge>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </section>
+        </Card>
 
         {/* Action Buttons */}
-        <section className="flex gap-4">
-          <button
-            onClick={onSave}
-            className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
+        <section className="flex gap-4 pt-4 border-t border-ink/10">
+          <Button variant="primary" onClick={onSave}>
             Save Slate Configuration
-          </button>
-          <button
-            onClick={onCancel}
-            className="px-6 py-2 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         </section>
-      </main>
-    </div>
+      </Card>
+    </PageShell>
   );
 }

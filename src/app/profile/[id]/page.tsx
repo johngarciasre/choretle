@@ -1,17 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { PageShell, StatCard, Loading, Badge, Button, Card, PageHeader } from "@/components/ui";
 import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight } from "lucide-react";
-
-// Server action to fetch profile data
-async function fetchUserProfile(userId: string) {
-  const res = await fetch(`/api/profile/${userId}`);
-  if (!res.ok) throw new Error("Failed to fetch profile");
-  return res.json();
-}
 
 interface JobCompletion {
   id: string;
@@ -21,8 +15,6 @@ interface JobCompletion {
   category: string;
   taskName?: string | null;
 }
-
-// ... rest of code
 
 interface UserProfile {
   id: string;
@@ -112,11 +104,6 @@ export default function UserProfilePage() {
       });
   }, [userId]);
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-
-  const weekTrend = stats.pointsThisWeek - stats.pointsLastWeek;
-  const streakFlames = Array.from({ length: Math.min(stats.streakDays, 10) }, () => "\u{1F525}");
-
   const categoryBreakdown = useMemo(() => {
     const map = new Map<string, { total: number; count: number }>();
     for (const c of completions) {
@@ -141,32 +128,32 @@ export default function UserProfilePage() {
 
   const maxDayPoints = useMemo(() => Math.max(...last7Days.map((d) => d.points), 1), [last7Days]);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      {/* Header */}
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
-        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <ChevronRight size={20} className="transform rotate-180" />
-          <span className="text-sm text-gray-600 dark:text-gray-300">Back to Dashboard</span>
-        </Link>
-        <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Profile</h1>
-      </nav>
+  if (loading) return <Loading label="Loading profile..." />;
 
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
-        {/* Profile Hero */}
-        <div className={cn(
-          "rounded-2xl shadow-xl relative overflow-hidden",
-          "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-400 dark:from-indigo-700 dark:via-purple-700 dark:to-pink-600"
-        )}>
+  const weekTrend = stats.pointsThisWeek - stats.pointsLastWeek;
+  const streakFlames = Array.from({ length: Math.min(stats.streakDays, 10) }, () => "\u{1F525}");
+
+  return (
+    <PageShell>
+      <PageHeader 
+        title={user.name}
+        subtitle={`${user.role} \u00B7 Joined ${new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`}
+        actions={
+          <Link href="/dashboard">
+            <Button variant="ghost">Back to Dashboard</Button>
+          </Link>
+        }
+      />
+
+      <main className="space-y-6">
+        {/* Profile Hero - Candy Gradient */}
+        <div className="bg-gradient-to-br from-coral via-bubblegum to-grape rounded-2xl shadow-xl relative overflow-hidden p-8 text-white">
           <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.3),transparent_50%)]" />
 
           {/* Avatar & Name */}
-          <div className="relative flex items-center gap-6 p-8">
+          <div className="relative flex items-center gap-6">
             {/* Avatar */}
-            <div className={cn(
-              "w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold",
-              user.avatarUrl ? "" : "bg-gradient-to-br from-indigo-400 to-purple-400"
-            )}>
+            <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold bg-white/90 text-ink shadow-lg">
               {user.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.name} className="w-full h-full rounded-full object-cover" />
               ) : (
@@ -176,211 +163,220 @@ export default function UserProfilePage() {
 
             {/* Name & Role */}
             <div className="flex-1">
-              <h2 className="text-2xl font-bold text-white">{user.name}</h2>
-              <p className="text-sm opacity-80 capitalize">{user.role} &middot; Joined {new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</p>
+              <h2 className="font-display text-4xl font-bold">{user.name}</h2>
+              <p className="text-white/80 capitalize">{user.role}</p>
             </div>
 
             {/* Total Points Badge */}
-            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
-              <Award size={20} className="text-yellow-300" />
-              <span className="text-xl font-black text-white">{stats.totalPoints.toLocaleString()}</span>
-              <span className="text-sm opacity-80 ml-1">pts</span>
-            </div>
+            <Badge status="points" className="text-lg px-5 py-2">
+              <Star size={16} fill="currentColor" />
+              {stats.totalPoints.toLocaleString()} pts
+            </Badge>
           </div>
 
           {/* Streak Bar */}
           {stats.streakDays > 0 && (
-            <div className="px-8 pb-6 flex items-center gap-2">
-              <Flame size={18} className="text-orange-300" />
-              <span className="text-sm font-medium text-white">{stats.streakDays} day streak</span>
+            <div className="mt-6 flex items-center gap-3">
+              <Flame size={20} />
+              <span className="text-lg font-bold">{stats.streakDays} day streak</span>
               {streakFlames.length > 0 && (
-                <span className="text-lg leading-none ml-2">{streakFlames.join("")}</span>
+                <span className="text-2xl leading-none ml-1">{streakFlames.join("")}</span>
               )}
             </div>
           )}
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Points */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 text-center">
-            <Trophy size={20} className="mx-auto mb-3 text-amber-500" />
-            <div className="text-2xl font-bold">{stats.totalPoints.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total Points</div>
-          </div>
+          <StatCard 
+            icon={<Trophy size={24} />}
+            label="Total Points"
+            value={stats.totalPoints.toLocaleString()}
+            accent="coral"
+          />
 
           {/* Jobs Completed */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 text-center">
-            <CheckCircle2 size={20} className="mx-auto mb-3 text-emerald-500" />
-            <div className="text-2xl font-bold">{stats.jobsCompleted}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Jobs Done</div>
-          </div>
+          <StatCard 
+            icon={<CheckCircle2 size={24} />}
+            label="Jobs Done"
+            value={stats.jobsCompleted}
+            accent="teal"
+          />
 
           {/* Avg Points / Job */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 text-center">
-            <Star size={20} className="mx-auto mb-3 text-purple-500" />
-            <div className="text-2xl font-bold">{stats.averagePointsPerJob.toFixed(1)}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg / Job</div>
-          </div>
+          <StatCard 
+            icon={<Star size={24} />}
+            label="Avg / Job"
+            value={stats.averagePointsPerJob.toFixed(1)}
+            accent="sunny"
+          />
 
           {/* Longest Streak */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 text-center">
-            <Flame size={20} className="mx-auto mb-3 text-orange-500" />
-            <div className="text-2xl font-bold">{stats.longestStreak}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Best Streak</div>
-          </div>
+          <StatCard 
+            icon={<Flame size={24} />}
+            label="Best Streak"
+            value={stats.longestStreak}
+            accent="grape"
+          />
         </div>
 
         {/* Weekly Trend */}
         {weekTrend !== 0 && (
-          <div className={cn(
-            "flex items-center justify-between p-4 rounded-xl border",
-            weekTrend > 0 ? "bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-800" : "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800"
-          )}>
+          <Card accent={weekTrend > 0 ? "teal" : "grape"} className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               {weekTrend > 0 ? (
-                <TrendingUp size={16} className="text-emerald-500" />
+                <TrendingUp size={18} />
               ) : (
-                <TrendingDown size={16} className="text-red-500" />
+                <TrendingDown size={18} />
               )}
-              <span className={cn(
-                "text-sm font-medium",
-                weekTrend > 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"
-              )}>
+              <span className="font-bold text-ink">
                 {weekTrend > 0 ? "Up" : "Down"} {Math.abs(weekTrend)} pts vs last week
               </span>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* 7-Day Activity Chart */}
         {completions.length > 0 && (
-          <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 size={18} className="text-indigo-500" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">7-Day Activity</h3>
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 size={20} className="text-sunny" />
+              <h3 className="font-display text-xl font-bold text-ink">7-Day Activity</h3>
             </div>
 
-            <div className="flex items-end gap-2 h-40">
-              {last7Days.map((day, index) => (
-                <div key={index} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{day.points > 0 ? `${day.points}pts` : ""}</span>
-                  <div className={cn(
-                    "w-full rounded-md transition-all duration-300",
-                    day.points > 0 ? "bg-gradient-to-t from-indigo-500 to-purple-400" : "bg-gray-200 dark:bg-gray-700"
-                  )} style={{ height: `${day.points > 0 ? Math.max((day.points / maxDayPoints) * 100, 8) : 4}%` }} />
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {new Date(day.date).toLocaleDateString("en-US", { weekday: "short" }).charAt(0)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <Card accent="sunny" className="p-6">
+              <div className="flex items-end gap-2 h-48">
+                {last7Days.map((day, index) => (
+                  <div key={index} className="flex-1 flex flex-col items-center gap-2">
+                    <span className="text-xs font-bold text-ink/60">{day.points > 0 ? `${day.points}pts` : ""}</span>
+                    <div 
+                      className={`w-full rounded-t-xl transition-all duration-300 ${
+                        day.points > 0 ? "bg-gradient-to-t from-teal to-sunny" : "bg-ink/10"
+                      }`} 
+                      style={{ height: `${day.points > 0 ? Math.max((day.points / maxDayPoints) * 100, 8) : 4}%` }} 
+                    />
+                    <span className="text-xs text-ink/60">
+                      {new Date(day.date).toLocaleDateString("en-US", { weekday: "short" }).charAt(0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
           </section>
         )}
 
         {/* Category Breakdown */}
         {categoryBreakdown.length > 0 && (
-          <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Star size={18} className="text-purple-500" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Categories</h3>
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Star size={20} className="text-grape" />
+              <h3 className="font-display text-xl font-bold text-ink">Categories</h3>
             </div>
 
-            <div className="space-y-3">
-              {categoryBreakdown.map(([category, data]) => (
-                <div key={category} className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200 w-24 truncate">{category}</span>
-                  <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-400"
-                      style={{ width: `${(data.total / stats.totalPoints) * 100}%` }}
-                    />
+            <Card accent="bubblegum" className="p-6">
+              <div className="space-y-4">
+                {categoryBreakdown.map(([category, data]) => (
+                  <div key={category} className="flex items-center gap-4">
+                    <span className="text-sm font-bold text-ink w-32 truncate">{category}</span>
+                    <div className="flex-1 h-3 rounded-full bg-ink/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-grape to-bubblegum"
+                        style={{ width: `${(data.total / stats.totalPoints) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-bold text-ink">{data.total} pts</span>
+                    <span className="text-xs text-ink/60">({data.count})</span>
                   </div>
-                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{data.total} pts</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">({data.count})</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </Card>
           </section>
         )}
 
         {/* Points History Timeline */}
         {completions.length > 0 && (
-          <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock size={18} className="text-blue-500" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Points History</h3>
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock size={20} className="text-teal" />
+              <h3 className="font-display text-xl font-bold text-ink">Points History</h3>
             </div>
 
-            <div className="space-y-4">
-              {completions.slice(0, 8).map((completion, index) => (
-                <div key={completion.id} className="flex items-center gap-3">
-                  {/* Timeline dot */}
-                  <div className="flex flex-col items-center gap-1">
-                    <div className={cn(
-                      "w-3 h-3 rounded-full border-2",
-                      index === 0 ? "bg-indigo-500 border-indigo-500" : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
-                    )} />
+            <Card accent="teal" className="p-6">
+              <div className="space-y-4">
+                {completions.slice(0, 8).map((completion, index) => (
+                  <div key={completion.id} className="flex items-center gap-3">
+                    {/* Timeline dot */}
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={`w-3 h-3 rounded-full border-2 ${
+                        index === 0 
+                          ? "bg-coral border-coral" 
+                           : "bg-white border-teal/30"
+                      }`} />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-ink">{completion.name}</p>
+                      <p className="text-xs text-ink/60">
+                        {new Date(completion.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {" \u00B7 "}
+                        {completion.category}
+                      </p>
+                    </div>
+
+                    {/* Points */}
+                    <Badge status="points">
+                      +{completion.points} pts
+                    </Badge>
                   </div>
+                ))}
 
-                  {/* Content */}
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{completion.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(completion.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      {" · "}
-                      {completion.category}
-                    </p>
-                  </div>
-
-                  {/* Points */}
-                  <span className="text-sm font-bold text-amber-500">+{completion.points}</span>
-                </div>
-              ))}
-
-              {completions.length > 8 && (
-                <Link href={`/profile/${userId}/history`} className="flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline transition-opacity">
-                  View all {completions.length} completions
-                  <ChevronRight size={14} />
-                </Link>
-              )}
-            </div>
+                {completions.length > 8 && (
+                  <Link href={`/profile/${userId}/history`} className="flex items-center gap-1 text-sm text-grape hover:underline transition-opacity">
+                    View all {completions.length} completions
+                    <ChevronRight size={14} />
+                  </Link>
+                )}
+              </div>
+            </Card>
           </section>
         )}
 
-        {/* Badges Section */}
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Award size={18} className="text-amber-500" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Badges</h3>
+        {/* Badges/achievements Section */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Award size={20} className="text-bubblegum" />
+            <h3 className="font-display text-xl font-bold text-ink">Badges</h3>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { name: "First Task", icon: "\u{1F3AF}", earned: stats.jobsCompleted >= 1, desc: "Complete your first task" },
-              { name: "Hard Worker", icon: "\u{1F6BE}", earned: stats.jobsCompleted >= 5, desc: "Complete 5 tasks" },
-              { name: "Streak Starter", icon: "\u{1F525}", earned: stats.streakDays >= 3, desc: "3-day streak" },
-              { name: "Point Master", icon: "\u{1F3C6}", earned: stats.totalPoints >= 100, desc: "Earn 100 points" },
-              { name: "Streak Pro", icon: "\u{1F525}", earned: stats.streakDays >= 7, desc: "7-day streak" },
-              { name: "Champion", icon: "\u{1F3C6}", earned: stats.totalPoints >= 500, desc: "Earn 500 points" },
-            ].map((badge) => (
-              <div key={badge.name} className={cn(
-                "flex flex-col items-center gap-2 p-4 rounded-xl text-center transition-shadow",
-                badge.earned ? "bg-gradient-to-br from-amber-100 to-yellow-50 dark:from-amber-950 dark:to-yellow-950 border border-amber-300 dark:border-amber-700" : "bg-gray-100 dark:bg-gray-700 opacity-60"
-              )}>
-                <span className="text-2xl">{badge.earned ? badge.icon : "\u2B50"}</span>
-                <span className={cn(
-                  "text-sm font-medium",
-                  badge.earned ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"
-                )}>{badge.name}</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">{badge.desc}</span>
-              </div>
-            ))}
-          </div>
+          <Card accent="sunny" className="p-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {[
+                { name: "First Task", icon: "\u{1F3AF}", earned: stats.jobsCompleted >= 1, desc: "Complete your first task" },
+                { name: "Hard Worker", icon: "\u{1F6BE}", earned: stats.jobsCompleted >= 5, desc: "Complete 5 tasks" },
+                { name: "Streak Starter", icon: "\u{1F525}", earned: stats.streakDays >= 3, desc: "3-day streak" },
+                { name: "Point Master", icon: "\u{1F3C6}", earned: stats.totalPoints >= 100, desc: "Earn 100 points" },
+                { name: "Streak Pro", icon: "\u{1F525}", earned: stats.streakDays >= 7, desc: "7-day streak" },
+                { name: "Champion", icon: "\u{1F3C6}", earned: stats.totalPoints >= 500, desc: "Earn 500 points" },
+              ].map((badge) => (
+                <div key={badge.name} className={cn(
+                  "flex flex-col items-center gap-2 p-4 rounded-xl text-center transition-shadow",
+                  badge.earned 
+                    ? "bg-sunny text-ink shadow-md shadow-sunny/30" 
+                    : "bg-ink/5 opacity-60"
+                )}>
+                  <span className="text-2xl">{badge.earned ? badge.icon : "\u2B50"}</span>
+                  <span className={`text-sm font-bold ${
+                      badge.earned ? "text-ink" : "text-ink/40"
+                  }`}>{badge.name}</span>
+                  <span className="text-xs text-ink/60">{badge.desc}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
         </section>
       </main>
-    </div>
+    </PageShell>
   );
 }
-
-import { useMemo } from "react";

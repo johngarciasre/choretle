@@ -232,12 +232,12 @@ export default function SwapMeetPage() {
 
   if (!familyId) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
+      <div className="min-h-screen bg-gradient-to-br from-cream to-bubblegum/20">
         <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
           <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <span className="text-sm text-gray-600 dark:text-gray-300">Back to Dashboard</span>
+            <span className="text-sm text-ink/60">Back to Dashboard</span>
           </Link>
-          <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Choretle</h1>
+          <h1 className="text-2xl font-bold text-grape">Choretle</h1>
           <div className="flex gap-4">
             <Link href="/dashboard" className="hover:underline">Dashboard</Link>
             <Link href="/swap-meet" className="hover:underline text-indigo-600 font-semibold">Swap Meet</Link>
@@ -246,7 +246,7 @@ export default function SwapMeetPage() {
 
         <main className="max-w-xl mx-auto p-8 space-y-4">
           <h2 className="text-xl font-semibold mb-4">Set Your Family ID</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">Enter your family ID to view your rotation schedule.</p>
+          <p className="text-ink/60 mb-4">Enter your family ID to view your rotation schedule.</p>
           <input
             type="text"
             value={familyId}
@@ -266,12 +266,12 @@ export default function SwapMeetPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-cream to-bubblegum/20">
       <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
         <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <span className="text-sm text-gray-600 dark:text-gray-300">Back to Dashboard</span>
+          <span className="text-sm text-ink/60">Back to Dashboard</span>
         </Link>
-        <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Choretle</h1>
+        <h1 className="text-2xl font-bold text-grape">Choretle</h1>
         <div className="flex gap-4">
           <Link href="/dashboard" className="hover:underline">Dashboard</Link>
           <Link href="/swap-meet" className="hover:underline text-indigo-600 font-semibold">Swap Meet</Link>
@@ -291,7 +291,7 @@ export default function SwapMeetPage() {
                   className={`px-3 py-1 rounded text-sm ${
                     days === daysAhead 
                       ? "bg-indigo-600 text-white" 
-                      : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                      : "bg-ink/10 hover:bg-ink/20"
                   }`}
                 >
                   {days} days
@@ -300,21 +300,21 @@ export default function SwapMeetPage() {
             </div>
           </div>
           
-          <p className="text-gray-500 dark:text-gray-400 mb-4">View your upcoming chore assignments.</p>
+          <p className="text-ink/60 mb-4">View your upcoming chore assignments.</p>
 
           {loading ? (
-            <p className="text-gray-500 dark:text-gray-400">Loading schedule...</p>
+            <p className="text-ink/60">Loading schedule...</p>
           ) : schedule.length === 0 ? (
-            <div className="bg-white/90 dark:bg-gray-800 p-6 rounded-lg shadow text-center">
-              <p className="text-gray-500 dark:text-gray-400">No rotation schedule found. Set up rotations in your family settings.</p>
+            <div className="bg-white p-6 rounded-lg shadow text-center">
+              <p className="text-ink/60">No rotation schedule found. Set up rotations in your family settings.</p>
             </div>
           ) : (
             schedule.map((slate) => (
-              <div key={slate.slateId} className="mb-6 bg-white/90 dark:bg-gray-800 p-4 rounded-lg shadow">
+              <div key={slate.slateId} className="mb-6 bg-white p-4 rounded-lg shadow">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="font-semibold text-lg">{slate.slateName || `Slate: ${slate.slateId}`}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-sm text-ink/60">
                       {slate.frequency} · Every {slate.interval} days
                     </p>
                   </div>
@@ -326,8 +326,8 @@ export default function SwapMeetPage() {
                       key={index}
                       className={`p-2 rounded text-center text-xs transition-all ${
                         assignment.isCurrent
-                          ? "bg-indigo-100 dark:bg-indigo-900 border-2 border-indigo-500 shadow-md"
-                          : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                          ? "bg-grape/20 border-2 border-grape shadow-md"
+                          : "bg-ink/5 hover:bg-ink/10"
                       }`}
                     >
                       <div className="font-semibold text-sm">{assignment.date}</div>
@@ -345,9 +345,9 @@ export default function SwapMeetPage() {
         {/* Swap Assignments Section */}
         <section className="mt-12">
           <h2 className="text-xl font-semibold mb-4">Swap Assignments</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">Select two rotation entries to swap between users.</p>
+          <p className="text-ink/60 mb-4">Select two rotation entries to swap between users.</p>
 
-          <div className="bg-white/90 dark:bg-gray-800 p-6 rounded-lg shadow space-y-4">
+          <div className="bg-white p-6 rounded-lg shadow space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Family ID</label>
@@ -423,9 +423,9 @@ export default function SwapMeetPage() {
         {/* Share Slate Section */}
         <section className="mt-12">
           <h2 className="text-xl font-semibold mb-4">Share Slates</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">Share your slates with another family for swap meet.</p>
+          <p className="text-ink/60 mb-4">Share your slates with another family for swap meet.</p>
 
-          <div className="bg-white/90 dark:bg-gray-800 p-6 rounded-lg shadow space-y-4">
+          <div className="bg-white p-6 rounded-lg shadow space-y-4">
             <button
               onClick={openShareModal}
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
@@ -438,11 +438,11 @@ export default function SwapMeetPage() {
                 <h3 className="font-medium mb-2">Pending Requests</h3>
                 <div className="space-y-2">
                   {swaps.map((swap) => (
-                    <div key={swap.id} className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    <div key={swap.id} className="bg-ink/5 p-3 rounded-lg">
                       <div className="flex justify-between items-center">
                         <div>
                           <p className="text-sm font-medium">Slate: {swap.slateId}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                          <p className="text-xs text-ink/60">
                             Requested by family ID: {swap.requestedBy}
                           </p>
                         </div>
@@ -465,7 +465,7 @@ export default function SwapMeetPage() {
         {/* Share Slate Modal */}
         {showShareModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
               <h3 className="text-xl font-semibold mb-4">Share Slates</h3>
               
               <div className="space-y-4">
@@ -513,7 +513,7 @@ export default function SwapMeetPage() {
                   </button>
                   <button
                     onClick={closeShareModal}
-                    className="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded hover:bg-gray-400 dark:hover:bg-gray-500"
+                    className="flex-1 bg-ink/10 text-ink px-4 py-2 rounded hover:bg-ink/20"
                   >
                     Cancel
                   </button>

@@ -1,6 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { PageShell } from "@/components/ui/PageShell";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { AlertCircle } from "lucide-react";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
@@ -42,40 +46,47 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <form onSubmit={handleSignIn} className="space-y-4 p-8 rounded-lg shadow-lg w-full max-w-md bg-white">
-        <h1 className="text-3xl font-bold text-center">Sign In</h1>
-        {error && <p className="text-red-600">{error}</p>}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full px-4 py-2 border rounded-lg"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          className="w-full px-4 py-2 border rounded-lg"
-        />
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
-        >
-          {loading ? "Signing in..." : "Sign In"}
-        </button>
-        <div className="text-center text-sm mt-4">
-          Don&apos;t have an account?{" "}
-          <a href="/auth/signup" className="text-indigo-600 hover:text-indigo-700 font-medium">
-            Sign up
-          </a>
-        </div>
-      </form>
-    </div>
+    <PageShell>
+      <main className="flex items-center justify-center min-h-[60vh]">
+        <Card accent="bubblegum" className="w-full max-w-md p-8">
+          <h1 className="font-display text-3xl font-bold text-center text-ink mb-6">Sign In</h1>
+          {error && (
+            <div className="flex items-center gap-2 text-coral bg-coral/10 px-4 py-3 rounded-xl mb-4">
+              <AlertCircle size={18} />
+              <p className="text-sm font-bold">{error}</p>
+            </div>
+          )}
+          <form onSubmit={handleSignIn} className="space-y-4">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+            />
+            <Button variant="primary" size="lg" className="w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
+          <div className="text-center mt-6">
+            <p className="text-ink/60 text-sm">
+              Don&apos;t have an account?{" "}
+              <a href="/auth/signup" className="text-grape hover:text-grape/80 font-bold underline">
+                Sign up
+              </a>
+            </p>
+          </div>
+        </Card>
+      </main>
+    </PageShell>
   );
 }
