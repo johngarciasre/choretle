@@ -60,7 +60,12 @@ export async function POST(request: NextRequest) {
     );
 
     setDevSessionCookie(response.headers, session);
-    console.log("[SIGNIN] Set dev session cookie");
+    console.log("[SIGNIN] Set dev session cookie:");
+    for (const [key, value] of response.headers) {
+      if (key.toLowerCase().includes("cookie")) {
+        console.log(`  ${key}: ${value}`);
+      }
+    }
     return response;
   }
 
@@ -144,7 +149,6 @@ export async function POST(request: NextRequest) {
   try {
     const db = await initDb();
     if (db && db.select) {
-      // Only run DB code if database is actually available
       const existingUserWithFamily = await db.select().from(schema.users).where(
         eq(schema.users.id, userId),
         sql`${schema.users.familyId} IS NOT NULL`
@@ -197,7 +201,7 @@ export async function POST(request: NextRequest) {
       userId,
       email: userEmail,
       role: userRole,
-      familyId: null, // Will be null on Vercel where DB is not available
+      familyId: null, 
       message: "Sign in successful"
     },
     {
@@ -214,7 +218,7 @@ export async function POST(request: NextRequest) {
   
   const tokens = signInResult.data.session;
   if (tokens) {
-    // Access token cookie
+    // Access token cookie - use append to add multiple cookies
     response.headers.append(
       "set-cookie",
       `supabase-token=${encodeURIComponent(JSON.stringify({
@@ -247,7 +251,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  console.log("[SIGNIN] Cookies set, returning response");
+  console.log("[SIGNIN] Cookies set on response. Headers:");
+  for (const [key, value] of response.headers) {
+    if (key.toLowerCase().includes("cookie")) {
+      console.log(`  ${key}: ${value.substring(0, 200)}...`);
+    }
+  }
+  
+  console.log("[SIGNIN] Returning response");
   return response;
 }
 
