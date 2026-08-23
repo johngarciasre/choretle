@@ -8,32 +8,14 @@ export default function SignInPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Check if we're already logged in on mount
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  async function checkAuth() {
-    try {
-      const res = await fetch("/api/auth/me?_t=" + Date.now());
-      if (res.ok) {
-        window.location.href = "/";
-      }
-    } catch (e) {
-      console.log("Not logged in yet");
-    }
-  }
-
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    console.log("[SIGNIN PAGE] Starting sign in process");
+    console.log("[SIGNIN PAGE] Starting sign in");
     setError("");
     setLoading(true);
     
     try {
-      console.log("[SIGNIN PAGE] Sending fetch to /api/auth/signin");
-      
-      const response = await fetch("/api/auth/signin?_t=" + Date.now(), {
+      const response = await fetch("/api/auth/signin", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -42,30 +24,18 @@ export default function SignInPage() {
       });
       
       console.log("[SIGNIN PAGE] Response status:", response.status);
-      console.log("[SIGNIN PAGE] All response headers:");
-      for (const [key, value] of response.headers) {
-        if (!key.includes("set-cookie")) {
-          console.log(`  ${key}: ${value}`);
-        }
-      }
       
       const data = await response.json();
-      console.log("[SIGNIN PAGE] Response JSON:", data);
-      console.log("[SIGNIN PAGE] Cookies stored by browser - check DevTools Application tab");
+      console.log("[SIGNIN PAGE] Response data:", data);
       
       if (response.ok) {
-        console.log("[SIGNIN PAGE] Sign in successful, redirecting to /");
         window.location.href = "/";
       } else {
-        let errorMessage = "Sign in failed";
-        if (data.error) {
-          errorMessage = data.error;
-        }
-        setError(errorMessage);
+        setError(data.error || "Sign in failed");
       }
     } catch (err) {
-      console.error("[SIGNIN PAGE] Sign in error:", err);
-      setError("An error occurred during sign in");
+      console.error("[SIGNIN PAGE] Error:", err);
+      setError("An error occurred");
     } finally {
       setLoading(false);
     }

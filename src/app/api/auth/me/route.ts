@@ -2,15 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
-  console.log("[AUTH_ME] === START ===");
-  
   const cookieHeader = request.headers.get("cookie") || "";
-  console.log("[AUTH_ME] Cookie header:", cookieHeader ? `${cookieHeader.substring(0, 200)}...` : "EMPTY");
   
-  if (!cookieHeader) {
-    console.log("[AUTH_ME] No cookies in request!");
-    return NextResponse.json({ authenticated: false });
-  }
+  console.log("[AUTH_ME] Cookie header:", cookieHeader ? `${cookieHeader.substring(0, 100)}...` : "EMPTY");
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,7 +26,6 @@ export async function GET(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession();
 
   if (session) {
-    console.log("[AUTH_ME] Session found:", session.user.id);
     return NextResponse.json({
       authenticated: true,
       user: {
@@ -44,6 +37,5 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  console.log("[AUTH_ME] No session found");
   return NextResponse.json({ authenticated: false });
 }
