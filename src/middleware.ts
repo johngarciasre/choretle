@@ -2,12 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, getDevUserFromRequest, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 
-// ─── Protected Routes ──────────────────────────────────────────────────
-// These routes require authentication
-
-/**
- * List of page routes that don't require authentication
- */
 const PUBLIC_ROUTES = [
   "/auth/signin",
   "/auth/signup", 
@@ -20,9 +14,6 @@ const PUBLIC_ROUTES = [
   "/apple-touch-icon.png",
 ];
 
-/**
- * List of API routes that don't require authentication (public APIs)
- */
 const PUBLIC_API_ROUTES = [
   "/api/auth/signin",
   "/api/auth/signup",
@@ -32,25 +23,10 @@ const PUBLIC_API_ROUTES = [
   "/api/schedules/generate",
 ];
 
-/**
- * Checks if dev mode auth bypass is enabled.
- */
 function isDevMode(): boolean {
   return process.env.AUTH_MODE === "dev";
 }
 
-/**
- * Checks if Supabase credentials are configured.
- * Requires both URL and anon key to be set.
- */
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
-/**
- * Middleware to protect routes and validate Supabase Auth sessions.
- * In dev mode (AUTH_MODE=dev), skips real auth and uses mock users.
- */
 export async function middleware(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const pathname = requestUrl.pathname;
@@ -64,7 +40,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
-  if (process.env.AUTH_MODE === "dev") {
+  if (isDevMode()) {
     const devUser = getDevUserFromRequest(request);
     
     let userId: string | null = null;
@@ -87,6 +63,7 @@ export async function middleware(request: NextRequest) {
     if (userId) {
       response.headers.set("x-user-id", userId);
     }
+    
     if (familyId) {
       response.headers.set("x-family-id", familyId);
     }
@@ -94,100 +71,31 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // ─── Production Mode: Check Supabase config before using it ──────────
+  // ─── Production Mode: Use Supabase Auth ──────────────────────────
   
-  if (!hasSupabaseConfig()) {
-    console.error("[MIDDLEWARE] Supabase not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-    
-    const isApiRoute = pathname.startsWith("/api/");
-    
-    if (isApiRoute) {
-      return NextResponse.json(
-        { error: "Server misconfiguration: Supabase credentials not set on server." },
-        { status: 500 }
-      );
-    }
-    
-    // For page routes, redirect to auth page which will show appropriate message
-    const signInUrl = new URL("/auth/signin", request.url);
-    return NextResponse.redirect(signInUrl);
-  }
+  const supabase = await getSupabaseMiddlewareClient(request);
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // ─── Initialize Supabase client (safe to use now) ──────────────────────
-  let supabase;
-  try {
-    supabase = await getSupabaseMiddlewareClient(request);
-  } catch (error) {
-    console.error("[MIDDLEWARE] Failed to initialize Supabase client:", error);
-    return NextResponse.json(
-      { error: "Authentication service unavailable" },
-      { status: 503 }
-    );
-  }
-
-  // ─── Get current session ──────────────────────────────────────────────
-  let userId: string | null = null;
-  let familyId: string | null = null;
-
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  
-  if (sessionError) {
-    console.error("[MIDDLEWARE] Supabase getSession error:", sessionError);
-  }
-  
-  if (session) {
-    userId = session.user.id;
-    familyId = session.user.user_metadata?.family_id || null;
-    
-    // Set auth headers for downstream API routes
-    const response = NextResponse.next();
-    if (userId) {
-      response.headers.set("x-user-id", userId);
-    }
-    if (familyId) {
-      response.headers.set("x-family-id", familyId);
-    }
-    
-    return response;
-  }
-
-  // ─── Session is missing or expired ──────────────────────────────────
-  
-  const isApiRoute = pathname.startsWith("/api/");
-
-  if (isApiRoute) {
-    const isProtectedApi = !isPublicApiRoute;
-    
-    if (isProtectedApi) {
-      return NextResponse.json(
-        { error: "Unauthorized", message: "Authentication required" },
-        { status: 401 }
-      );
-    }
-    
-    // This is a public API route, so we allow it but don't set auth headers
-    const response = NextResponse.next();
-    return response;
-  }
-
-  // ─── For page routes (non-API) ──────────────────────────────────────
-  
-  const isAuthPage = pathname === "/auth/signin" || 
-                    pathname === "/auth/signup" ||
-                    pathname.startsWith("/auth/");
-
-  if (!isAuthPage && !isPublicRoute) {
+  if (!user) {
     // Redirect to sign in page
     const signInUrl = new URL("/auth/signin", request.url);
     return NextResponse.redirect(signInUrl);
   }
 
-  // Allow the request but without auth headers (for public pages)
+  // ─── User is authenticated ──────────────────────────────────────────
   const response = NextResponse.next();
+  
+  response.headers.set("x-user-id", user.id);
+  if (user.email) {
+    response.headers.set("x-email", user.email);
+  }
+  if (user.user_metadata?.family_id) {
+    response.headers.set("x-family-id", user.user_metadata.family_id);
+  }
+
   return response;
 }
 
-// ─── Route Matcher Configuration ────────────────────────────────────────
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
