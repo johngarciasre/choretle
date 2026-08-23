@@ -1,12 +1,13 @@
 import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
+import Database from "better-sqlite3";
 import * as schema from "@/db/schema";
 
-// ─── PostgreSQL/Supabase Configuration ────────────────────────────────
+// ─── PostgreSQL/Supabase Configuration ───────────────────────────────
 
 let db: any;
 
 const DATABASE_URL = process.env.DATABASE_URL;
-let sqliteDb: any;
+let sqliteDb: Database.Database | null = null;
 
 export async function initDb(): Promise<any> {
   try {
@@ -17,18 +18,11 @@ export async function initDb(): Promise<any> {
       const pgClient = postgres.default(DATABASE_URL);
       db = (await import("drizzle-orm/postgres-js")).drizzle(pgClient, { schema });
     } else {
-      // Fallback to SQLite for local development
-      const DatabaseModule = (await import("better-sqlite3")).default;
+      // Fallback to in-memory SQLite for local development
+      // This avoids file system issues and works better with Next.js dev server
+      sqliteDb = new Database();
       
-      // Use a file-based SQLite database for local development persistence
-      const path = await import("path");
-      const sqlitePath = process.env.SQLITE_PATH || path.join(process.cwd(), ".choretle-dev.sqlite");
-      
-      sqliteDb = new DatabaseModule(sqlitePath, { 
-        readonly: false
-      });
-      
-      // Run SQLite schema creation
+      // Run SQLite schema creation on in-memory database
       sqliteDb.exec(`
         CREATE TABLE IF NOT EXISTS families (
           id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
