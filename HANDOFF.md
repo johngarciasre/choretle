@@ -1,9 +1,9 @@
 # Choretle Project Handoff Notes
 
-## Current State (as of Aug 20, 2026)
+## Current State (as of Aug 23, 2026)
 
 ### Repository
-- **URL**: https://github.com/johargarciasre/choretle.git
+- **URL**: https://github.com/johngarciasre/choretle.git
 - **Branches**: `main` and `production` both pushed to origin
 - **Owner**: johngarciasre (GitHub)
 - **Active user accounts**: johngarciasre & assimilative-john (both authenticated via `gh auth`)
@@ -31,6 +31,8 @@ src/
 │   │   ├── family/join/route.ts          # Join family via code
 │   │   ├── jobs/route.ts                 # Job CRUD
 │   │   ├── reports/route.ts              # Reports
+│   │   ├── rotations/route.ts            # Rotation CRUD (GET list, POST upsert, DELETE)
+│   │   ├── rotations/[rotationId]/route.ts  # Single rotation delete
 │   │   ├── schedules/generate/route.ts   # Auto-generate jobs from slates
 │   │   ├── swap-meet/route.ts            # Swap/rotate assignments
 │   │   ├── tasks/route.ts                # Task CRUD
@@ -117,6 +119,20 @@ src/
 8. **User Profile View** ✅ — Fetches user's assigned slates, active lists, current score, completed jobs with category info and streaks.
 9. **Task/Job View Details** ✅ — Task view shows name/details/status change affordance/comments/history; Job view shows truncated task info with workflow controls and auto-point awarding on completion.
 10. **Team Management UI/API** ✅ — Teams can be created/assigned users/toggled; API endpoints for team creation, member assignment, and family settings updates.
+11. **Consistent Header** ✅ — All pages now use `PageShell` with `NavBar` for consistent navigation across the app.
+12. **CRUD for Slates** ✅ — Slates list view has delete capability (hover to reveal trash icon); API routes use middleware headers (`x-family-id`).
+13. **CRUD for Tasks** ✅ — Task page has create/edit/delete modal UI with tag selection; POST/PUT/DELETE operations wired through API routes.
+14. **CRUD for Rotations** ✅ — New `/api/rotations` endpoint (GET/list, POST/upsert, DELETE); RotationBoard supports drag-and-drop between slates and removal via X button + drop zone.
+15. **Tags API** ✅ — Added PUT and DELETE methods to tags route; tasks API routes updated to use middleware headers.
+
+### Next Steps (Active)
+- None at this time — all previous HANDOFF.md next steps are complete.
+
+### Next Steps (Future)
+1. **Integration tests** — Add more integration tests for new API routes (rotations, tags CRUD).
+2. **Supabase Deployment** — Set up Supabase project with real PostgreSQL database and configure `.env.local` credentials.
+3. **Email Verification & Magic Links** — Enable email confirmation flows in Supabase dashboard as desired.
+4. **Feature Expansion** — Add more views/reports or integrations based on user feedback.
 
 ### Commands Reference
 ```bash
