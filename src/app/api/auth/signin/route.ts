@@ -79,7 +79,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Use Supabase SSR middleware client to handle cookies properly
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -219,26 +218,25 @@ export async function POST(request: NextRequest) {
   if (tokens) {
     console.log("[SIGNIN] Tokens available:", !!tokens.access_token);
     
-    // Set cookie using Supabase's helper function format
     response.headers.append(
       "set-cookie",
       `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL!.split("//")[1].split(".")[0]}${process.env.NODE_ENV === 'production' ? '-auth' : ''}-token=${encodeURIComponent(JSON.stringify({
-      access_token: tokens.access_token,
-      token_type: "bearer",
-      expires_in: tokens.expires_in,
-      expires_at: tokens.expires_at,
-      refresh_token: tokens.refresh_token,
-      user: {
-        id: tokens.user.id,
-        aud: tokens.user.aud,
-        email: tokens.user.email,
-        phone: tokens.user.phone,
-        app_metadata: tokens.user.app_metadata,
-        user_metadata: tokens.user.user_metadata,
-        identities: tokens.user.identities,
-      }
-    }))}; Path=/; Secure; HttpOnly; SameSite=Lax`
-    ));
+        access_token: tokens.access_token,
+        token_type: "bearer",
+        expires_in: tokens.expires_in,
+        expires_at: tokens.expires_at,
+        refresh_token: tokens.refresh_token,
+        user: {
+          id: tokens.user.id,
+          aud: tokens.user.aud,
+          email: tokens.user.email,
+          phone: tokens.user.phone,
+          app_metadata: tokens.user.app_metadata,
+          user_metadata: tokens.user.user_metadata,
+          identities: tokens.user.identities,
+        }
+      }))}; Path=/; Secure; HttpOnly; SameSite=Lax`
+    );
     
     console.log("[SIGNIN] Cookie set!");
   } else {
