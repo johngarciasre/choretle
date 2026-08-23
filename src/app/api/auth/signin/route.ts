@@ -5,9 +5,6 @@ import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 
-/**
- * Check if Supabase credentials are properly configured.
- */
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -16,7 +13,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // ─── Dev Mode: Use mock user ────────────────────────────────
     if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
       
@@ -55,16 +51,13 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
-    // ─── Production Mode: Use Supabase Auth ──────────────────────
-    
     if (!hasSupabaseConfig()) {
       return NextResponse.json(
-        { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
+        { error: "Server configuration error: Supabase credentials not found." },
         { status: 500 }
       );
     }
 
-    // Validate input
     if (!body?.email || !body?.password) {
       return NextResponse.json(
         { error: "Email and password are required" },
@@ -72,7 +65,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize Supabase client directly (not via middleware)
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -90,7 +82,6 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Sign in with password using Supabase Auth
     const signInResult = await supabase.auth.signInWithPassword({
       email: body.email.toLowerCase().trim(),
       password: body.password,
@@ -128,19 +119,16 @@ export async function POST(request: NextRequest) {
     const userEmail = signInResult.data.session.user.email || null;
     const userRole = signInResult.data.session.user.user_metadata?.role || "child";
 
-    // Create or update user record in users table and ensure family membership exists
     let familyId: string | null = null;
     try {
       const db = await initDb();
       if (db) {
-        // Check if user already has a family assignment
         const existingUserWithFamily = await db.select().from(schema.users).where(
           eq(schema.users.id, userId),
           sql`${schema.users.familyId} IS NOT NULL`
         ).first();
 
         if (!existingUserWithFamily) {
-          // Create a default family for the user
           const familyName = userEmail ? `${userEmail.split('@')[0]}'s Family` : "My Family";
           const familySlug = `family-${Date.now()}`;
           
@@ -156,14 +144,13 @@ export async function POST(request: NextRequest) {
           familyId = existingUserWithFamily.familyId;
         }
 
-        // Create or update user record in users table
         const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, userId)).first();
         
         if (!existingUser) {
           await db.insert(schema.users).values({
             id: userId,
             email: userEmail,
-            name: "", // Will be populated via profile endpoint later
+            name: "",
             role: userRole,
             familyId: familyId || null,
             createdAt: new Date(),
@@ -200,6 +187,44 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // Manually set Supabase session cookies on the response
+    const tokens = signInResult.data.session;
+    if (tokens) {
+      const cookiePairs: string[] = [];
+      
+      // Access token cookie
+      cookiePairs.push(
+        `supabase-token=${encodeURIComponent(JSON.stringify({
+          access_token: tokens.access_token,
+          token_type: "bearer",
+          expires_in: tokens.expires_in,
+          expires_at: tokens.expires_at,
+          refresh_token: tokens.refresh_token,
+          user: {
+            id: tokens.user.id,
+            aud: tokens.user.aud,
+            email: tokens.user.email,
+            phone: tokens.user.phone,
+            app_metadata: tokens.user.app_metadata,
+            user_metadata: tokens.user.user_metadata,
+            identities: tokens.user.identities,
+          }
+        }))}; Path=/; Secure; HttpOnly; SameSite=Lax`
+      );
+      
+      // Refresh token cookie  
+      cookiePairs.push(
+        `supabase-refresh-token=${encodeURIComponent(JSON.stringify({
+          access_token: tokens.refresh_token,
+          token_type: "bearer",
+          expires_in: tokens.expires_in,
+          expires_at: tokens.expires_at
+        }))}; Max-Age=${tokens.expires_in}; Path=/; Secure; HttpOnly; SameSite=Lax`
+      );
+
+      response.headers.set("set-cookie", cookiePairs.join("; "));
+    }
+
     return response;
   } catch (error) {
     if (error instanceof Error) {
@@ -219,12 +244,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET endpoint for sign-in page (returns the current session if logged in).
- */
 export async function GET(request: NextRequest) {
   try {
-    // ─── Dev Mode: Check dev session cookie ────────────────
     if (process.env.AUTH_MODE === "dev") {
       const cookieHeader = request.headers.get("cookie") || "";
       const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
@@ -251,11 +272,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ authenticated: false });
     }
 
-    // ─── Production Mode: Use Supabase Auth ────────────────
-    
     if (!hasSupabaseConfig()) {
       return NextResponse.json(
-        { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
+        { error: "Server configuration error: Supabase credentials not found." },
         { status: 500 }
       );
     }
