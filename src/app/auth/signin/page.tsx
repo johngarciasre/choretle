@@ -16,40 +16,44 @@ export default function SignInPage() {
     
     try {
       console.log("[SIGNIN PAGE] Sending fetch to /api/auth/signin");
-      const res = await fetch("/api/auth/signin", {
+      
+      // Clear any existing cookies by removing the cookie header
+      const response = await fetch("/api/auth/signin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Cookie": ""  // Clear old cookies
+        },
         body: JSON.stringify({ email, password }),
       });
-      console.log("[SIGNIN PAGE] Response status:", res.status);
       
-      const text = await res.text();
-      console.log("[SIGNIN PAGE] Response text:", text);
+      console.log("[SIGNIN PAGE] Response status:", response.status);
+      console.log("[SIGNIN PAGE] Response headers:", Object.fromEntries(response.headers.entries()));
       
-      if (res.ok) {
+      const data = await response.json();
+      console.log("[SIGNIN PAGE] Response JSON:", data);
+      
+      if (response.ok) {
+        console.log("[SIGNIN PAGE] Sign in successful, redirecting to /");
         window.location.href = "/";
       } else {
         let errorMessage = "Sign in failed";
-        try {
-          const data = JSON.parse(text);
-          errorMessage = data.error || errorMessage;
-        } catch {
-          // Not JSON - use raw text
-          errorMessage = text.substring(0, 200) || errorMessage;
+        if (data.error) {
+          errorMessage = data.error;
         }
         setError(errorMessage);
       }
-    } catch (err: unknown) {
-      console.log("[SIGNIN PAGE] Catch block:", err);
-      setError(err instanceof Error ? err.message : "Sign in failed");
+    } catch (err) {
+      console.error("[SIGNIN PAGE] Sign in error:", err);
+      setError("An error occurred during sign in");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      <form onSubmit={handleSignIn} className="space-y-4 p-8 rounded-lg shadow-lg w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <form onSubmit={handleSignIn} className="space-y-4 p-8 rounded-lg shadow-lg w-full max-w-md bg-white">
         <h1 className="text-3xl font-bold text-center">Sign In</h1>
         {error && <p className="text-red-600">{error}</p>}
         <input
