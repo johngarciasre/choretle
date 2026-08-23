@@ -198,6 +198,28 @@ export const swapMeet = pgTable("swap_meet", {
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
 });
 
+// ─── Tags ───────────────────────────────────────────────────────────
+
+export const tags = pgTable("tags", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  familyId: uuid("family_id").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  color: text("color"),
+  createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+});
+
+export const taskTags = pgTable("task_tags", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  tagId: uuid("tag_id").notNull(),
+  taskId: uuid("task_id").notNull(),
+});
+
+export const slateTags = pgTable("slate_tags", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  slateId: uuid("slate_id").notNull(),
+  tagId: uuid("tag_id").notNull(),
+});
+
 // ─── Invites ────────────────────────────────────────────────────────
 
 export const invites = pgTable("invites", {

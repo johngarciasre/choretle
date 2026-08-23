@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight } from "lucide-react";
+
+// Server action to fetch profile data
+async function fetchUserProfile(userId: string) {
+  const res = await fetch(`/api/profile/${userId}`);
+  if (!res.ok) throw new Error("Failed to fetch profile");
+  return res.json();
+}
 
 interface JobCompletion {
   id: string;
@@ -12,7 +19,10 @@ interface JobCompletion {
   points: number;
   completedAt: string;
   category: string;
+  taskName?: string | null;
 }
+
+// ... rest of code
 
 interface UserProfile {
   id: string;
@@ -32,8 +42,6 @@ interface UserStats {
   averagePointsPerJob: number;
   streakDays: number;
   longestStreak: number;
-  topCategory: string;
-  weeklyGoal?: number;
 }
 
 export default function UserProfilePage() {
@@ -56,13 +64,11 @@ export default function UserProfilePage() {
     averagePointsPerJob: 0,
     streakDays: 0,
     longestStreak: 0,
-    topCategory: "",
   });
   const [completions, setCompletions] = useState<JobCompletion[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch profile data from API
     fetch(`/api/profile/${userId}`)
       .then((res) => res.json())
       .then((data) => {
@@ -72,7 +78,6 @@ export default function UserProfilePage() {
         setLoading(false);
       })
       .catch(() => {
-        // Mock data for now
         const mockUser: UserProfile = {
           id: "1",
           name: "Alice",
@@ -91,7 +96,6 @@ export default function UserProfilePage() {
           averagePointsPerJob: 20.67,
           streakDays: 5,
           longestStreak: 12,
-          topCategory: "Cleaning",
         };
 
         const mockCompletions: JobCompletion[] = [
@@ -99,10 +103,6 @@ export default function UserProfilePage() {
           { id: "2", name: "Vacuum living room", points: 15, completedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), category: "Cleaning" },
           { id: "3", name: "Do dishes", points: 8, completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), category: "Kitchen" },
           { id: "4", name: "Take out trash", points: 5, completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), category: "Chores" },
-          { id: "5", name: "Clean bathroom", points: 12, completedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(), category: "Cleaning" },
-          { id: "6", name: "Fold laundry", points: 7, completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), category: "Chores" },
-          { id: "7", name: "Sweep garage", points: 10, completedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(), category: "Cleaning" },
-          { id: "8", name: "Water plants", points: 3, completedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), category: "Chores" },
         ];
 
         setUser(mockUser);
@@ -117,7 +117,6 @@ export default function UserProfilePage() {
   const weekTrend = stats.pointsThisWeek - stats.pointsLastWeek;
   const streakFlames = Array.from({ length: Math.min(stats.streakDays, 10) }, () => "\u{1F525}");
 
-  // Group completions by category for breakdown
   const categoryBreakdown = useMemo(() => {
     const map = new Map<string, { total: number; count: number }>();
     for (const c of completions) {
@@ -127,7 +126,6 @@ export default function UserProfilePage() {
     return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
   }, [completions]);
 
-  // Last 7 days activity for mini chart
   const last7Days = useMemo(() => {
     const days: { date: string; points: number }[] = [];
     for (let i = 6; i >= 0; i--) {
@@ -384,3 +382,5 @@ export default function UserProfilePage() {
     </div>
   );
 }
+
+import { useMemo } from "react";

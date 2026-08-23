@@ -1,6 +1,6 @@
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 
 // ─── Global DB Initialization ────────────────────────────────────────
 
@@ -98,6 +98,45 @@ export async function updateUserPoints(id: string, points: number) {
   );
   return (res as any[])?.[0] || null;
 }
+
+// ─── Profile ────────────────────────────────────────────────────────
+
+export async function getProfileByUserId(userId: string) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.select().from(schema.users).where({ id: userId }).first()
+  );
+  return res as Selectable<any> | null;
+}
+
+export async function getCompletedJobsByUser(userId: string, limit = 20) {
+  const db = await ensureDb();
+  if (!db) return [];
+  
+  const result = await safeQuery(
+    db.select({
+      job: schema.jobs,
+      task: schema.tasks,
+      slateTask: schema.slateTasks,
+    })
+      .from(schema.jobs)
+      .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
+      .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
+      .where(
+        and(
+          eq(schema.jobs.status, "done"),
+          eq(schema.jobs.assignedTo, userId)
+        )
+      )
+      .orderBy(desc(schema.jobs.completedAt))
+      .limit(limit)
+  );
+  
+  return (result as any[]) || [];
+}
+
+// ─── Tags ───────────────────────────────────────────────────────────
 
 // ─── Teams ──────────────────────────────────────────────────────────
 
@@ -215,7 +254,53 @@ export async function getSlateTasksBySlate(slateId: string) {
   return (res as any[]) || [];
 }
 
-// ─── Jobs ───────────────────────────────────────────────────────────
+// ─── Slates CRUD ────────────────────────────────────────────────────
+
+export async function createSlate(data: Insertable<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.insert(schema.slates).values(data).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function updateSlate(id: string, data: Partial<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.update(schema.slates).set(data).where({ id }).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+// ─── Slate Tasks CRUD ──────────────────────────────────────────────
+
+export async function createSlateTask(data: Insertable<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.insert(schema.slateTasks).values(data).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function updateSlateTask(id: string, data: Partial<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.update(schema.slateTasks).set(data).where({ id }).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function deleteSlateTask(id: string) {
+  const db = await ensureDb();
+  if (!db) return false;
+  await safeQuery(db.delete(schema.slateTasks).where({ id }));
+  return true;
+}
+
 
 export async function getJobsByList(listId: string) {
   const db = await ensureDb();
@@ -800,3 +885,186 @@ export async function getUpcomingAssignments(
 
   return schedule;
 }
+
+// ─── Tags ───────────────────────────────────────────────────────────
+
+export async function getTagsByFamily(familyId: string) {
+  const db = await ensureDb();
+  if (!db) return [];
+  const res = await safeQuery(
+    db.select().from(schema.tags).where({ familyId })
+  );
+  return (res as any[]) || [];
+}
+
+export async function createTag(data: Insertable<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.insert(schema.tags).values(data).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function updateTag(id: string, data: Partial<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.update(schema.tags).set(data).where({ id }).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function deleteTag(id: string) {
+  const db = await ensureDb();
+  if (!db) return false;
+  
+  // Use cascade delete via foreign keys
+  await Promise.all([
+    safeQuery(db.delete(schema.taskTags).where({ tagId: id })),
+    safeQuery(db.delete(schema.slateTags).where({ tagId: id }))
+  ]);
+  
+  return true;
+}
+
+export async function getTaskTagIds(taskId: string) {
+  const db = await ensureDb();
+  if (!db) return [];
+  const res = await safeQuery(
+    db.select({ tagId: schema.taskTags.tagId })
+      .from(schema.taskTags)
+      .where({ taskId })
+  );
+  return (res as any[])?.map((r: any) => r.tagId) || [];
+}
+
+export async function setTaskTags(taskId: string, tagIds: string[]) {
+  const db = await ensureDb();
+  if (!db) return false;
+  
+  // Remove existing tags
+  await safeQuery(db.delete(schema.taskTags).where({ taskId }));
+  
+  // Add new tags
+  if (tagIds.length === 0) return true;
+  
+  const insertValues = tagIds.map((tagId) => ({ taskId, tagId }));
+  const res = await safeQuery(
+    db.insert(schema.taskTags).values(insertValues).returning("*")
+  );
+  return (res as any[]) ? (res as any[]).length > 0 : false;
+}
+
+export async function getSlateTags(slateId: string) {
+  const db = await ensureDb();
+  if (!db) return [];
+  const res = await safeQuery(
+    db.select({ tagId: schema.slateTags.tagId })
+      .from(schema.slateTags)
+      .where({ slateId })
+  );
+  return (res as any[])?.map((r: any) => r.tagId) || [];
+}
+
+export async function setSlateTags(slateId: string, tagIds: string[]) {
+  const db = await ensureDb();
+  if (!db) return false;
+  
+  // Remove existing tags
+  await safeQuery(db.delete(schema.slateTags).where({ slateId }));
+  
+  // Add new tags
+  if (tagIds.length === 0) return true;
+  
+  const insertValues = tagIds.map((tagId) => ({ slateId, tagId }));
+  const res = await safeQuery(
+    db.insert(schema.slateTags).values(insertValues).returning("*")
+  );
+  return (res as any[]) ? (res as any[]).length > 0 : false;
+}
+
+// ─── Core Slate Task Resolution with Tag Auto-Inclusion ─────────────
+
+export async function resolveSlateTaskSet(slateId: string) {
+  const db = await ensureDb();
+  if (!db) return [];
+  
+  // Fetch explicit slate tasks (explicit assignments)
+  const explicitTasksResult = await safeQuery(
+    db.select({
+      taskId: schema.slateTasks.taskId,
+      pointsOverride: schema.slateTasks.pointsOverride,
+      order: schema.slateTasks.order,
+      isExplicit: sql`1`,
+    }).from(schema.slateTasks).where({ slateId })
+  );
+  
+  // Fetch slate's tags
+  const slateTagIds = await getSlateTags(slateId);
+  
+  // If no explicit tasks and no tags, return empty
+  const explicitTasks = (explicitTasksResult || []) as any[];
+  if (explicitTasks.length === 0 && slateTagIds.length === 0) {
+    return [];
+  }
+  
+  // Fetch tag-matched tasks (auto-inclusion by tag)
+  const tagMatchedTasks: Array<{ taskId: string; points: number }> = [];
+  
+  if (slateTagIds.length > 0) {
+    const placeholders = slateTagIds.map(() => '?').join(',');
+    const tagPlaceholders = slateTagIds.map(() => '?').join(',');
+    
+    const tasksWithTags = await safeQuery(
+      db.select({
+        taskId: schema.tasks.id,
+        points: schema.tasks.points,
+      })
+        .from(schema.tasks)
+        .innerJoin(schema.taskTags, eq(schema.tasks.id, schema.taskTags.taskId))
+        .where(sql`(${placeholders}, ${tagPlaceholders})`)
+    );
+    
+    if (tasksWithTags) {
+      tagMatchedTasks.push(...(tasksWithTags as any[]));
+    }
+  }
+  
+  // Dedupe by taskId: explicit rows take priority over tag-matched
+  const result = new Map<string, any>();
+  
+  // First add explicit tasks
+  for (const task of explicitTasks) {
+    result.set(task.taskId, {
+      taskId: task.taskId,
+      pointsOverride: task.pointsOverride,
+      order: task.order,
+      isExplicit: true,
+    });
+  }
+  
+  // Then add tag-matched tasks (only if not already explicit)
+  for (const task of tagMatchedTasks) {
+    if (!result.has(task.taskId)) {
+      result.set(task.taskId, {
+        taskId: task.taskId,
+        pointsOverride: task.points,
+        order: 0,
+        isExplicit: false,
+      });
+    }
+  }
+  
+  const slateTasks = Array.from(result.values());
+  
+  // Sort by explicit=true first, then by order
+  slateTasks.sort((a, b) => {
+    if (a.isExplicit && !b.isExplicit) return -1;
+    if (!a.isExplicit && b.isExplicit) return 1;
+    return a.order - b.order;
+  });
+  
+  return slateTasks;
+}
+

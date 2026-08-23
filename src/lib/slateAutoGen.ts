@@ -57,12 +57,12 @@ export async function generateJobsFromSlate(
   targetDate: Date,
 ): Promise<GeneratedJob[]> {
   const {
-    getSlateTasksBySlate,
     getRotationsBySlate,
     getListBySlateAndDate,
     createList,
     createListTask,
     createJob,
+    resolveSlateTaskSet,
   } = await import("@/lib/db/service");
 
   // Skip if list already exists for this slate/date
@@ -85,9 +85,9 @@ export async function generateJobsFromSlate(
 
   if (!list?.id) return [];
 
-  // Get slate tasks and rotations
-  const slateTasks = await getSlateTasksBySlate(slateId);
-  if (!slateTasks || slateTasks.length === 0) return [];
+  // Get slate tasks WITH TAG AUTO-INCLUSION (explicit + tag-matched)
+  const slateTaskSet = await resolveSlateTaskSet(slateId);
+  if (!slateTaskSet || slateTaskSet.length === 0) return [];
 
   const rotations = await getRotationsBySlate(slateId);
 
@@ -95,14 +95,14 @@ export async function generateJobsFromSlate(
   let assignments: Map<string, string[]> = new Map();
 
   if (rotations && rotations.length > 0) {
-    assignments = calculateRotationAssignment(slateTasks, rotations, targetDate);
+    assignments = calculateRotationAssignment(slateTaskSet, rotations, targetDate);
   } else {
     // No rotations configured — assign all tasks without specific user
-    for (const slateTask of slateTasks) {
+    for (const slateTask of slateTaskSet) {
       const job = await createJob({
         listId: list.id,
-        slateTaskId: slateTask.id,
-        name: slateTask.name || "Untitled Task",
+        slateTaskId: slateTask.taskId,
+        name: slateTask.taskId + " (auto-included by tag)",
         points: slateTask.pointsOverride || 0,
         status: "todo",
         dueDate: targetDate,
@@ -111,7 +111,7 @@ export async function generateJobsFromSlate(
       if (job?.id) {
         await createListTask({
           listId: list.id,
-          slateTaskId: slateTask.id,
+          slateTaskId: slateTask.taskId,
           pointsOverride: slateTask.pointsOverride,
         });
       }
@@ -124,14 +124,14 @@ export async function generateJobsFromSlate(
 
   for (const [userId, taskIds] of assignments.entries()) {
     for (const slateTaskId of taskIds) {
-      const slateTask = slateTasks.find((st: any) => st.id === slateTaskId);
+      const slateTask = slateTaskSet.find((st: any) => st.taskId === slateTaskId);
       if (!slateTask) continue;
 
       const job = await createJob({
         listId: list.id,
-        slateTaskId,
+        slateTaskId: slateTask.taskId,
         assignedTo: userId,
-        name: slateTask.name || "Untitled Task",
+        name: slateTask.taskId + " (auto-included by tag)",
         points: slateTask.pointsOverride || 0,
         status: "todo",
         dueDate: targetDate,
@@ -140,7 +140,7 @@ export async function generateJobsFromSlate(
       if (job?.id) {
         await createListTask({
           listId: list.id,
-          slateTaskId,
+          slateTaskId: slateTask.taskId,
           pointsOverride: slateTask.pointsOverride,
         });
         result.push(job);

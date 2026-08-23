@@ -201,6 +201,32 @@ CREATE TABLE IF NOT EXISTS invites (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
+-- Tags tables
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
+    CHECK(id != ''),
+  family_id TEXT REFERENCES families(id) NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_tags (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
+    CHECK(id != ''),
+  tag_id TEXT REFERENCES tags(id) NOT NULL,
+  task_id TEXT REFERENCES tasks(id) NOT NULL,
+  UNIQUE(tag_id, task_id)
+);
+
+CREATE TABLE IF NOT EXISTS slate_tags (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
+    CHECK(id != ''),
+  slate_id TEXT REFERENCES slates(id) NOT NULL,
+  tag_id TEXT REFERENCES tags(id) NOT NULL,
+  UNIQUE(slate_id, tag_id)
+);
+
 -- Create indexes for better performance (SQLite handles these differently)
 CREATE INDEX IF NOT EXISTS idx_users_family_id ON users(family_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_family_id ON tasks(family_id);
