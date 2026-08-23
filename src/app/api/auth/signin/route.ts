@@ -79,7 +79,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  console.log("[SIGNIN] Creating Supabase client...");
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -141,7 +140,6 @@ export async function POST(request: NextRequest) {
 
   console.log("[SIGNIN] Auth successful! User:", userId);
 
-  // Skip DB operations on Vercel - just create the session cookie
   try {
     const db = await initDb();
     if (db && db.select) {
@@ -216,45 +214,42 @@ export async function POST(request: NextRequest) {
   if (tokens) {
     console.log("[SIGNIN] Tokens available:", !!tokens.access_token);
     
-    // Access token cookie
-    const accessTokenCookie = `supabase-token=${encodeURIComponent(JSON.stringify({
-      access_token: tokens.access_token,
-      token_type: "bearer",
-      expires_in: tokens.expires_in,
-      expires_at: tokens.expires_at,
-      refresh_token: tokens.refresh_token,
-      user: {
-        id: tokens.user.id,
-        aud: tokens.user.aud,
-        email: tokens.user.email,
-        phone: tokens.user.phone,
-        app_metadata: tokens.user.app_metadata,
-        user_metadata: tokens.user.user_metadata,
-        identities: tokens.user.identities,
-      }
-    }))}; Path=/; Secure; HttpOnly; SameSite=Lax`;
-    
-    console.log("[SIGNIN] Setting access token cookie:", accessTokenCookie.substring(0, 100), "...");
-    
-    response.headers.set("set-cookie", accessTokenCookie);
+    // Access token cookie - MUST use append() since set-cookie can have multiple values
+    response.headers.append(
+      "set-cookie",
+      `supabase-token=${encodeURIComponent(JSON.stringify({
+        access_token: tokens.access_token,
+        token_type: "bearer",
+        expires_in: tokens.expires_in,
+        expires_at: tokens.expires_at,
+        refresh_token: tokens.refresh_token,
+        user: {
+          id: tokens.user.id,
+          aud: tokens.user.aud,
+          email: tokens.user.email,
+          phone: tokens.user.phone,
+          app_metadata: tokens.user.app_metadata,
+          user_metadata: tokens.user.user_metadata,
+          identities: tokens.user.identities,
+        }
+      }))}; Path=/; Secure; HttpOnly; SameSite=Lax`
+    );
     
     // Refresh token cookie  
-    const refreshTokenCookie = `supabase-refresh-token=${encodeURIComponent(JSON.stringify({
-      access_token: tokens.refresh_token,
-      token_type: "bearer",
-      expires_in: tokens.expires_in,
-      expires_at: tokens.expires_at
-    }))}; Max-Age=${tokens.expires_in}; Path=/; Secure; HttpOnly; SameSite=Lax`;
-    
-    console.log("[SIGNIN] Setting refresh token cookie:", refreshTokenCookie.substring(0, 100), "...");
-    
-    response.headers.set("set-cookie", refreshTokenCookie);
+    response.headers.append(
+      "set-cookie",
+      `supabase-refresh-token=${encodeURIComponent(JSON.stringify({
+        access_token: tokens.refresh_token,
+        token_type: "bearer",
+        expires_in: tokens.expires_in,
+        expires_at: tokens.expires_at
+      }))}; Max-Age=${tokens.expires_in}; Path=/; Secure; HttpOnly; SameSite=Lax`
+    );
   } else {
     console.error("[SIGNIN] No tokens in session!");
   }
 
   console.log("[SIGNIN] === END ===");
-  console.log("[SIGNIN] Final headers:", [...response.headers.entries()].filter(([k]) => k.toLowerCase().includes("cookie")));
   
   return response;
 }
