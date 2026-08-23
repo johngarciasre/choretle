@@ -19,11 +19,10 @@ export async function initDb(): Promise<any> {
       db = (await import("drizzle-orm/postgres-js")).drizzle(pgClient, { schema });
     } else {
       // Fallback to in-memory SQLite for local development
-      // This avoids file system issues and works better with Next.js dev server
-      sqliteDb = new Database();
+      sqliteDb = new Database(":memory:");
       
-      // Run SQLite schema creation on in-memory database
-      sqliteDb.exec(`
+      // Create a separate connection for schema creation
+      const schemaConn = sqliteDb.prepare(`
         CREATE TABLE IF NOT EXISTS families (
           id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
             CHECK(id != ''),
@@ -224,7 +223,6 @@ export async function initDb(): Promise<any> {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
         );
 
-        // Create indexes for better performance (SQLite handles these differently)
         CREATE INDEX IF NOT EXISTS idx_users_family_id ON users(family_id);
         CREATE INDEX IF NOT EXISTS idx_tasks_family_id ON tasks(family_id);
         CREATE INDEX IF NOT EXISTS idx_slates_family_id ON slates(family_id);
@@ -238,12 +236,9 @@ export async function initDb(): Promise<any> {
 
     return db;
   } catch (error) {
-    // In production (Vercel), DATABASE_URL might not be set.
-    // Gracefully skip DB initialization in that case rather than crashing.
-    console.warn("Skipping database initialization (no DATABASE_URL set):", error);
+    console.warn("Skipping database initialization:", error);
     return null;
   }
 }
 
-// Export db (will be null until initDb() is called)
 export { db };
