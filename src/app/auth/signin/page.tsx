@@ -9,13 +9,15 @@ export default function SignInPage() {
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
     try {
       const res = await fetch("/api/auth/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      if (!res.ok) throw new Error("Sign in failed");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sign in failed");
       window.location.href = "/";
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign in failed");

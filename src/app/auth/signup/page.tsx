@@ -10,13 +10,15 @@ export default function SignUpPage() {
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
     try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, name }),
       });
-      if (!res.ok) throw new Error("Sign up failed");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sign up failed");
       window.location.href = "/";
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign up failed");

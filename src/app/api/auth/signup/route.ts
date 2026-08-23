@@ -64,13 +64,19 @@ export async function POST(request: NextRequest) {
     // ─── Production Mode: Use Supabase Auth ────────────────
     
     if (!hasSupabaseConfig()) {
+      console.error("[SIGNUP] Missing Supabase credentials:", {
+        url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        anonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      });
       return NextResponse.json(
         { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
         { status: 500 }
       );
     }
 
-    // Validate input
+    // Validate input - log what we received
+    console.log("[SIGNUP] Received body:", JSON.stringify(body));
+    
     if (!body?.email || !body?.password || !body?.name) {
       return NextResponse.json(
         { error: "Email, password, and name are required" },
@@ -79,9 +85,16 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
+    if (!supabase) {
+      console.error("[SIGNUP] Failed to initialize Supabase client");
+      return NextResponse.json(
+        { error: "Failed to initialize authentication service" },
+        { status: 500 }
+      );
+    }
 
     // Sign up with Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
+    const signUpResult = await supabase.auth.signUp({
       email: body.email.toLowerCase().trim(),
       password: body.password,
       options: {
@@ -92,15 +105,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (error) {
-      if (error.message.includes("Email already registered")) {
+    if (signUpResult.error) {
+      console.log("[SIGNUP] Supabase error:", signUpResult.error.message);
+      
+      if (signUpResult.error.message?.includes("Email already registered")) {
         return NextResponse.json(
           { error: "An account with this email already exists" },
           { status: 409 }
         );
       }
       
-      if (error.message.includes("Weak password")) {
+      if (signUpResult.error.message?.includes("Weak password")) {
         return NextResponse.json(
           { error: "Password is too weak. Please use at least 6 characters." },
           { status: 400 }
@@ -108,20 +123,21 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: error.message || "Failed to sign up" },
+        { error: signUpResult.error.message || "Failed to sign up" },
         { status: 400 }
       );
     }
 
-    if (!data?.user) {
+    if (!signUpResult.data?.user) {
+      console.error("[SIGNUP] No user created in Supabase Auth");
       return NextResponse.json(
         { error: "User registration failed" },
         { status: 500 }
       );
     }
 
-    const userId = data.user.id;
-    const userEmail = data.user.email || null;
+    const userId = signUpResult.data.user.id;
+    const userEmail = signUpResult.data.user.email || null;
 
     // Create corresponding row in users table and ensure family membership exists
     let familyId: string | null = null;
@@ -173,6 +189,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (dbError) {
+      console.error("[SIGNUP] Database operations failed:", dbError);
       // Silently fail - user is created in Supabase Auth anyway
     }
 
@@ -195,6 +212,8 @@ export async function POST(request: NextRequest) {
       }
     );
   } catch (error) {
+    console.error("[SIGNUP] Unhandled error:", error);
+    
     if (error instanceof Error) {
       return NextResponse.json(
         { 
