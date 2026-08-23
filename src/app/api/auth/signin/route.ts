@@ -20,7 +20,6 @@ export async function POST(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          const headers = new Headers();
           for (const cookie of cookiesToSet) {
             const { name, value, options } = cookie;
             let cookieStr = `${name}=${value}`;
@@ -29,9 +28,8 @@ export async function POST(request: NextRequest) {
                 cookieStr += `; ${key}=${val}`;
               }
             }
-            headers.append("set-cookie", cookieStr);
+            NextResponse.headers.append("set-cookie", cookieStr);
           }
-          return headers.get("set-cookie") || "";
         },
       }
     }
