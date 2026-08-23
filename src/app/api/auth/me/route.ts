@@ -1,27 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseMiddlewareClient } from "@/lib/supabase";
+import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
-  const supabase = await getSupabaseMiddlewareClient(request);
+  console.log("[AUTH_ME] === START ===");
   
-  const { data: { session } } = await supabase.auth.getSession();
+  const cookieHeader = request.headers.get("cookie") || "";
+  console.log("[AUTH_ME] Cookie header:", cookieHeader ? `${cookieHeader.substring(0, 200)}...` : "EMPTY");
   
-  if (!session) {
-    return NextResponse.json(
-      { error: "Unauthorized", message: "Authentication required" },
-      { status: 401 }
-    );
+  if (!cookieHeader) {
+    console.log("[AUTH_ME] No cookies in request!");
+    return NextResponse.json({ authenticated: false });
   }
 
-  const userId = session.user.id;
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          for (const cookie of cookiesToSet) {
+            request.cookies.set(cookie.name, cookie.value);
+          }
+        },
+      }
+    }
+  );
+  
+  const { data: { session } } = await supabase.auth.getSession();
 
-  // Fetch user profile from DB
-  const requestUrl = new URL(request.url);
-  const response = NextResponse.next();
-  response.headers.set("x-user-id", userId);
-  response.headers.set("x-family-id", session.user.user_metadata?.family_id || "");
+  if (session) {
+    console.log("[AUTH_ME] Session found:", session.user.id);
+    return NextResponse.json({
+      authenticated: true,
+      user: {
+        id: session.user.id,
+        email: session.user.email,
+        role: session.user.user_metadata?.role || "child",
+        name: session.user.user_metadata?.name || "",
+      },
+    });
+  }
 
-  return fetch(`${requestUrl.origin}/api/profile/${userId}`, {
-    headers: response.headers,
-  }).then((res) => res.json());
+  console.log("[AUTH_ME] No session found");
+  return NextResponse.json({ authenticated: false });
 }
