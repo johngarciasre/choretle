@@ -20,13 +20,18 @@ export async function POST(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
+          const headers = new Headers();
           for (const cookie of cookiesToSet) {
             const { name, value, options } = cookie;
-            response.headers.append(
-              "set-cookie",
-              `${name}=${value}${options ? (Object.entries(options).map(([k, v]) => `; ${k}=${v}`).join("") || "") : ""}`
-            );
+            let cookieStr = `${name}=${value}`;
+            if (options) {
+              for (const [key, val] of Object.entries(options)) {
+                cookieStr += `; ${key}=${val}`;
+              }
+            }
+            headers.append("set-cookie", cookieStr);
           }
+          return headers.get("set-cookie") || "";
         },
       }
     }
@@ -60,9 +65,10 @@ export async function POST(request: NextRequest) {
     { status: 200 }
   );
 
+  const cookieName = `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL!.split("//")[1].split(".")[0]}${process.env.NODE_ENV === 'production' ? '-auth' : ''}-token`;
   response.headers.append(
     "set-cookie",
-    `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL!.split("//")[1].split(".")[0]}${process.env.NODE_ENV === 'production' ? '-auth' : ''}-token=${encodeURIComponent(JSON.stringify({
+    `${cookieName}=${encodeURIComponent(JSON.stringify({
       access_token: session.access_token,
       token_type: "bearer",
       expires_in: session.expires_in,
