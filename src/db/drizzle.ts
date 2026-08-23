@@ -10,7 +10,7 @@ let sqliteDb: any;
 
 export async function initDb(): Promise<any> {
   try {
-    if (DATABASE_URL) {
+    if (DATABASE_URL && DATABASE_URL.trim() !== "") {
       // Use PostgreSQL via Drizzle Postgres adapter
       const postgres = await import("postgres");
       
@@ -246,7 +246,7 @@ export async function initDb(): Promise<any> {
   } catch (error) {
     // In production (Vercel), DATABASE_URL might not be set.
     // Gracefully skip DB initialization in that case rather than crashing.
-    console.error("Failed to initialize database:", error);
+    console.warn("Skipping database initialization (no DATABASE_URL set):", error);
     return null;
   }
 }
