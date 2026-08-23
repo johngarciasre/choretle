@@ -244,8 +244,10 @@ export async function initDb(): Promise<any> {
 
     return db;
   } catch (error) {
+    // In production (Vercel), DATABASE_URL might not be set.
+    // Gracefully skip DB initialization in that case rather than crashing.
     console.error("Failed to initialize database:", error);
-    throw error;
+    return null;
   }
 }
 
