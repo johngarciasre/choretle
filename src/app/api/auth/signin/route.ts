@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
                 cookieStr += `; ${key}=${val}`;
               }
             }
-            NextResponse.headers.append("set-cookie", cookieStr);
           }
         },
       }
@@ -52,14 +51,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Authentication failed" }, { status: 500 });
   }
 
-  const response = NextResponse.json(
-    { 
+  const response = new Response(
+    JSON.stringify({ 
       ok: true, 
       userId: session.user.id,
       email: session.user.email,
       role: session.user.user_metadata?.role || "child",
       message: "Sign in successful"
-    },
+    }),
     { status: 200 }
   );
 
