@@ -27,6 +27,7 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/signin",
   "/api/auth/signup",
   "/api/auth/signout",
+  "/api/auth/me",
   "/api/family/join",
   "/api/schedules/generate",
 ];
@@ -63,9 +64,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
-  const isDevMode = process.env.AUTH_MODE === "dev";
-
-  if (isDevMode) {
+  if (process.env.AUTH_MODE === "dev") {
     const devUser = getDevUserFromRequest(request);
     
     let userId: string | null = null;
@@ -95,16 +94,46 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // ─── Production Mode: Use Supabase Auth ──────────────────────────
+  // ─── Production Mode: Check Supabase config before using it ──────────
   
-  // ─── Initialize Supabase client ──────────────────────────────────────
-  const supabase = await getSupabaseMiddlewareClient(request);
+  if (!hasSupabaseConfig()) {
+    console.error("[MIDDLEWARE] Supabase not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+    
+    const isApiRoute = pathname.startsWith("/api/");
+    
+    if (isApiRoute) {
+      return NextResponse.json(
+        { error: "Server misconfiguration: Supabase credentials not set on server." },
+        { status: 500 }
+      );
+    }
+    
+    // For page routes, redirect to auth page which will show appropriate message
+    const signInUrl = new URL("/auth/signin", request.url);
+    return NextResponse.redirect(signInUrl);
+  }
+
+  // ─── Initialize Supabase client (safe to use now) ──────────────────────
+  let supabase;
+  try {
+    supabase = await getSupabaseMiddlewareClient(request);
+  } catch (error) {
+    console.error("[MIDDLEWARE] Failed to initialize Supabase client:", error);
+    return NextResponse.json(
+      { error: "Authentication service unavailable" },
+      { status: 503 }
+    );
+  }
 
   // ─── Get current session ──────────────────────────────────────────────
   let userId: string | null = null;
   let familyId: string | null = null;
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  
+  if (sessionError) {
+    console.error("[MIDDLEWARE] Supabase getSession error:", sessionError);
+  }
   
   if (session) {
     userId = session.user.id;
@@ -124,16 +153,9 @@ export async function middleware(request: NextRequest) {
 
   // ─── Session is missing or expired ──────────────────────────────────
   
-  // For API routes, we need to decide: redirect or 401?
-  // - Auth endpoints should allow the request (they handle auth themselves)
-  // - Other public API routes should return 200
-  // - Protected routes should return 401
-  
   const isApiRoute = pathname.startsWith("/api/");
 
   if (isApiRoute) {
-    // Check if this is a protected API route (not in PUBLIC_API_ROUTES)
-    // If it's not public and user isn't authenticated, return 401
     const isProtectedApi = !isPublicApiRoute;
     
     if (isProtectedApi) {
@@ -149,9 +171,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── For page routes (non-API) ──────────────────────────────────────
-  // If not authenticated and not on a public route, redirect to sign in
   
-  // Check if this is an auth-related page we should redirect to
   const isAuthPage = pathname === "/auth/signin" || 
                     pathname === "/auth/signup" ||
                     pathname.startsWith("/auth/");
@@ -168,17 +188,8 @@ export async function middleware(request: NextRequest) {
 }
 
 // ─── Route Matcher Configuration ────────────────────────────────────────
-// This tells Next.js which routes should be processed by this middleware
-
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

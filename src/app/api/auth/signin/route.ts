@@ -20,6 +20,7 @@ function hasSupabaseConfig(): boolean {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log("[SIGNIN] Received body:", JSON.stringify(body));
     
     // ─── Dev Mode: Use mock user ────────────────────────────────
     if (process.env.AUTH_MODE === "dev") {
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
     // ─── Production Mode: Use Supabase Auth ──────────────────────
     
     if (!hasSupabaseConfig()) {
+      console.error("[SIGNIN] Missing Supabase credentials");
       return NextResponse.json(
         { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
         { status: 500 }
@@ -71,29 +73,39 @@ export async function POST(request: NextRequest) {
 
     // Validate input
     if (!body?.email || !body?.password) {
+      console.log("[SIGNIN] Missing required fields:", !!body.email, !!body.password);
       return NextResponse.json(
-        { error: "Email and password are required", status: 400 },
+        { error: "Email and password are required" },
         { status: 400 }
       );
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
+    if (!supabase) {
+      console.error("[SIGNIN] Failed to initialize Supabase client");
+      return NextResponse.json(
+        { error: "Failed to initialize authentication service" },
+        { status: 500 }
+      );
+    }
 
     // Sign in with password using Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const signInResult = await supabase.auth.signInWithPassword({
       email: body.email.toLowerCase().trim(),
       password: body.password,
     });
 
-    if (error) {
-      if (error.message.includes("Invalid login credentials")) {
+    if (signInResult.error) {
+      console.log("[SIGNIN] Supabase error:", signInResult.error.message);
+      
+      if (signInResult.error.message?.includes("Invalid login credentials")) {
         return NextResponse.json(
           { error: "Invalid email or password" },
           { status: 401 }
         );
       }
       
-      if (error.message.includes("Email not confirmed")) {
+      if (signInResult.error.message?.includes("Email not confirmed")) {
         return NextResponse.json(
           { error: "Please verify your email address before signing in" },
           { status: 403 }
@@ -101,21 +113,22 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: error.message || "Failed to sign in" },
+        { error: signInResult.error.message || "Failed to sign in" },
         { status: 401 }
       );
     }
 
-    if (!data?.session) {
+    if (!signInResult.data?.session) {
+      console.error("[SIGNIN] No session returned from Supabase");
       return NextResponse.json(
         { error: "Authentication failed" },
         { status: 500 }
       );
     }
 
-    const userId = data.session.user.id;
-    const userEmail = data.session.user.email || null;
-    const userRole = data.session.user.user_metadata?.role || "child";
+    const userId = signInResult.data.session.user.id;
+    const userEmail = signInResult.data.session.user.email || null;
+    const userRole = signInResult.data.session.user.user_metadata?.role || "child";
 
     // Create or update user record in users table and ensure family membership exists
     let familyId: string | null = null;
@@ -149,6 +162,7 @@ export async function POST(request: NextRequest) {
         const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, userId)).first();
         
         if (!existingUser) {
+          console.log("[SIGNIN] Creating new user record");
           await db.insert(schema.users).values({
             id: userId,
             email: userEmail,
@@ -159,13 +173,17 @@ export async function POST(request: NextRequest) {
             updatedAt: new Date(),
           });
         } else if (existingUser.familyId !== familyId) {
+          console.log("[SIGNIN] Updating user family reference");
           await db.update(schema.users).set({ 
             familyId,
             updatedAt: new Date()
           }).where(eq(schema.users.id, existingUser.id));
+        } else {
+          console.log("[SIGNIN] User record already exists");
         }
       }
     } catch (dbError) {
+      console.error("[SIGNIN] Database operations failed:", dbError);
       // Silently fail - user is authenticated in Supabase Auth anyway
     }
 
@@ -191,6 +209,8 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
+    console.error("[SIGNIN] Unhandled error:", error);
+    
     if (error instanceof Error) {
       return NextResponse.json(
         { 
