@@ -5,10 +5,9 @@ import { createDevSession, setDevSessionCookie, getDevUserFromRequest } from "@/
 const PUBLIC_ROUTES = [
   "/auth/signin",
   "/auth/signup", 
-  "/family",
-  "/api/family/join",
-  "_next/static",
-  "_next/image",
+  "/auth/signup/verify-email",
+  "/_next/static",
+  "/_next/image",
   "/favicon.ico",
   "/manifest.json",
   "/apple-touch-icon.png",
@@ -39,6 +38,26 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ─── Redirect authenticated users away from marketing page ──────────
+  if (pathname === "/" && !isDevMode()) {
+    const supabase = await getSupabaseMiddlewareClient(request);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
+  // ─── Redirect unauthenticated users to sign in ──────────────────────
+  if (!isDevMode()) {
+    const supabase = await getSupabaseMiddlewareClient(request);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return NextResponse.redirect(new URL("/auth/signin", request.url));
+    }
+  }
+
   // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
   if (isDevMode()) {
     const devUser = getDevUserFromRequest(request);
@@ -51,53 +70,42 @@ export async function middleware(request: NextRequest) {
 
     if (devUser) {
       userId = devUser.id;
-      familyId = devUser.familyId;
+      familyId = devUser.familyId || null;
     } else {
-      // Create a default session for the user
-      const session = createDevSession();
+      // Auto-sign in admin user
+      const session = createDevSession({ userId: "dev-user-admin-001", role: "admin" });
       setDevSessionCookie(response.headers, session);
+      response.headers.set("x-user-id", session.user.id);
+      response.headers.set("x-family-id", "dev-family-001");
       userId = session.user.id;
-      familyId = session.user.familyId;
+      familyId = "dev-family-001";
     }
 
+    // Set user headers for protected routes
     if (userId) {
       response.headers.set("x-user-id", userId);
-    }
-    
-    if (familyId) {
-      response.headers.set("x-family-id", familyId);
+      response.headers.set("x-email", devUser?.email || "admin@choretle.dev");
+      response.headers.set("x-role", devUser?.role || "admin");
+      response.headers.set("x-family-id", familyId!);
     }
 
     return response;
   }
 
-  // ─── Production Mode: Use Supabase Auth ──────────────────────────
-  
-  const supabase = await getSupabaseMiddlewareClient(request);
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    // Redirect to sign in page
-    const signInUrl = new URL("/auth/signin", request.url);
-    return NextResponse.redirect(signInUrl);
-  }
-
-  // ─── User is authenticated ──────────────────────────────────────────
-  const response = NextResponse.next();
-  
-  response.headers.set("x-user-id", user.id);
-  if (user.email) {
-    response.headers.set("x-email", user.email);
-  }
-  if (user.user_metadata?.family_id) {
-    response.headers.set("x-family-id", user.user_metadata.family_id);
-  }
-
-  return response;
+  // ─── Protected route, user is authenticated ──────────────────────────
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * Feel free to modify this pattern to include more paths.
+     */
+    "/((?!api/|_next/|_vercel|[\\w-]+\\.\\w+).*)",
   ],
 };
