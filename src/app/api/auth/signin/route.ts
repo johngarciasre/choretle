@@ -13,6 +13,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    console.log("[SIGNIN] Request received in", process.env.NODE_ENV, "mode");
+    console.log("[SIGNIN] Email:", body?.email);
+    console.log("[SIGNIN] Has Supabase config:", hasSupabaseConfig());
+
     if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
       
@@ -28,6 +32,8 @@ export async function POST(request: NextRequest) {
       }
       
       const session = createDevSession({ userId });
+
+      console.log("[SIGNIN] Dev mode - created session for user:", userId);
 
       const response = NextResponse.json(
         { 
@@ -48,10 +54,12 @@ export async function POST(request: NextRequest) {
       );
 
       setDevSessionCookie(response.headers, session);
+      console.log("[SIGNIN] Set dev session cookie");
       return response;
     }
 
     if (!hasSupabaseConfig()) {
+      console.error("[SIGNIN] No Supabase credentials configured!");
       return NextResponse.json(
         { error: "Server configuration error: Supabase credentials not found." },
         { status: 500 }
@@ -82,12 +90,16 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    console.log("[SIGNIN] Calling signInWithPassword...");
     const signInResult = await supabase.auth.signInWithPassword({
       email: body.email.toLowerCase().trim(),
       password: body.password,
     });
 
+    console.log("[SIGNIN] signInResult:", JSON.stringify(signInResult, null, 2));
+
     if (signInResult.error) {
+      console.error("[SIGNIN] Sign in error:", signInResult.error.message);
       if (signInResult.error.message?.includes("Invalid login credentials")) {
         return NextResponse.json(
           { error: "Invalid email or password" },
@@ -109,6 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!signInResult.data?.session) {
+      console.error("[SIGNIN] No session in signInResult.data");
       return NextResponse.json(
         { error: "Authentication failed" },
         { status: 500 }
@@ -118,6 +131,8 @@ export async function POST(request: NextRequest) {
     const userId = signInResult.data.session.user.id;
     const userEmail = signInResult.data.session.user.email || null;
     const userRole = signInResult.data.session.user.user_metadata?.role || "child";
+
+    console.log("[SIGNIN] Auth successful! User:", userId);
 
     let familyId: string | null = null;
     try {
@@ -164,7 +179,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (dbError) {
-      // Silently fail - user is authenticated in Supabase Auth anyway
+      console.warn("[SIGNIN] DB operation failed (non-fatal):", dbError);
     }
 
     const response = NextResponse.json(
@@ -187,13 +202,13 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Manually set Supabase session cookies on the response
+    console.log("[SIGNIN] Setting Supabase cookies for session:", signInResult.data.session);
+    
     const tokens = signInResult.data.session;
     if (tokens) {
-      const cookiePairs: string[] = [];
-      
       // Access token cookie
-      cookiePairs.push(
+      response.headers.append(
+        "set-cookie",
         `supabase-token=${encodeURIComponent(JSON.stringify({
           access_token: tokens.access_token,
           token_type: "bearer",
@@ -213,7 +228,8 @@ export async function POST(request: NextRequest) {
       );
       
       // Refresh token cookie  
-      cookiePairs.push(
+      response.headers.append(
+        "set-cookie",
         `supabase-refresh-token=${encodeURIComponent(JSON.stringify({
           access_token: tokens.refresh_token,
           token_type: "bearer",
@@ -221,12 +237,12 @@ export async function POST(request: NextRequest) {
           expires_at: tokens.expires_at
         }))}; Max-Age=${tokens.expires_in}; Path=/; Secure; HttpOnly; SameSite=Lax`
       );
-
-      response.headers.set("set-cookie", cookiePairs.join("; "));
     }
 
+    console.log("[SIGNIN] Cookies set, returning response");
     return response;
   } catch (error) {
+    console.error("[SIGNIN] Unexpected error:", error);
     if (error instanceof Error) {
       return NextResponse.json(
         { 
@@ -312,6 +328,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ authenticated: false });
   } catch (error) {
+    console.error("[SESSION GET] Error:", error);
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }
