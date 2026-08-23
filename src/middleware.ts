@@ -73,7 +73,7 @@ export async function middleware(request: NextRequest) {
       familyId = devUser.familyId || null;
     } else {
       // Auto-sign in admin user
-      const session = createDevSession({ userId: "dev-user-admin-001", role: "admin" });
+      const session = createDevSession({ userId: "dev-user-admin-001" });
       setDevSessionCookie(response.headers, session);
       response.headers.set("x-user-id", session.user.id);
       response.headers.set("x-family-id", "dev-family-001");
