@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import { Trash2 } from "lucide-react";
 
 interface Task {
   id: string;
@@ -22,11 +23,17 @@ interface Tag {
 interface Slate {
   id: string;
   name: string;
+  description?: string;
+  roomLocation?: string;
+  frequency: string;
+  interval: number;
+  isActive: boolean;
+  taskCount?: number;
 }
 
 const fetchSlates = async () => {
   try {
-    const res = await fetch("/api/slates?familyId=test-family");
+    const res = await fetch("/api/slates");
     if (!res.ok) throw new Error("Failed to fetch slates");
     return await res.json();
   } catch (error) {
@@ -37,7 +44,7 @@ const fetchSlates = async () => {
 
 const fetchTasks = async () => {
   try {
-    const res = await fetch("/api/tasks?familyId=test-family");
+    const res = await fetch("/api/tasks");
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
   } catch (error) {
@@ -48,7 +55,7 @@ const fetchTasks = async () => {
 
 const fetchTags = async () => {
   try {
-    const res = await fetch("/api/tags?familyId=test-family");
+    const res = await fetch("/api/tags");
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (error) {
@@ -86,7 +93,7 @@ export default function SlatesPage() {
       const res = await fetch("/api/slates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newSlateName, familyId: "test-family" }),
+        body: JSON.stringify({ name: newSlateName }),
       });
 
       if (!res.ok) throw new Error("Failed to create slate");
@@ -97,6 +104,25 @@ export default function SlatesPage() {
     } catch (error) {
       console.error("Create slate failed:", error);
       alert("Failed to create slate");
+    }
+  }
+
+  async function handleDeleteSlate(slateId: string, slateName: string) {
+    if (!confirm(`Are you sure you want to delete "${slateName}"? This will also remove all associated rotations and task assignments.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/slates/${slateId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Failed to delete slate");
+      
+      setSlates(prev => prev.filter(s => s.id !== slateId));
+    } catch (error) {
+      console.error("Delete slate failed:", error);
+      alert("Failed to delete slate");
     }
   }
 
@@ -141,28 +167,30 @@ export default function SlatesPage() {
     }
   }
 
-  if (loading) return <PageLoader label="Loading slates..." />;
+  if (loading) return <PageShell><PageLoader label="Loading slates..." /></PageShell>;
 
   if (buildingSlateId) {
     return (
-      <SlateBuilderPage
-        tasks={tasks}
-        tags={tags}
-        explicitTaskIds={buildingSlateExplicitTaskIds}
-        autoIncludeTagIds={buildingSlateAutoIncludeTagIds}
-        onToggleTask={(taskId) => 
-          setBuildingSlateExplicitTaskIds(prev => 
-            prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
-          )
-        }
-        onToggleTag={(tagId) => 
-          setBuildingSlateAutoIncludeTagIds(prev => 
-            prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
-          )
-        }
-        onSave={handleSaveSlate}
-        onCancel={() => setBuildingSlateId(null)}
-      />
+      <PageShell>
+        <SlateBuilderPage
+          tasks={tasks}
+          tags={tags}
+          explicitTaskIds={buildingSlateExplicitTaskIds}
+          autoIncludeTagIds={buildingSlateAutoIncludeTagIds}
+          onToggleTask={(taskId) => 
+            setBuildingSlateExplicitTaskIds(prev => 
+              prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+            )
+          }
+          onToggleTag={(tagId) => 
+            setBuildingSlateAutoIncludeTagIds(prev => 
+              prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
+            )
+          }
+          onSave={handleSaveSlate}
+          onCancel={() => setBuildingSlateId(null)}
+        />
+      </PageShell>
     );
   }
 
@@ -181,6 +209,9 @@ export default function SlatesPage() {
                 value={newSlateName}
                 onChange={(e) => setNewSlateName(e.target.value)}
                 placeholder="Enter slate name..."
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateSlate();
+                }}
                 className="flex-1 px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
               />
               <Button variant="primary" onClick={handleCreateSlate}>
@@ -192,17 +223,32 @@ export default function SlatesPage() {
 
         {/* Slates List */}
         <section>
-          <h2 className="font-display text-xl font-bold text-ink mb-4">Your Slates</h2>
+          <h2 className="font-display text-xl font-bold text-ink mb-4">Your Slates ({slates.length})</h2>
           {slates.length === 0 ? (
             <EmptyState icon={<span className="text-2xl">📋</span>} title="No slates yet" message="Create a slate to organize your chores!" />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {slates.map(slate => (
-                <Card key={slate.id} accent="sunny" className="p-6 space-y-4">
-                  <h3 className="font-display text-xl font-bold text-ink">{slate.name}</h3>
-                  <p className="text-sm text-ink/60">Click to configure tasks and tags</p>
+                <Card key={slate.id} accent="sunny" className="p-6 space-y-4 relative group">
+                  <button
+                    onClick={() => handleDeleteSlate(slate.id, slate.name)}
+                    className="absolute top-3 right-3 text-ink/20 hover:text-coral transition opacity-0 group-hover:opacity-100"
+                    title={`Delete ${slate.name}`}
+                    aria-label={`Delete slate: ${slate.name}`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  
+                  <h3 className="font-display text-xl font-bold text-ink pr-4">{slate.name}</h3>
+                  {slate.description && (
+                    <p className="text-sm text-ink/60 mb-2">{slate.description}</p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Badge status="neutral" className="text-xs px-2 py-0.5">{slate.frequency}</Badge>
+                    <Badge status="points" className="text-xs px-2 py-0.5">Every {slate.interval} day{slate.interval > 1 ? "s" : ""}</Badge>
+                  </div>
                   <Button variant="primary" onClick={() => handleStartBuilding(slate.id)}>
-                    Configure Tasks & Tags
+                    Configure Tasks &amp; Tags
                   </Button>
                 </Card>
               ))}
@@ -272,9 +318,11 @@ function SlateBuilderPage({
 
   if (!tasks.length || !tags.length) {
     return (
-      <div className="min-h-screen bg-cream flex items-center justify-center p-8">
-        <EmptyState icon={<span className="text-2xl">📋</span>} title="Loading slate builder..." message="Please wait while we prepare the editor..." />
-      </div>
+      <PageShell>
+        <div className="min-h-screen bg-cream flex items-center justify-center p-8">
+          <EmptyState icon={<span className="text-2xl">📋</span>} title="Loading slate builder..." message="Please wait while we prepare the editor..." />
+        </div>
+      </PageShell>
     );
   }
 

@@ -1,4 +1,4 @@
-import { GripHorizontal } from "lucide-react";
+import { GripHorizontal, X } from "lucide-react";
 
 export interface RotationAssignment {
   id?: string;
@@ -33,11 +33,19 @@ interface AssignmentCardProps {
   onRemove?: () => void;
 }
 
-export default function AssignmentCard({ assignment, onDragStart, onEditInterval }: AssignmentCardProps) {
+export default function AssignmentCard({ assignment, onDragStart, onEditInterval, onRemove }: AssignmentCardProps) {
   const avatarUrl = assignment.userAvatarUrl || `https://ui.boringavatars.com/badge/1/${assignment.userId.length}/flat`;
 
   return (
-    <div className="flex items-center gap-3 bg-white rounded-xl border-2 border-ink/10 p-3 shadow-sm hover:shadow-md hover:border-grape/40 transition-all group">
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer?.setData("userId", assignment.userId);
+        onDragStart(e, assignment.userId);
+      }}
+      onDragEnd={() => {}}
+      className="flex items-center gap-3 bg-white rounded-xl border-2 border-ink/10 p-3 shadow-sm hover:shadow-md hover:border-grape/40 transition-all group cursor-grab active:cursor-grabbing"
+    >
       <span className="text-ink/30 cursor-grab active:cursor-grabbing" aria-hidden="true">
         <GripHorizontal size={16} />
       </span>
@@ -65,6 +73,19 @@ export default function AssignmentCard({ assignment, onDragStart, onEditInterval
       <span className="font-bold px-2 py-0.5 rounded-full bg-grape/15 text-grape text-xs border border-grape/20">
         #{assignment.order}
       </span>
+
+      {onRemove && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="text-ink/30 hover:text-coral transition"
+          aria-label="Remove assignment"
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 }

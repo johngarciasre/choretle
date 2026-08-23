@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
@@ -36,16 +36,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await request.json();
     const { name, description, roomLocation, frequency, interval, defaultDueDateOffset, isActive } = body;
 
-    const slate = await db.update(schema.slates)
+    const result = await db.update(schema.slates)
       .set({ name, description, roomLocation, frequency, interval, defaultDueDateOffset, isActive })
       .where(eq(schema.slates.id, slateId))
       .returning("*");
 
-    if (!slate || !slate[0]) {
+    if (!result || !result[0]) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
 
-    return NextResponse.json(slate[0]);
+    return NextResponse.json(result[0]);
   } catch (error) {
     console.error("Slate PUT failed:", error);
     return NextResponse.json({ error: "Failed to update slate" }, { status: 500 });
@@ -61,9 +61,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const slateId = (await params).slateId;
     
+    // Delete associated entries first (cascade via FK constraints in PostgreSQL)
+    await db.delete(schema.slateTasks).where(eq(schema.slateTasks.slateId, slateId));
+    await db.delete(schema.rotations).where(eq(schema.rotations.slateId, slateId));
+    await db.delete(schema.slateTags).where(eq(schema.slateTags.slateId, slateId));
     await db.delete(schema.slates).where(eq(schema.slates.id, slateId));
     
-    // Cascade delete via FK constraints
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Slate DELETE failed:", error);

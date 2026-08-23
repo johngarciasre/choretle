@@ -36,7 +36,7 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
     setDragOverSlate(slateId);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, slateId: string) => {
+  const handleDrop = useCallback((e: React.DragEvent, targetSlateId: string) => {
     e.preventDefault();
     const userId = e.dataTransfer.getData("userId");
     if (!userId) return;
@@ -44,23 +44,22 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
     setDraggedUserId(null);
     setDragOverSlate(null);
 
+    const slateToDropOn = slates.find((s) => s.id === targetSlateId);
+    const isDroppingOnUsersColumn = !slateToDropOn;
+
+    if (isDroppingOnUsersColumn) return;
+
     const newSlates = slates.map((slate) => {
-      if (slate.id !== slateId) return slate;
-
-      const existingIndex = slate.assignments.findIndex((a) => a.userId === userId);
-      let newAssignments: UserRotation[];
-
-      if (existingIndex >= 0) {
-        const [moved] = [...slate.assignments].splice(existingIndex, 1);
-        moved.order = slate.assignments.length;
-        moved.intervalDays = moved.intervalDays || 7;
-        newAssignments = [...slate.assignments, moved].map((a, i) => ({ ...a, order: i + 1 }));
-      } else {
+      // First, remove the user from their current slate if they're already assigned somewhere
+      let assignmentsAfterRemove = slate.assignments.filter((a) => a.userId !== userId);
+      
+      if (slate.id === targetSlateId) {
+        // Add user to this slate at the end
         const newUserRotation: UserRotation = {
           id: undefined,
           userId,
-          slateId,
-          order: slate.assignments.length + 1,
+          slateId: targetSlateId,
+          order: assignmentsAfterRemove.length + 1,
           intervalDays: 7,
           isActive: true,
           userName: "",
@@ -75,14 +74,26 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
           newUserRotation.userPointsTotal = userData.userPointsTotal;
           newUserRotation.userRole = userData.userRole;
         }
-        newAssignments = [...slate.assignments, newUserRotation].map((a, i) => ({ ...a, order: i + 1 }));
+        assignmentsAfterRemove = [...assignmentsAfterRemove, newUserRotation];
       }
 
-      return { ...slate, assignments: newAssignments };
+      // Reorder all assignments in this slate
+      const reordered = assignmentsAfterRemove.map((a, i) => ({ ...a, order: i + 1 }));
+      return { ...slate, assignments: reordered };
     });
 
     onSlatesChange(newSlates);
   }, [slates, users, onSlatesChange]);
+
+  const handleRemoveAssignment = useCallback((assignmentId: string | undefined, userId: string, slateId: string) => {
+    const newSlates = slates.map((slate) => {
+      if (slate.id !== slateId) return slate;
+      const assignmentsAfterRemove = slate.assignments.filter((a) => a.userId !== userId);
+      const reordered = assignmentsAfterRemove.map((a, i) => ({ ...a, order: i + 1 }));
+      return { ...slate, assignments: reordered };
+    });
+    onSlatesChange(newSlates);
+  }, [slates, onSlatesChange]);
 
   const handleEditInterval = useCallback((assignmentId: string | undefined, intervalDays: number) => {
     for (const slate of slates) {
@@ -247,6 +258,7 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
                         onEditInterval={(intervalDays: number) => {
                           handleEditInterval(assignment.id, intervalDays);
                         }}
+                        onRemove={() => handleRemoveAssignment(assignment.id, assignment.userId, slate.id)}
                       />
                     ))}
 
@@ -264,6 +276,38 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
             {slates.length === 0 && (
               <p className="text-sm text-ink/60 italic p-3 text-center">No slates to display</p>
             )}
+
+            {/* Drop zone for removing assignments - drag here to remove */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const userId = e.dataTransfer.getData("userId");
+                if (!userId) return;
+                
+                setDraggedUserId(null);
+                setDragOverSlate(null);
+                
+                const newSlates = slates.map((slate) => {
+                  const assignmentsAfterRemove = slate.assignments.filter((a) => a.userId !== userId);
+                  const reordered = assignmentsAfterRemove.map((a, i) => ({ ...a, order: i + 1 }));
+                  return { ...slate, assignments: reordered };
+                });
+                onSlatesChange(newSlates);
+              }}
+              onDragLeave={(e) => e.preventDefault()}
+              className={`mt-4 rounded-2xl border-2 border-dashed transition-all ${
+                draggedUserId
+                  ? "border-coral/50 bg-coral/10"
+                  : "border-ink/10"
+              }`}
+            >
+              <p className="text-center text-sm text-ink/40 py-6">
+                {draggedUserId ? "Drop here to remove" : "Drag assignments here to remove"}
+              </p>
+            </div>
           </div>
         </div>
       </div>

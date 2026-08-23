@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { PageShell, PageHeader, PageLoader } from "@/components/ui";
 import RotationBoard from "@/components/RotationBoard";
 import type { UserRotation, SlateWithRotations, RotationAssignment } from "@/components/AssignmentCard";
 
@@ -22,7 +22,6 @@ export default function RotationsPage() {
 
   async function loadRotationData() {
     try {
-      // Try to fetch from API first
       const response = await fetch("/api/rotations");
       if (response.ok) {
         const data = await response.json();
@@ -36,7 +35,6 @@ export default function RotationsPage() {
       // Fall through to mock data
     }
 
-    // Mock data for development / no API
     const mockFamily: Family = { id: "mock-family", name: "Demo Family" };
     const mockUsers: UserRotation[] = [
       {
@@ -144,7 +142,6 @@ export default function RotationsPage() {
 
   const handleSave = async (assignments: RotationAssignment[]) => {
     try {
-      // Save each assignment via the API route (server-side only)
       for (const assignment of assignments) {
         await fetch("/api/rotations", {
           method: "POST",
@@ -160,33 +157,19 @@ export default function RotationsPage() {
     }
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  }
+  if (loading) return <PageShell><PageLoader label="Loading rotations..." /></PageShell>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cream to-sunny/20">
-      {/* Navigation */}
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-grape">Choretle</h1>
-        <div className="flex gap-4">
-          <Link href="/dashboard" className="hover:underline">Dashboard</Link>
-          <Link href="/tasks" className="hover:underline">Tasks</Link>
-          <Link href="/rotations" className="hover:underline text-grape font-semibold">Rotations</Link>
-        </div>
-      </nav>
+    <PageShell>
+      <PageHeader
+        title="Rotations"
+        subtitle={`Family: ${family?.name || "No family"} · ${users.length + slates.reduce((acc, s) => acc + s.assignments.length, 0)} assignments`}
+        actions={
+          <span className="text-sm text-ink/60">{slates.length} slates configured</span>
+        }
+      />
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
-        <header>
-          <h2 className="text-2xl font-bold text-ink">Rotation Assignment</h2>
-          {family && (
-            <p className="text-sm text-ink/60 mt-1">
-              Family: <span className="font-medium">{family.name}</span> &middot; {users.length} users &middot; {slates.length} slates
-            </p>
-          )}
-        </header>
-
+      <main className="space-y-8">
         <RotationBoard
           familyName={family?.name || ""}
           users={users}
@@ -195,6 +178,6 @@ export default function RotationsPage() {
           onSlatesChange={setSlates}
         />
       </main>
-    </div>
+    </PageShell>
   );
 }

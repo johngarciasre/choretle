@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,11 +10,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const familyId = searchParams.get("familyId");
+    const familyId = request.headers.get("x-family-id");
 
     if (!familyId) {
-      return NextResponse.json({ error: "familyId is required" }, { status: 400 });
+      return NextResponse.json([]);
     }
 
     // Get tags with task counts
@@ -47,8 +46,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, familyId, color } = body;
+    const { name, color } = body;
 
+    const familyId = request.headers.get("x-family-id");
     if (!name || !familyId) {
       return NextResponse.json({ error: "name and familyId are required" }, { status: 400 });
     }
@@ -63,5 +63,61 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Tags POST failed:", error);
     return NextResponse.json({ error: "Failed to create tag" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const db = await initDb();
+    if (!db) {
+      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
+    }
+
+    const body = await request.json();
+    const { id, name, color } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const result = await db.update(schema.tags)
+      .set({ name, color })
+      .where(eq(schema.tags.id, id))
+      .returning("*");
+
+    if (!result || !result[0]) {
+      return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(result[0]);
+  } catch (error) {
+    console.error("Tags PUT failed:", error);
+    return NextResponse.json({ error: "Failed to update tag" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const db = await initDb();
+    if (!db) {
+      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
+    }
+
+    const body = await request.json();
+    const { id } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    // Delete tag from junction tables first (cascade via FK constraints in PostgreSQL)
+    await db.delete(schema.taskTags).where(eq(schema.taskTags.tagId, id));
+    await db.delete(schema.slateTags).where(eq(schema.slateTags.tagId, id));
+    await db.delete(schema.tags).where(eq(schema.tags.id, id));
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Tags DELETE failed:", error);
+    return NextResponse.json({ error: "Failed to delete tag" }, { status: 500 });
   }
 }
