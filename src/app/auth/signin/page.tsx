@@ -1,12 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Check if we're already logged in on mount
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  async function checkAuth() {
+    try {
+      const res = await fetch("/api/auth/me?_t=" + Date.now());
+      if (res.ok) {
+        window.location.href = "/";
+      }
+    } catch (e) {
+      console.log("Not logged in yet");
+    }
+  }
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -17,21 +33,25 @@ export default function SignInPage() {
     try {
       console.log("[SIGNIN PAGE] Sending fetch to /api/auth/signin");
       
-      // Clear any existing cookies by removing the cookie header
-      const response = await fetch("/api/auth/signin", {
+      const response = await fetch("/api/auth/signin?_t=" + Date.now(), {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Cookie": ""  // Clear old cookies
         },
         body: JSON.stringify({ email, password }),
       });
       
       console.log("[SIGNIN PAGE] Response status:", response.status);
-      console.log("[SIGNIN PAGE] Response headers:", Object.fromEntries(response.headers.entries()));
+      console.log("[SIGNIN PAGE] All response headers:");
+      for (const [key, value] of response.headers) {
+        if (!key.includes("set-cookie")) {
+          console.log(`  ${key}: ${value}`);
+        }
+      }
       
       const data = await response.json();
       console.log("[SIGNIN PAGE] Response JSON:", data);
+      console.log("[SIGNIN PAGE] Cookies stored by browser - check DevTools Application tab");
       
       if (response.ok) {
         console.log("[SIGNIN PAGE] Sign in successful, redirecting to /");
