@@ -7,16 +7,11 @@ import { eq, sql } from "drizzle-orm";
 
 /**
  * Check if Supabase credentials are properly configured.
- * Requires both URL and anon key to be set.
  */
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
-/**
- * Sign in user with email and password using Supabase Auth.
- * In dev mode (AUTH_MODE=dev), uses mock users instead.
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -63,7 +58,6 @@ export async function POST(request: NextRequest) {
     // ─── Production Mode: Use Supabase Auth ──────────────────────
     
     if (!hasSupabaseConfig()) {
-      console.error("[SIGNIN] Missing Supabase credentials");
       return NextResponse.json(
         { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
         { status: 500 }
@@ -79,13 +73,6 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
-    if (!supabase) {
-      console.error("[SIGNIN] Failed to initialize Supabase client");
-      return NextResponse.json(
-        { error: "Failed to initialize authentication service" },
-        { status: 500 }
-      );
-    }
 
     // Sign in with password using Supabase Auth
     const signInResult = await supabase.auth.signInWithPassword({
@@ -94,8 +81,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (signInResult.error) {
-      console.log("[SIGNIN] Supabase error:", signInResult.error.message);
-      
       if (signInResult.error.message?.includes("Invalid login credentials")) {
         return NextResponse.json(
           { error: "Invalid email or password" },
@@ -117,7 +102,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!signInResult.data?.session) {
-      console.error("[SIGNIN] No session returned from Supabase");
       return NextResponse.json(
         { error: "Authentication failed" },
         { status: 500 }
@@ -160,7 +144,6 @@ export async function POST(request: NextRequest) {
         const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, userId)).first();
         
         if (!existingUser) {
-          console.log("[SIGNIN] Creating new user record");
           await db.insert(schema.users).values({
             id: userId,
             email: userEmail,
@@ -171,17 +154,13 @@ export async function POST(request: NextRequest) {
             updatedAt: new Date(),
           });
         } else if (existingUser.familyId !== familyId) {
-          console.log("[SIGNIN] Updating user family reference");
           await db.update(schema.users).set({ 
             familyId,
             updatedAt: new Date()
           }).where(eq(schema.users.id, existingUser.id));
-        } else {
-          console.log("[SIGNIN] User record already exists");
         }
       }
     } catch (dbError) {
-      console.error("[SIGNIN] Database operations failed:", dbError);
       // Silently fail - user is authenticated in Supabase Auth anyway
     }
 
@@ -207,8 +186,6 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("[SIGNIN] Unhandled error:", error);
-    
     if (error instanceof Error) {
       return NextResponse.json(
         { 
