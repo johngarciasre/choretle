@@ -10,9 +10,8 @@ function hasSupabaseConfig(): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  console.log("[SIGNIN] Request received in", process.env.NODE_ENV, "mode");
-  console.log("[SIGNIN] Has Supabase config:", hasSupabaseConfig());
-
+  console.log("[SIGNIN] === START ===");
+  
   let body;
   try {
     body = await request.json();
@@ -60,12 +59,8 @@ export async function POST(request: NextRequest) {
     );
 
     setDevSessionCookie(response.headers, session);
-    console.log("[SIGNIN] Set dev session cookie:");
-    for (const [key, value] of response.headers) {
-      if (key.toLowerCase().includes("cookie")) {
-        console.log(`  ${key}: ${value}`);
-      }
-    }
+    
+    console.log("[SIGNIN] === END ===");
     return response;
   }
 
@@ -84,6 +79,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  console.log("[SIGNIN] Creating Supabase client...");
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -107,7 +103,7 @@ export async function POST(request: NextRequest) {
     password: body.password,
   });
 
-  console.log("[SIGNIN] signInResult:", JSON.stringify(signInResult, null, 2));
+  console.log("[SIGNIN] signInResult:", JSON.stringify(signInResult));
 
   if (signInResult.error) {
     console.error("[SIGNIN] Sign in error:", signInResult.error.message);
@@ -214,123 +210,51 @@ export async function POST(request: NextRequest) {
     }
   );
 
-  console.log("[SIGNIN] Setting Supabase cookies...");
+  console.log("[SIGNIN] About to set cookies...");
   
   const tokens = signInResult.data.session;
   if (tokens) {
-    // Access token cookie - use append to add multiple cookies
-    response.headers.append(
-      "set-cookie",
-      `supabase-token=${encodeURIComponent(JSON.stringify({
-        access_token: tokens.access_token,
-        token_type: "bearer",
-        expires_in: tokens.expires_in,
-        expires_at: tokens.expires_at,
-        refresh_token: tokens.refresh_token,
-        user: {
-          id: tokens.user.id,
-          aud: tokens.user.aud,
-          email: tokens.user.email,
-          phone: tokens.user.phone,
-          app_metadata: tokens.user.app_metadata,
-          user_metadata: tokens.user.user_metadata,
-          identities: tokens.user.identities,
-        }
-      }))}; Path=/; Secure; HttpOnly; SameSite=Lax`
-    );
+    console.log("[SIGNIN] Tokens available:", !!tokens.access_token);
+    
+    // Access token cookie
+    const accessTokenCookie = `supabase-token=${encodeURIComponent(JSON.stringify({
+      access_token: tokens.access_token,
+      token_type: "bearer",
+      expires_in: tokens.expires_in,
+      expires_at: tokens.expires_at,
+      refresh_token: tokens.refresh_token,
+      user: {
+        id: tokens.user.id,
+        aud: tokens.user.aud,
+        email: tokens.user.email,
+        phone: tokens.user.phone,
+        app_metadata: tokens.user.app_metadata,
+        user_metadata: tokens.user.user_metadata,
+        identities: tokens.user.identities,
+      }
+    }))}; Path=/; Secure; HttpOnly; SameSite=Lax`;
+    
+    console.log("[SIGNIN] Setting access token cookie:", accessTokenCookie.substring(0, 100), "...");
+    
+    response.headers.set("set-cookie", accessTokenCookie);
     
     // Refresh token cookie  
-    response.headers.append(
-      "set-cookie",
-      `supabase-refresh-token=${encodeURIComponent(JSON.stringify({
-        access_token: tokens.refresh_token,
-        token_type: "bearer",
-        expires_in: tokens.expires_in,
-        expires_at: tokens.expires_at
-      }))}; Max-Age=${tokens.expires_in}; Path=/; Secure; HttpOnly; SameSite=Lax`
-    );
-  }
-
-  console.log("[SIGNIN] Cookies set on response. Headers:");
-  for (const [key, value] of response.headers) {
-    if (key.toLowerCase().includes("cookie")) {
-      console.log(`  ${key}: ${value.substring(0, 200)}...`);
-    }
-  }
-  
-  console.log("[SIGNIN] Returning response");
-  return response;
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    if (process.env.AUTH_MODE === "dev") {
-      const cookieHeader = request.headers.get("cookie") || "";
-      const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
-
-      if (!setCookie) {
-        return NextResponse.json({ authenticated: false });
-      }
-
-      const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
-      const user = parseDevSession(value);
-
-      if (user) {
-        return NextResponse.json({
-          authenticated: true,
-          user: {
-            id: user.id,
-            email: user.email,
-            role: user.role || "child",
-            name: user.name || "",
-          },
-        });
-      }
-
-      return NextResponse.json({ authenticated: false });
-    }
-
-    if (!hasSupabaseConfig()) {
-      return NextResponse.json(
-        { error: "Server configuration error: Supabase credentials not found." },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            for (const cookie of cookiesToSet) {
-              request.cookies.set(cookie.name, cookie.value);
-            }
-          },
-        },
-      }
-    );
+    const refreshTokenCookie = `supabase-refresh-token=${encodeURIComponent(JSON.stringify({
+      access_token: tokens.refresh_token,
+      token_type: "bearer",
+      expires_in: tokens.expires_in,
+      expires_at: tokens.expires_at
+    }))}; Max-Age=${tokens.expires_in}; Path=/; Secure; HttpOnly; SameSite=Lax`;
     
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (session) {
-      return NextResponse.json({
-        authenticated: true,
-        user: {
-          id: session.user.id,
-          email: session.user.email,
-          role: session.user.user_metadata?.role || "child",
-          name: session.user.user_metadata?.name || "",
-        },
-      });
-    }
-
-    return NextResponse.json({ authenticated: false });
-  } catch (error) {
-    console.error("[SESSION GET] Error:", error);
-    return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
+    console.log("[SIGNIN] Setting refresh token cookie:", refreshTokenCookie.substring(0, 100), "...");
+    
+    response.headers.set("set-cookie", refreshTokenCookie);
+  } else {
+    console.error("[SIGNIN] No tokens in session!");
   }
+
+  console.log("[SIGNIN] === END ===");
+  console.log("[SIGNIN] Final headers:", [...response.headers.entries()].filter(([k]) => k.toLowerCase().includes("cookie")));
+  
+  return response;
 }
