@@ -20,7 +20,6 @@ function hasSupabaseConfig(): boolean {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log("[SIGNIN] Received body:", JSON.stringify(body));
     
     // ─── Dev Mode: Use mock user ────────────────────────────────
     if (process.env.AUTH_MODE === "dev") {
@@ -73,7 +72,6 @@ export async function POST(request: NextRequest) {
 
     // Validate input
     if (!body?.email || !body?.password) {
-      console.log("[SIGNIN] Missing required fields:", !!body.email, !!body.password);
       return NextResponse.json(
         { error: "Email and password are required" },
         { status: 400 }
