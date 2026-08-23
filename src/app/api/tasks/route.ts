@@ -5,7 +5,18 @@ export async function GET(request: NextRequest) {
   try {
     const familyId = request.headers.get("x-family-id") || "";
     if (!familyId) return NextResponse.json([]);
-    const tasks = await getTasksByFamily(familyId);
+
+    const searchParams = request.nextUrl.searchParams;
+    const tagIds = searchParams.get("tagIds");
+
+    let tasks = await getTasksByFamily(familyId);
+
+    // Filter by tags if provided
+    if (tagIds) {
+      const tagIdArray = JSON.parse(tagIds);
+      tasks = tasks.filter((task: any) => task.tagIds && tagIdArray.some((id: string) => task.tagIds.includes(id)));
+    }
+
     return NextResponse.json(tasks);
   } catch (error) {
     console.error("Get tasks failed:", error);
