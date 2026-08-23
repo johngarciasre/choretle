@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseMiddlewareClient } from "@/lib/supabase";
+import { createServerClient } from "@supabase/ssr";
 import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
@@ -72,7 +72,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await getSupabaseMiddlewareClient(request);
+    // Initialize Supabase client directly (not via middleware)
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            for (const cookie of cookiesToSet) {
+              request.cookies.set(cookie.name, cookie.value);
+            }
+          },
+        },
+      }
+    );
 
     // Sign in with password using Supabase Auth
     const signInResult = await supabase.auth.signInWithPassword({
@@ -244,7 +260,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = await getSupabaseMiddlewareClient(request);
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            for (const cookie of cookiesToSet) {
+              request.cookies.set(cookie.name, cookie.value);
+            }
+          },
+        },
+      }
+    );
     
     const { data: { session } } = await supabase.auth.getSession();
 
