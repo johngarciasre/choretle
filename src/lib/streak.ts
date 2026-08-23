@@ -14,6 +14,7 @@ export function calculateStreak(completedJobs: Array<{ completedAt?: string }>):
 
     if (!lastDate) {
       lastDate = date;
+      streak = 1;
       continue;
     }
 
@@ -51,7 +52,7 @@ export function calculateLongestStreak(completedJobs: Array<{ completedAt?: stri
 
     if (!lastDate) {
       lastDate = date;
-      currentStreak++;
+      currentStreak = 1;
       continue;
     }
 
