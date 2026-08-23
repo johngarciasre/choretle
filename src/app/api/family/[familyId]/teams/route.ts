@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     const teams = await db.select().from(schema.teams).where(eq(schema.teams.familyId, familyId));
 
     // Optionally fetch team members
-    let teamsWithMembers: any[] = [];
+    const teamsWithMembers: any[] = [];
     if (teams && (teams as any[]).length > 0) {
       for (const team of teams as any[]) {
         const members = await db.select().from(schema.teamMembers).where(

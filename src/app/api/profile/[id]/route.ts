@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Allow fetching own profile or profile of user in same family
-    let targetUserId = userId;
+    const targetUserId = userId;
     
     const db = await initDb();
     if (!db) {

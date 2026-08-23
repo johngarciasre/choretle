@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate slateIds if provided (must belong to sharing family)
-    let validSlateIds: string[] = [];
+    const validSlateIds: string[] = [];
     if (slateIds && Array.isArray(slateIds)) {
       for (const slateId of slateIds) {
         const slate = await db.select().from(schema.slates).where(

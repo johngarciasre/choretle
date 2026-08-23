@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { createDevSession, setDevSessionCookie, getDevUserFromRequest, DEV_COOKIE_NAME } from "@/lib/dev-auth";
+import { createDevSession, setDevSessionCookie, getDevUserFromRequest } from "@/lib/dev-auth";
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
