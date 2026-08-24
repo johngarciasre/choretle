@@ -59,6 +59,7 @@ export default function SwapMeetPage() {
   const [selectedSlateIdsForSharing, setSelectedSlateIdsForSharing] = useState<string[]>([]);
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Swap Meet");
     const storedFamilyId = typeof window !== "undefined" && localStorage.getItem("familyId");
     if (storedFamilyId) {
       setFamilyId(storedFamilyId);

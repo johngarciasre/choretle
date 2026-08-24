@@ -1,10 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
 import { PageShell } from "@/components/ui/PageShell";
 import { Card } from "@/components/ui/Card";
 import Link from "next/link";
 
 export default function ProfilePage() {
+  useEffect(() => {
+    typeof window !== 'undefined' && (document.title = "Choretle - Profile");
+  }, []);
+
   return (
     <PageShell>
       <main className="flex items-center justify-center min-h-[60vh]">

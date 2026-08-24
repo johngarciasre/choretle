@@ -98,6 +98,7 @@ export default function JobPage() {
 
   useEffect(() => {
     if (!jobId) return;
+    typeof window !== "undefined" && (document.title = "Choretle - Job Details");
     Promise.all([fetchJob(), fetchSubtasks(jobId), fetchPhotos("job", jobId)]).then(([jobData, subtasks, photoData]) => {
       if (jobData) {
         setJob(jobData.job);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useState } from "react";
 import { PageShell } from "@/components/ui/PageShell";
 import { Card } from "@/components/ui/Card";
@@ -7,6 +8,10 @@ import { Button } from "@/components/ui/Button";
 import { AlertCircle, Sparkles } from "lucide-react";
 
 export default function SignUpPage() {
+  useEffect(() => {
+    typeof window !== 'undefined' && (document.title = "Choretle - Sign Up");
+  }, []);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

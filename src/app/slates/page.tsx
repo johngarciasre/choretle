@@ -80,6 +80,7 @@ export default function SlatesPage() {
   const [buildingSlateAutoIncludeTagIds, setBuildingSlateAutoIncludeTagIds] = useState<string[]>([]);
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Slates");
     Promise.all([fetchSlates(), fetchTasks(), fetchTags()]).then(([slates, tasks, tags]) => {
       setSlates(slates);
       setTasks(tasks);

@@ -83,6 +83,7 @@ export default function TaskPage() {
 
   useEffect(() => {
     if (!taskId) return;
+    typeof window !== "undefined" && (document.title = "Choretle - Task Details");
     Promise.all([fetchTask(taskId), fetchTags(), fetchSubtasks(taskId)]).then(([taskData, tags, subtasks]) => {
       if (taskData) {
         setTask(taskData);

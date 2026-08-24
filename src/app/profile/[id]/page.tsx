@@ -62,6 +62,7 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - User Profile");
     fetch(`/api/profile/${userId}`)
       .then((res) => res.json())
       .then((data) => {

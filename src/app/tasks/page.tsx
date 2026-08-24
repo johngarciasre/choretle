@@ -66,6 +66,7 @@ export default function TasksPage() {
   });
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Tasks");
     Promise.all([fetchTasks(), fetchTags()]).then(([tasks, tags]) => {
       setTasks(tasks);
       setTags(tags);

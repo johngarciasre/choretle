@@ -34,6 +34,7 @@ export default function ReviewQueuePage() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Review Queue");
     fetchReviews();
   }, [filter]);
 
