@@ -10,6 +10,7 @@ export const families = pgTable("families", {
   logoUrl: text("logo_url"),
   timezone: varchar("timezone", { length: 64 }).default("America/New_York").notNull(),
   weekStartDay: integer("week_start_day").default(0).notNull(),
+  theme: varchar("theme", { length: 32 }).default("coral").notNull(),
   teamsEnabled: boolean("teams_enabled").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),

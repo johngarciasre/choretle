@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── PATCH: Update family settings (e.g., teamsEnabled) ─────────────
+// ─── PATCH: Update family settings (e.g., teamsEnabled, name, theme) ─────────────
 export async function PATCH(request: NextRequest) {
   try {
     const authResult = await verifyAuth(request);
@@ -165,10 +165,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { teamsEnabled } = body;
+    const { teamsEnabled, name, theme } = body;
 
-    if (teamsEnabled === undefined) {
-      return NextResponse.json({ error: "teamsEnabled is required" }, { status: 400 });
+    if (teamsEnabled === undefined && !name && !theme) {
+      return NextResponse.json({ error: "At least one of teamsEnabled, name, or theme is required" }, { status: 400 });
     }
 
     const db = await initDb();
@@ -185,11 +185,23 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "You don't have access to this family" }, { status: 403 });
     }
 
+    // Build update object with only provided fields
+    const updates: any = { updatedAt: new Date() };
+    if (teamsEnabled !== undefined) updates.teamsEnabled = teamsEnabled;
+    if (name) {
+      const newSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      const existingFamily = await db.select().from(schema.families).where(eq(schema.families.slug, newSlug)).first();
+      if (existingFamily && existingFamily.id !== familyId) {
+        return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
+      }
+      updates.name = name;
+      updates.slug = newSlug;
+    }
+    if (theme) updates.theme = theme;
+
     // Update family settings
-    const updatedFamily = await db.update(schema.families).set({ 
-      teamsEnabled,
-      updatedAt: new Date()
-    }).where(eq(schema.families.id, familyId)).returning("*");
+    const updatedFamily = await db.update(schema.families).set(updates)
+      .where(eq(schema.families.id, familyId)).returning("*");
 
     return NextResponse.json({
       ok: true,
