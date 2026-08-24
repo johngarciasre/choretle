@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Dashboard");
     checkAuthInternal().then((u) => {
       if (u) setUser(u);
     }).finally(() => setLoading(false));

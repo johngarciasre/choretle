@@ -131,6 +131,7 @@ export default function FamilyPage() {
 
   // Load family ID from storage or URL
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Family");
     if (pathname.startsWith("/family/")) {
       // Viewing a specific family
       const id = pathname.split("/").pop();

@@ -17,6 +17,7 @@ export default function RotationsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Rotations");
     loadRotationData();
   }, []);
 

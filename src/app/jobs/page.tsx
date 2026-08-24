@@ -36,6 +36,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Jobs");
     fetchJobs().then(data => {
       if (data) {
         setJobs(data);

@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
 import { PageShell } from "@/components/ui/PageShell";
 import { Card } from "@/components/ui/Card";
 
 export default function RotationsPage() {
+  useEffect(() => {
+    typeof window !== 'undefined' && (document.title = "Choretle - Rotations");
+  }, []);
+
   return (
     <PageShell>
       <main className="flex items-center justify-center min-h-[60vh]">

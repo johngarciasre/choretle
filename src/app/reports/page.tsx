@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, Card, Badge, StatCard, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
@@ -60,6 +60,10 @@ export default function ReportsPage() {
     setActiveTab(tab);
     setReportData(mockData[tab]);
   }
+
+  useEffect(() => {
+    typeof window !== "undefined" && (document.title = "Choretle - Reports");
+  }, []);
 
   if (!reportData) {
     return <PageLoader label="Loading reports..." />;
