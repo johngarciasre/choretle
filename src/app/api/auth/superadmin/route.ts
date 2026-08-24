@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 
 const SUPERADMIN_COOKIE = "superadmin-session";
 
@@ -45,7 +46,7 @@ function setSuperadminSessionCookie(
   const encoded = encodeURIComponent(JSON.stringify(session));
   responseHeaders.set(
     "set-cookie",
-    `${SUPERADMIN_COOKIE}=${encoded}; path=/; secure=true; httpOnly=true`,
+    `${SUPERADMIN_COOKIE}=${encoded}; path=/; secure=true; httpOnly=true; sameSite=lax`,
   );
 }
 
@@ -55,7 +56,7 @@ function setSuperadminSessionCookie(
 function clearSuperadminSessionCookie(responseHeaders: Headers): void {
   responseHeaders.set(
     "set-cookie",
-    `${SUPERADMIN_COOKIE}=; path=/; secure=true; httpOnly=true`,
+    `${SUPERADMIN_COOKIE}=; path=/; secure=true; httpOnly=true; sameSite=lax`,
   );
 }
 
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (username !== expectedUsername || password !== expectedPassword) {
+  if (username !== expectedUsername || !crypto.timingSafeEqual(Buffer.from(password), Buffer.from(expectedPassword))) {
     return NextResponse.json({ error: "Invalid superadmin credentials" }, { status: 401 });
   }
 

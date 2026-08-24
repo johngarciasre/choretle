@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   // Clear superadmin session
   response.headers.set(
     "set-cookie",
-    "superadmin-session=; path=/; secure=true; httpOnly=true",
+    "superadmin-session=; path=/; secure=true; httpOnly=true; sameSite=lax",
   );
   return response;
 }

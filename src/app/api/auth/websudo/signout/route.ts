@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   // Clear websudo cookie
   response.headers.set(
     "set-cookie",
-    `${WEBSUDO_COOKIE}=; path=/; secure=true; httponly=true`,
+    `${WEBSUDO_COOKIE}=; path=/; secure=true; httponly=true; sameSite=lax`,
   );
   
   return response;

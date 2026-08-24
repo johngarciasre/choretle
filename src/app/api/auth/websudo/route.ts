@@ -16,7 +16,11 @@ interface WebsudoPayload {
  * Sign a websudo payload into a cookie value.
  */
 function signWebsudo(payload: WebsudoPayload): string {
-  const secret = process.env.WEBSUDO_SECRET || "dev-websudo-secret-change-me";
+  const secret = process.env.WEBSUDO_SECRET;
+  if (!secret) {
+    console.error("[websudo] WEBSUDO_SECRET is not configured. Aborting.");
+    throw new Error("WEBSUDO_SECRET environment variable must be set");
+  }
   const json = JSON.stringify(payload);
   const hash = crypto.createHmac("sha256", secret).update(json).digest("hex");
   return `${json}.${hash}`;
@@ -38,9 +42,13 @@ function verifyWebsudo(cookieValue?: string): WebsudoPayload | null {
     if (Date.now() > payload.exp) return null;
 
     // Verify signature
-    const secret = process.env.WEBSUDO_SECRET || "dev-websudo-secret-change-me";
+    const secret = process.env.WEBSUDO_SECRET;
+    if (!secret) {
+      console.error("[websudo] WEBSUDO_SECRET is not configured. Aborting.");
+      throw new Error("WEBSUDO_SECRET environment variable must be set");
+    }
     const expectedHash = crypto.createHmac("sha256", secret).update(json).digest("hex");
-    if (hash !== expectedHash) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(expectedHash, "hex"))) return null;
 
     return payload;
   } catch {
@@ -55,7 +63,7 @@ function setWebsudoCookie(responseHeaders: Headers, payload: WebsudoPayload): vo
   const signed = signWebsudo(payload);
   responseHeaders.set(
     "set-cookie",
-    `${WEBSUDO_COOKIE}=${signed}; path=/; secure=true; httponly=true`,
+    `${WEBSUDO_COOKIE}=${signed}; path=/; secure=true; httponly=true; sameSite=lax`,
   );
 }
 

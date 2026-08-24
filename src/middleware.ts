@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, getDevUserFromRequest } from "@/lib/dev-auth";
+import nodeCrypto from "crypto";
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -88,7 +89,11 @@ export async function middleware(request: NextRequest) {
                 .map((b) => b.toString(16).padStart(2, "0"))
                 .join("");
               
-              if (hash === expectedHash) {
+              // Timing-safe comparison of the signature hash
+              if (nodeCrypto.timingSafeEqual(
+                Buffer.from(hash, "hex"),
+                Buffer.from(expectedHash, "hex"),
+              )) {
                 const response = NextResponse.next();
                 response.headers.set("x-user-id", payload.userId);
                 response.headers.set("x-email", payload.email);
