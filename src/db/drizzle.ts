@@ -4,14 +4,13 @@ import * as schema from "@/db/schema";
 
 export const db: any = null;
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DB_URL = process.env.POSTGRES_URL;
 
 /**
- * Initialize database only if DATABASE_URL is provided.
- * Returns null for Vercel deployments without PostgreSQL.
+ * Initialize database only if POSTGRES_URL is provided.
  */
 export async function initDb(): Promise<any> {
-  // Always return null in this environment (Vercel doesn't have DB_URL set)
-  console.warn("[DB] Not initializing - running on Vercel without DATABASE_URL");
+  // Always return null in this environment (Vercel doesn't have POSTGRES_URL set)
+  console.warn("[DB] Not initializing - running on Vercel without POSTGRES_URL");
   return null;
 }
