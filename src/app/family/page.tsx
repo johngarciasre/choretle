@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from "@/components/ui";
-import { Star, Users, Plus, X } from "lucide-react";
+import { Star, Users, Plus, X, Pencil, Trash2, Tag as TagIcon } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 
 interface Family {
@@ -14,7 +14,17 @@ interface Family {
   logoUrl?: string;
   timezone: string;
   weekStartDay: number;
+  theme: string;
   teamsEnabled: boolean;
+  createdAt: string;
+}
+
+interface Tag {
+  id: string;
+  familyId: string;
+  name: string;
+  color: string;
+  taskCount?: number;
   createdAt: string;
 }
 
@@ -79,6 +89,21 @@ export default function FamilyPage() {
   const [showToggleModal, setShowToggleModal] = useState(false);
   const [enableTeams, setEnableTeams] = useState(true);
 
+  // Tag management state
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [showTagForm, setShowTagForm] = useState(false);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
+  const [tagName, setTagName] = useState("");
+  const [tagColor, setTagColor] = useState("#6366ee");
+
+  // Name editing state
+  const [editingName, setEditingName] = useState(false);
+  const [tempName, setTempName] = useState("");
+
+  // Theme selection state
+  const [selectedTheme, setSelectedTheme] = useState(family?.theme || "coral");
+
   const checkAuth = async () => {
     const { data: { session } } = await getSupabaseBrowser().auth.getSession();
     if (!session) {
@@ -120,6 +145,7 @@ export default function FamilyPage() {
       }
 
       setFamily(familyData.family);
+      setSelectedTheme(familyData.family.theme || "coral");
       setUsers(usersData.users);
       setTeams(teamsData.teams);
     } catch (error) {
@@ -152,6 +178,12 @@ export default function FamilyPage() {
       loadFamilyData(storedFamilyId);
     }
   }, []);
+
+  useEffect(() => {
+    if (viewingFamily) {
+      loadTags(viewingFamily);
+    }
+  }, [viewingFamily]);
 
   const handleCreateFamily = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,6 +308,136 @@ export default function FamilyPage() {
     }
   };
 
+  const loadTags = async (fid: string) => {
+    setLoadingTags(true);
+    try {
+      const response = await fetch("/api/tags", {
+        headers: { "x-family-id": fid },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTags(data);
+      }
+    } catch (error) {
+      console.error("Failed to load tags:", error);
+    } finally {
+      setLoadingTags(false);
+    }
+  };
+
+  const handleCreateTag = async () => {
+    if (!tagName.trim() || !familyId) return;
+
+    try {
+      const response = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: tagName.trim(), color: tagColor }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to create tag");
+
+      const newTag = await response.json();
+      setTags([...tags, newTag]);
+      setShowTagForm(false);
+      setTagName("");
+      setTagColor("#6366ee");
+    } catch (error) {
+      console.error("Failed to create tag:", error);
+      alert("Failed to create tag.");
+    }
+  };
+
+  const handleUpdateTag = async () => {
+    if (!editingTag || !tagName.trim()) return;
+
+    try {
+      const response = await fetch("/api/tags", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingTag.id, name: tagName.trim(), color: tagColor }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to update tag");
+
+      const updatedTag = await response.json();
+      setTags(tags.map(t => t.id === updatedTag.id ? updatedTag : t));
+      setEditingTag(null);
+      setShowTagForm(false);
+      setTagName("");
+      setTagColor("#6366ee");
+    } catch (error) {
+      console.error("Failed to update tag:", error);
+      alert("Failed to update tag.");
+    }
+  };
+
+  const handleDeleteTag = async (tagId: string) => {
+    if (!confirm("Delete this tag? This cannot be undone.")) return;
+
+    try {
+      const response = await fetch("/api/tags", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: tagId }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete tag");
+
+      setTags(tags.filter(t => t.id !== tagId));
+    } catch (error) {
+      console.error("Failed to delete tag:", error);
+      alert("Failed to delete tag.");
+    }
+  };
+
+  const handleUpdateFamilyName = async () => {
+    if (!familyId || !tempName.trim()) return;
+
+    try {
+      const response = await fetch(`/api/family/${familyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: tempName.trim() }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to update family name");
+
+      const data = await response.json();
+      setFamily(data.family);
+      setEditingName(false);
+    } catch (error) {
+      console.error("Failed to update family name:", error);
+      alert("Failed to update family name.");
+    }
+  };
+
+  const handleUpdateTheme = async () => {
+    if (!familyId) return;
+
+    try {
+      const response = await fetch(`/api/family/${familyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: selectedTheme }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to update theme");
+
+      const data = await response.json();
+      setFamily(data.family);
+      setSelectedTheme(data.family.theme || selectedTheme);
+    } catch (error) {
+      console.error("Failed to update theme:", error);
+      alert("Failed to update theme.");
+    }
+  };
+
   if (!isAuthenticated && pathname.startsWith("/family/")) {
     return (
       <PageShell>
@@ -341,9 +503,31 @@ export default function FamilyPage() {
           
           <Card accent="coral" className="p-6 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Family Name */}
               <div>
-                <label className="block text-sm font-bold text-ink mb-1">Family Name</label>
-                <p className="text-ink/60">{family.name}</p>
+                <label className="block text-sm font-bold text-ink mb-1 flex items-center gap-2">
+                  Family Name
+                  {viewingFamily && !editingName && (
+                    <button onClick={() => { setTempName(family.name); setEditingName(true); }} className="text-xs text-ink/40 hover:text-ink/70">
+                      <Pencil size={12} />
+                    </button>
+                  )}
+                </label>
+                {editingName ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tempName}
+                      onChange={(e) => setTempName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleUpdateFamilyName(); if (e.key === "Escape") setEditingName(false); }}
+                      className="flex-1 rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-coral focus:outline-none"
+                      autoFocus
+                    />
+                    <Button onClick={handleUpdateFamilyName} size="sm" variant="primary">Save</Button>
+                  </div>
+                ) : (
+                  <p className="text-ink/60">{family.name}</p>
+                )}
               </div>
 
               <div>
@@ -366,6 +550,36 @@ export default function FamilyPage() {
                   {family.teamsEnabled ? "Yes ✓" : "No"}
                 </Badge>
               </div>
+
+              {/* Theme Selector */}
+              {viewingFamily && (
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-bold text-ink mb-1 flex items-center gap-2">
+                    Family Theme
+                    {!editingName && (
+                      <button onClick={handleUpdateTheme} className="text-xs text-grape hover:text-grape/80 ml-auto">
+                        Save
+                      </button>
+                    )}
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: "coral", bg: "bg-coral" },
+                      { name: "teal", bg: "bg-teal" },
+                      { name: "sunny", bg: "bg-sunny" },
+                      { name: "grape", bg: "bg-grape" },
+                      { name: "bubblegum", bg: "bg-bubblegum" },
+                    ].map((t) => (
+                      <button
+                        key={t.name}
+                        onClick={() => setSelectedTheme(t.name)}
+                        className={`w-8 h-8 rounded-full ${t.bg} border-2 transition-all ${selectedTheme === t.name ? "border-ink scale-110" : "border-ink/15 hover:border-ink/30"}`}
+                        title={t.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {!viewingFamily && (
@@ -569,6 +783,143 @@ export default function FamilyPage() {
                       </Button>
                       <Button
                         onClick={() => setShowTeamForm(false)}
+                        variant="ghost"
+                        size="lg"
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Tags Section */}
+        {viewingFamily && (
+          <section className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="font-display text-xl font-bold text-ink flex items-center gap-2">
+                <TagIcon size={20} />
+                Tags
+              </h2>
+              <Button onClick={() => { setEditingTag(null); setShowTagForm(true); }} variant="success" size="sm">
+                <Plus size={16} className="inline mr-1" />
+                Add Tag
+              </Button>
+            </div>
+
+            {loadingTags ? (
+              <Card accent="bubblegum" className="p-8 text-center">
+                <p className="text-sm text-ink/60">Loading tags...</p>
+              </Card>
+            ) : tags.length === 0 ? (
+              <Card accent="bubblegum" className="p-8 text-center">
+                <EmptyState 
+                  icon={<TagIcon size={32} />}
+                  title="No Tags Yet"
+                  message="Create tags to organize your tasks and slates!"
+                />
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {tags.map((tag) => (
+                  <Card 
+                    key={tag.id} 
+                    accent={tag.color ? "coral" : "grape"}
+                    className="space-y-3"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        {tag.color && (
+                          <span 
+                            className="w-6 h-6 rounded-full border border-ink/15" 
+                            style={{ backgroundColor: tag.color }}
+                          />
+                        )}
+                        <h3 className="font-display text-lg font-bold text-ink flex-1">
+                          {tag.name}
+                        </h3>
+                      </div>
+                      <span className="text-xs text-ink/60">
+                        {(tag as any).taskCount || 0} tasks
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2 pt-2 border-t border-ink/10">
+                      <button
+                        onClick={() => { setEditingTag(tag); setTagName(tag.name); setTagColor(tag.color || "#6366ee"); setShowTagForm(true); }}
+                        className="flex-1 text-xs font-bold text-ink/60 hover:text-ink/90"
+                      >
+                        <Pencil size={12} className="inline mr-1" /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTag(tag.id)}
+                        className="flex-1 text-xs font-bold text-red-500/60 hover:text-red-500"
+                      >
+                        <Trash2 size={12} className="inline mr-1" /> Delete
+                      </button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {/* Tag Form Modal */}
+            {showTagForm && (
+              <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-[60] p-4">
+                <Card accent="sunny" className="max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                  <h3 className="font-display text-2xl font-bold text-ink mb-6 flex items-center gap-2">
+                    <TagIcon size={24} />
+                    {editingTag ? "Edit Tag" : "Create New Tag"}
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-bold text-ink mb-1">Tag Name</label>
+                      <input
+                        type="text"
+                        value={tagName}
+                        onChange={(e) => setTagName(e.target.value)}
+                        placeholder="Enter tag name"
+                        className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-sunny focus:outline-none"
+                        autoFocus
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-ink mb-1">Color</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={tagColor}
+                          onChange={(e) => setTagColor(e.target.value)}
+                          className="w-8 h-8 rounded-full border border-ink/15 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={tagColor}
+                          onChange={(e) => setTagColor(e.target.value)}
+                          placeholder="#6366ee"
+                          className="flex-1 rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-sunny focus:outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-4">
+                      <Button
+                        onClick={editingTag ? handleUpdateTag : handleCreateTag}
+                        disabled={!tagName.trim()}
+                        variant="success"
+                        size="lg"
+                        className="flex-1"
+                      >
+                        {editingTag ? "Update Tag" : "Create Tag"}
+                      </Button>
+                      <Button
+                        onClick={() => { setShowTagForm(false); setEditingTag(null); setTagName(""); setTagColor("#6366ee"); }}
                         variant="ghost"
                         size="lg"
                         className="flex-1"
