@@ -13,7 +13,7 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 ## Work State
 
 ### Completed ✅
-- **Unit Testing Suite**: 127 passing tests across 6 files (utilities, slug gen, rotation math, slate filtering, points calc, job status transitions, integration tests).
+- **Unit Testing Suite**: 456 passing tests across 17 files covering API routes (rotations, tasks, tags, reports, swap-meet), database service layer, dev auth module, middleware, scoring logic, and job completion workflows.
 - **Slate-to-List Auto-Generation**: `slateAutoGen.ts`, `rotation.ts`, `points.ts` with interval-based list generation.
 - **Task Workflow Enforcement**: `jobStatus.ts` and `subtask.ts` enforce state transitions (`todo → doing → done`), history tracking, and point awarding.
 - **Rotation UI**: Drag-and-drop assignment board (`RotationBoard.tsx`, `AssignmentCard.tsx`) with HTML5 drag API, responsive layout, and removal support (X button + drop zone).
