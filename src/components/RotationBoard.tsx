@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Save, Clock, Users, PanelsLeftRight } from "lucide-react";
 import type { UserRotation, SlateWithRotations, RotationAssignment } from "./AssignmentCard";
 import AssignmentCard from "./AssignmentCard";
+import { getAvatarEmoji } from "@/lib/avatar";
 
 interface RotationBoardProps {
   familyName: string;
@@ -169,7 +170,16 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
                   <Users size={16} />
                 </span>
 
-                <img src={user.userAvatarUrl || `https://ui.boringavatars.com/badge/1/${user.userId.length}/flat`} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
+                {user.userAvatarUrl ? (
+                  <img src={user.userAvatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
+                ) : user.userId ? (() => {
+                    const e = getAvatarEmoji(user.userId);
+                    return (
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${e.bgClass}`}>
+                        {e.emoji}
+                      </div>
+                    );
+                  })() : null}
 
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-ink truncate">{user.userName}</p>

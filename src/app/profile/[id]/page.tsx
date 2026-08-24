@@ -6,6 +6,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { PageShell, StatCard, Loading, Badge, Button, Card, PageHeader } from "@/components/ui";
 import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight } from "lucide-react";
+import { getAvatarEmoji } from "@/lib/avatar";
 
 interface JobCompletion {
   id: string;
@@ -156,7 +157,10 @@ export default function UserProfilePage() {
             <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold bg-white/90 text-ink shadow-lg">
               {user.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.name} className="w-full h-full rounded-full object-cover" />
-              ) : (
+              ) : user.id ? (() => {
+                  const e = getAvatarEmoji(user.id);
+                  return <span className={`${e.bgClass} w-full h-full rounded-full flex items-center justify-center`}>{e.emoji}</span>;
+                })() : (
                 user.name.charAt(0).toUpperCase()
               )}
             </div>

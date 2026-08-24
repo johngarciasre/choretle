@@ -73,8 +73,8 @@ describe("getValidNextStatuses", () => {
     expect(getValidNextStatuses("todo")).toEqual(["doing"]);
   });
 
-  it("returns ['todo', 'done'] for doing status", () => {
-    expect(getValidNextStatuses("doing")).toEqual(["todo", "done"]);
+  it("returns ['todo', 'done', 'under_review'] for doing status", () => {
+    expect(getValidNextStatuses("doing")).toEqual(["todo", "done", "under_review"]);
   });
 
   it("returns empty array for done status", () => {

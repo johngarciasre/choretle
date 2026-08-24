@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from "@/components/ui";
 import { Star, Users, Plus, X } from "lucide-react";
+import { getAvatarEmoji } from "@/lib/avatar";
 
 interface Family {
   id: string;
@@ -598,9 +599,20 @@ export default function FamilyPage() {
               {users.map((user) => (
                 <Card key={user.id} accent="coral" className="space-y-3">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold bg-coral/15 text-coral">
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-full object-cover" />
+                    ) : user.id ? (() => {
+                        const e = getAvatarEmoji(user.id);
+                        return (
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${e.bgClass}`}>
+                            {e.emoji}
+                          </div>
+                        );
+                      })() : (
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold bg-coral/15 text-coral">
+                        {user.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <h3 className="font-display text-lg font-bold text-ink">{user.name}</h3>
                       <p className="text-sm text-ink/60">{user.email}</p>

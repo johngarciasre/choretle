@@ -1,4 +1,5 @@
 import { GripHorizontal, X } from "lucide-react";
+import { getAvatarEmoji } from "@/lib/avatar";
 
 export interface RotationAssignment {
   id?: string;
@@ -34,7 +35,9 @@ interface AssignmentCardProps {
 }
 
 export default function AssignmentCard({ assignment, onDragStart, onEditInterval, onRemove }: AssignmentCardProps) {
-  const avatarUrl = assignment.userAvatarUrl || `https://ui.boringavatars.com/badge/1/${assignment.userId.length}/flat`;
+  const hasAvatar = !!assignment.userAvatarUrl;
+  const emojiFallback = !hasAvatar && assignment.userId ? getAvatarEmoji(assignment.userId) : null;
+  const avatarUrl = assignment.userAvatarUrl || "";
 
   return (
     <div
@@ -50,7 +53,13 @@ export default function AssignmentCard({ assignment, onDragStart, onEditInterval
         <GripHorizontal size={16} />
       </span>
 
-      <img src={avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
+      {hasAvatar ? (
+        <img src={avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
+      ) : emojiFallback ? (
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${emojiFallback.bgClass}`}>
+          {emojiFallback.emoji}
+        </div>
+      ) : null}
 
       <div className="flex-1 min-w-0">
         <p className="font-bold text-ink truncate">{assignment.userName}</p>
