@@ -156,14 +156,9 @@ export default function TasksPage() {
       <PageHeader 
         title="Tasks" 
         subtitle="Browse and manage all available tasks for your family"
-        actions={
-          <Button variant="primary" onClick={openCreateModal}>
-            <Plus size={16} /> Create Task
-          </Button>
-        }
       />
 
-      <main className="space-y-8">
+      <div className="relative space-y-8 pb-16">
         {/* Tag Filter */}
         <section>
           <Card accent="coral" className="p-4">
@@ -250,7 +245,16 @@ export default function TasksPage() {
             </div>
           )}
         </section>
-      </main>
+      </div>
+
+      {/* FAB: Create Task */}
+      <button
+        onClick={openCreateModal}
+        className="fixed right-4 sm:right-8 bottom-8 z-30 flex items-center justify-center w-9 h-9 rounded-full bg-coral text-white shadow-lg shadow-coral/30 hover:-translate-y-0.5 hover:brightness-105 transition-all active:translate-y-0"
+        aria-label="Create new task"
+      >
+        <Plus size={20} />
+      </button>
 
       {/* Task Modal */}
       {showModal && (

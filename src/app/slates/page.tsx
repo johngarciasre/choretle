@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus, X } from "lucide-react";
 
 interface Task {
   id: string;
@@ -73,6 +73,8 @@ export default function SlatesPage() {
   const [newSlateName, setNewSlateName] = useState("");
   
   const [buildingSlateId, setBuildingSlateId] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  
   const [buildingSlateTasks, setBuildingSlateTasks] = useState<Task[]>([]);
   const [buildingSlateExplicitTaskIds, setBuildingSlateExplicitTaskIds] = useState<string[]>([]);
   const [buildingSlateAutoIncludeTagIds, setBuildingSlateAutoIncludeTagIds] = useState<string[]>([]);
@@ -202,22 +204,10 @@ export default function SlatesPage() {
         {/* Create Slate */}
         <section>
           <Card accent="coral" className="p-6 space-y-4">
-            <h2 className="font-display text-xl font-bold text-ink">Create New Slate</h2>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={newSlateName}
-                onChange={(e) => setNewSlateName(e.target.value)}
-                placeholder="Enter slate name..."
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateSlate();
-                }}
-                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
-              />
-              <Button variant="primary" onClick={handleCreateSlate}>
-                Create Slate
-              </Button>
-            </div>
+            <h2 className="font-display text-xl font-bold text-ink mb-2">Create New Slate</h2>
+            {slates.length === 0 && (
+              <p className="text-sm text-ink/60">Click the + button below to create your first slate.</p>
+            )}
           </Card>
         </section>
 
@@ -256,6 +246,59 @@ export default function SlatesPage() {
           )}
         </section>
       </main>
+
+      {/* FAB: Create Slate */}
+      <button
+        onClick={() => setShowCreateModal(true)}
+        className="fixed right-4 sm:right-8 bottom-8 z-30 flex items-center justify-center w-9 h-9 rounded-full bg-coral text-white shadow-lg shadow-coral/30 hover:-translate-y-0.5 hover:brightness-105 transition-all active:translate-y-0"
+        aria-label="Create new slate"
+      >
+        <Plus size={20} />
+      </button>
+
+      {/* Create Slate Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl shadow-lg max-w-sm w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-xl font-bold text-ink">Create New Slate</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-ink/40 hover:text-ink transition">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div>
+              <label htmlFor="slate-name" className="block text-sm font-bold text-ink mb-1">
+                Slate Name *
+              </label>
+              <input
+                id="slate-name"
+                type="text"
+                value={newSlateName}
+                onChange={(e) => setNewSlateName(e.target.value)}
+                placeholder="e.g., Kitchen Cleaning"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleCreateSlate();
+                    setShowCreateModal(false);
+                  }
+                }}
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button variant="primary" onClick={() => { handleCreateSlate(); setShowCreateModal(false); }} className="flex-1 justify-center">
+                Create Slate
+              </Button>
+              <Button variant="ghost" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
