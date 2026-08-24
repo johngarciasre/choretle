@@ -5,7 +5,7 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 
 ## Important Details
 - Next.js 16.3.1 with App Router, Turbopack (default), TypeScript, Tailwind CSS, Drizzle ORM, and Vitest.
-- Hybrid database strategy: uses `DATABASE_URL` env var for PostgreSQL (`postgres-js`) or falls back to SQLite via `better-sqlite3`.
+- Hybrid database strategy: uses `POSTGRES_URL` env var for PostgreSQL (`postgres-js`) or falls back to SQLite via `better-sqlite3`.
 - Native addon resolution issue resolved: `better-sqlite3` native bindings are now properly excluded from client-side bundling by using dynamic imports and API-only server code paths.
 - All database initialization logic moved into `src/db/drizzle.ts` with lazy `initDb()` export to prevent top-level module evaluation in client components.
 - **Supabase Auth** is now the primary authentication system (migrated from custom JWT).

@@ -14,7 +14,7 @@
 - **Styling**: Tailwind CSS
 - **ORM**: Drizzle ORM v0.45.2
 - **Database**: Hybrid strategy
-  - PostgreSQL via `postgres-js` when `DATABASE_URL` env var is set
+  - PostgreSQL via `postgres-js` when `POSTGRES_URL` env var is set
   - In-memory SQLite via `better-sqlite3` as fallback (local dev)
 - **Testing**: Vitest (114 tests, all passing)
 
@@ -137,7 +137,7 @@ src/
 ### Commands Reference
 ```bash
 npm run build          # Production build
-npm run dev            # Development server (uses SQLite if DATABASE_URL unset)
+npm run dev            # Development server (uses SQLite if POSTGRES_URL unset)
 npm test               # Run tests (127 passing)
 npm run lint           # Lint check (if configured)
 gh auth status         # Check GitHub CLI auth
@@ -152,4 +152,4 @@ git push origin main   # Push to remote
 - vitest (testing)
 
 ### Environment Variables
-- `DATABASE_URL` — PostgreSQL connection string (optional, unset = SQLite fallback)
+- `POSTGRES_URL` — PostgreSQL connection string (optional, unset = SQLite fallback)

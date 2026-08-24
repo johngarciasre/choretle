@@ -49,7 +49,7 @@ Once you've created your Supabase project:
    NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
-   DATABASE_URL=postgresql://your-supabase-postgres-url
+    POSTGRES_URL=postgresql://your-supabase-postgres-url
    ```
 
 2. Run `schema.sql` in the Supabase SQL editor to create all tables and indexes.
@@ -78,7 +78,7 @@ The app is scaffolded with all major pages and API routes. All data operations a
 - ✅ Reports page with tab navigation and wallboard
 - ✅ Swap Meet marketplace placeholder
 - ✅ API routes for all endpoints (stubbed with fallbacks)
-- ✅ Service layer (`src/lib/db/service.ts`) — automatically activates when DATABASE_URL is set
+- ✅ Service layer (`src/lib/db/service.ts`) — automatically activates when POSTGRES_URL is set
 
 ### Remaining Work
 - [ ] Implement job assignment and rotation logic (auto-generate lists from slates)
