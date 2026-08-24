@@ -18,12 +18,33 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/signup",
   "/api/auth/signout",
   "/api/auth/me",
+  "/api/auth/superadmin",
   "/api/family/join",
   "/api/schedules/generate",
 ];
 
 function isDevMode(): boolean {
   return process.env.AUTH_MODE === "dev";
+}
+
+/**
+ * Parse superadmin session cookie.
+ */
+function parseSuperadminSession(cookieValue?: string) {
+  if (!cookieValue) return null;
+  try {
+    const decoded = JSON.parse(decodeURIComponent(cookieValue));
+    const u = decoded.user || decoded;
+    return {
+      id: u.sub ?? u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      familyId: null as null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -53,7 +74,25 @@ export async function middleware(request: NextRequest) {
     const supabase = await getSupabaseMiddlewareClient(request);
     const { data: { session } } = await supabase.auth.getSession();
     
+    // Allow superadmin access as fallback when no Supabase session
     if (!session) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      const setCookie = cookieHeader.split(";").find((c) => c.includes("superadmin-session"));
+
+      if (setCookie) {
+        const value = setCookie.replace("superadmin-session=", "").trim();
+        const superadminUser = parseSuperadminSession(value);
+
+        if (superadminUser) {
+          const response = NextResponse.next();
+          response.headers.set("x-user-id", superadminUser.id);
+          response.headers.set("x-email", superadminUser.email);
+          response.headers.set("x-role", superadminUser.role);
+          response.headers.set("x-family-id", "");
+          return response;
+        }
+      }
+
       return NextResponse.redirect(new URL("/auth/signin", request.url));
     }
   }
