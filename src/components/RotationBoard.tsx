@@ -327,24 +327,22 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
         <button
           onClick={handleSave}
           disabled={saving || slates.every((s) => s.assignments.length === 0)}
-          className={`inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all ${
-            saving
-              ? "bg-grape/50 cursor-not-allowed"
-              : "bg-grape hover:bg-grape/90 active:bg-grape/95 shadow-md shadow-grape/30"
+          className={`relative inline-flex items-center justify-center w-8 h-8 rounded-full transition-all ${
+            saving || saveStatus !== "idle"
+              ? "bg-grape/50 cursor-wait"
+              : "bg-grape hover:bg-grape/90 active:bg-grape/95 shadow-md shadow-grape/30 cursor-pointer"
           } text-white`}
         >
           {saving ? (
-            <>
-              <svg className="animate-spin" viewBox="1 24" stroke="currentColor" fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3.5 12a9 9 0A6 12"/>
-              </svg>
-              Saving...
-            </>
+            <svg className="w-4 h-4 animate-spin" viewBox="0 24" stroke="currentColor" fill="none" strokeWidth={2} strokeLinecap="round">
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          ) : saveStatus === "success" ? (
+            <svg className="w-4 h-4" viewBox="0 24" stroke="currentColor" fill="none" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="5 12 9 16 17 8" />
+            </svg>
           ) : (
-            <>
-              <Save size={18} />
-              Save Rotation
-            </>
+            <Save size={18} />
           )}
         </button>
       </div>
