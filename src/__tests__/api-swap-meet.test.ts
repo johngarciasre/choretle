@@ -108,7 +108,7 @@ describe("API Routes — Swap Meet", () => {
     });
 
     it("should validate that sharingFamilyId and requestingFamilyId are required", () => {
-      const body = {}; // Missing required fields
+      const body = {} as { sharingFamilyId?: string; requestingFamilyId?: string }; // Missing required fields
       const missingFields = !body.sharingFamilyId || !body.requestingFamilyId;
       expect(missingFields).toBe(true);
     });
