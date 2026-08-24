@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import * as schema from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -49,6 +51,41 @@ export async function POST(request: NextRequest) {
   const session = signInResult.data.session;
   if (!session) {
     return NextResponse.json({ error: "Authentication failed" }, { status: 500 });
+  }
+
+  // Ensure DB user record exists after sign in — use dynamic import to avoid bundling better-sqlite3
+  try {
+    const { initDb } = await import("@/db/drizzle");
+    const db = await initDb();
+    if (db) {
+      const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).first();
+      
+      if (!existingUser) {
+        // Create DB user record on first sign in
+        await db.insert(schema.users).values({
+          id: session.user.id,
+          email: session.user.email || null,
+          name: session.user.user_metadata?.name || body.name || "User",
+          role: session.user.user_metadata?.role || "child",
+          avatarUrl: session.user.user_metadata?.avatar_url || null,
+          familyId: null,
+          pointsTotal: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } else if (existingUser.email !== session.user.email) {
+        // Update email if it changed
+        await db.update(schema.users).set({ 
+          email: session.user.email || null,
+          name: session.user.user_metadata?.name || existingUser.name,
+          role: session.user.user_metadata?.role || existingUser.role,
+          avatarUrl: session.user.user_metadata?.avatar_url || existingUser.avatarUrl,
+          updatedAt: new Date(),
+        }).where(eq(schema.users.id, session.user.id));
+      }
+    }
+  } catch (dbError) {
+    console.error("[SIGNIN] Database sync failed:", dbError);
   }
 
   const response = new Response(
