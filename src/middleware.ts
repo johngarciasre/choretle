@@ -18,33 +18,13 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/signup",
   "/api/auth/signout",
   "/api/auth/me",
-  "/api/auth/superadmin",
+  "/api/auth/websudo",
   "/api/family/join",
   "/api/schedules/generate",
 ];
 
 function isDevMode(): boolean {
   return process.env.AUTH_MODE === "dev";
-}
-
-/**
- * Parse superadmin session cookie.
- */
-function parseSuperadminSession(cookieValue?: string) {
-  if (!cookieValue) return null;
-  try {
-    const decoded = JSON.parse(decodeURIComponent(cookieValue));
-    const u = decoded.user || decoded;
-    return {
-      id: u.sub ?? u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-      familyId: null as null,
-    };
-  } catch {
-    return null;
-  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -74,22 +54,52 @@ export async function middleware(request: NextRequest) {
     const supabase = await getSupabaseMiddlewareClient(request);
     const { data: { session } } = await supabase.auth.getSession();
     
-    // Allow superadmin access as fallback when no Supabase session
+    // Check for elevated websudo session as fallback
     if (!session) {
       const cookieHeader = request.headers.get("cookie") || "";
-      const setCookie = cookieHeader.split(";").find((c) => c.includes("superadmin-session"));
+      const setCookie = cookieHeader.split(";").find((c) => c.includes("webserversudo-session"));
 
       if (setCookie) {
-        const value = setCookie.replace("superadmin-session=", "").trim();
-        const superadminUser = parseSuperadminSession(value);
-
-        if (superadminUser) {
-          const response = NextResponse.next();
-          response.headers.set("x-user-id", superadminUser.id);
-          response.headers.set("x-email", superadminUser.email);
-          response.headers.set("x-role", superadminUser.role);
-          response.headers.set("x-family-id", "");
-          return response;
+        const value = setCookie.replace("webserversudo-session=", "").trim();
+        
+        try {
+          const [json, hash] = value.split(".");
+          if (json && hash) {
+            const payload = JSON.parse(json);
+            
+            // Check expiration
+            if (Date.now() < payload.exp) {
+              // Verify signature
+              const secret = process.env.WEBSUDO_SECRET || "dev-websudo-secret-change-me";
+              const encoder = new TextEncoder();
+              const key = await crypto.subtle.importKey(
+                "raw",
+                encoder.encode(secret),
+                { name: "HMAC", hash: "SHA-256" },
+                false,
+                ["sign"],
+              );
+              const signature = await crypto.subtle.sign(
+                "HMAC",
+                key,
+                encoder.encode(json),
+              );
+              const expectedHash = Array.from(new Uint8Array(signature))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("");
+              
+              if (hash === expectedHash) {
+                const response = NextResponse.next();
+                response.headers.set("x-user-id", payload.userId);
+                response.headers.set("x-email", payload.email);
+                response.headers.set("x-role", "superadmin");
+                response.headers.set("x-family-id", "");
+                return response;
+              }
+            }
+          }
+        } catch {
+          // Invalid websudo session, fall through to redirect
         }
       }
 
