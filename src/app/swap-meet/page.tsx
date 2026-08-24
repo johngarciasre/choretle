@@ -4,6 +4,7 @@ import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Repeat, Share2 } from "lucide-react";
 
 interface RotationAssignment {
   date: string;
@@ -523,6 +524,29 @@ export default function SwapMeetPage() {
           </div>
         )}
       </main>
+
+      {/* FAB: Swap Rotations */}
+      <button
+        onClick={() => {
+          const el = document.querySelector<HTMLTextAreaElement>('label:has(input[placeholder="Enter family ID"])');
+          if (el) el.scrollIntoView({ behavior: "smooth" });
+        }}
+        title="Swap Rotations"
+        className="fixed bottom-10 right-6 z-40 w-10 h-10 rounded-full bg-grape hover:bg-grape/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+        aria-label="Swap rotations"
+      >
+        <Repeat size={20} />
+      </button>
+
+      {/* FAB: Share Slate */}
+      <button
+        onClick={openShareModal}
+        title="Share Slate(s)"
+        className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-teal hover:bg-teal/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+        aria-label="Share slates"
+      >
+        <Share2 size={20} />
+      </button>
     </div>
   );
 }

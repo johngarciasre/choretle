@@ -156,11 +156,6 @@ export default function TasksPage() {
       <PageHeader 
         title="Tasks" 
         subtitle="Browse and manage all available tasks for your family"
-        actions={
-          <Button variant="primary" onClick={openCreateModal}>
-            <Plus size={16} /> Create Task
-          </Button>
-        }
       />
 
       <main className="space-y-8">
@@ -344,6 +339,16 @@ export default function TasksPage() {
           </div>
         </div>
       )}
+
+      {/* FAB: Create Task */}
+      <button
+        onClick={openCreateModal}
+        title="Create Task"
+        className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-grape hover:bg-grape/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+        aria-label="Create new task"
+      >
+        <Plus size={20} />
+      </button>
     </PageShell>
   );
 }

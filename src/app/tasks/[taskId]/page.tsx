@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import { Edit2, Save, X, Plus } from "lucide-react";
 import PhotoUploadModal from "@/components/PhotoUploadModal";
 
 interface Task {
@@ -310,24 +311,38 @@ export default function TaskPage() {
         <section className="flex gap-4 pt-4 border-t border-ink/10">
           {editingName ? (
             <>
-              <Button variant="primary" onClick={handleUpdateTask}>
-                Save Changes
-              </Button>
               <Button variant="ghost" onClick={() => { setEditingName(false); setNameValue(task.name); }}>
                 Cancel
               </Button>
             </>
-          ) : (
-            <Button variant="primary" onClick={() => { setEditingName(true); setNameValue(task.name); }}>
-              Edit Task Details
-            </Button>
-          )}
+          ) : null}
           
           <Link href="/tasks" className="px-6 py-2 rounded-full font-bold border-2 border-ink/15 hover:bg-grape/5 hover:border-grape/40 transition-colors text-ink">
             Back to Tasks
           </Link>
         </section>
       </Card>
+
+      {/* FAB: Edit / Save */}
+      {editingName ? (
+        <button
+          onClick={handleUpdateTask}
+          title="Save Changes"
+          className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-teal hover:bg-teal/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+          aria-label="Save changes"
+        >
+          <Save size={20} />
+        </button>
+      ) : (
+        <button
+          onClick={() => { setEditingName(true); setNameValue(task.name); }}
+          title="Edit Task"
+          className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-grape hover:bg-grape/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+          aria-label="Edit task"
+        >
+          <Edit2 size={20} />
+        </button>
+      )}
 
       {showUpload && (
         <PhotoUploadModal

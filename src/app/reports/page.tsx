@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, Card, Badge, StatCard, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import { BarChart3, LayoutGrid } from "lucide-react";
 
 interface ReportData {
   type: string;
@@ -82,9 +83,6 @@ export default function ReportsPage() {
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </TagPill>
             ))}
-            <Button variant="grape" onClick={() => setShowWallboard(!showWallboard)}>
-              Wallboard
-            </Button>
           </div>
 
           {showWallboard && (
@@ -146,6 +144,18 @@ export default function ReportsPage() {
           )}
         </section>
       </main>
+
+      {/* FAB: Toggle Wallboard */}
+      <button
+        onClick={() => setShowWallboard(!showWallboard)}
+        title="Toggle Wallboard"
+        className={`fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full text-white flex items-center justify-center shadow-lg transition-all active:scale-95 ${
+          showWallboard ? "bg-teal hover:bg-teal/90" : "bg-grape hover:bg-grape/90"
+        }`}
+        aria-label="Toggle wallboard"
+      >
+        <LayoutGrid size={20} />
+      </button>
     </PageShell>
   );
 }

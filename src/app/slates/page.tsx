@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 
 interface Task {
   id: string;
@@ -203,7 +203,6 @@ export default function SlatesPage() {
         <section>
           <Card accent="coral" className="p-6 space-y-4">
             <h2 className="font-display text-xl font-bold text-ink">Create New Slate</h2>
-            <div className="flex gap-3">
               <input
                 type="text"
                 value={newSlateName}
@@ -212,12 +211,8 @@ export default function SlatesPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleCreateSlate();
                 }}
-                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
               />
-              <Button variant="primary" onClick={handleCreateSlate}>
-                Create Slate
-              </Button>
-            </div>
           </Card>
         </section>
 
@@ -256,7 +251,21 @@ export default function SlatesPage() {
           )}
         </section>
       </main>
+
+      {/* FAB: Create Slate */}
+      <button
+        onClick={() => {
+          const input = document.querySelector<HTMLInputElement>('input[placeholder="Enter slate name..."]');
+          if (input) input.focus();
+        }}
+        title="Create Slate"
+        className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-grape hover:bg-grape/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+        aria-label="Create new slate"
+      >
+        <Plus size={20} />
+      </button>
     </PageShell>
+
   );
 }
 

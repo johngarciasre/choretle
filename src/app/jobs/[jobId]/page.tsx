@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { Button } from "@/components/ui";
+import { Play, CheckCircle2, Undo2, Clock, Camera } from "lucide-react";
 import PhotoCarousel from "@/components/PhotoCarousel";
 import PhotoUploadModal from "@/components/PhotoUploadModal";
 
@@ -280,49 +281,30 @@ export default function JobPage() {
           <div className="flex flex-wrap gap-3">
             {job.status === "todo" && (
               <>
-                <Button variant="grape" onClick={() => handleStatusChange("doing")}>
-                  Start
-                </Button>
                 <Link href="/jobs" className="px-4 py-2 rounded-full font-bold border-2 border-ink/15 hover:bg-grape/5 transition-colors text-ink">
                   Cancel
                 </Link>
               </>
             )}
-            {job.status === "doing" && (
-              <>
-                <Button variant="success" onClick={() => handleStatusChange("done")}>
-                  Done
-                </Button>
-                {job.verifyRequired ? (
-                  <Button variant="warning" onClick={() => handleStatusChange("under_review")}>
-                    Submit for Review
-                  </Button>
-                ) : (
-                  <Button variant="grape" onClick={() => handleStatusChange("todo")}>
-                    Start Over
-                  </Button>
-                )}
-              </>
+            {job.status === "doing" && job.verifyRequired && (
+              <Button variant="warning" onClick={() => handleStatusChange("under_review")}>
+                Submit for Review
+              </Button>
+            )}
+            {job.status === "doing" && !job.verifyRequired && (
+              <Button variant="grape" onClick={() => handleStatusChange("todo")}>
+                Start Over
+              </Button>
             )}
             {job.status === "under_review" && (
-              <>
-                <Button variant="success" onClick={() => handleStatusChange("done")}>
-                  Mark Complete
-                </Button>
-                <Button variant="grape" onClick={() => handleStatusChange("doing")}>
-                  Request Rework
-                </Button>
-              </>
+              <Button variant="grape" onClick={() => handleStatusChange("doing")}>
+                Request Rework
+              </Button>
             )}
-            {job.status === "done" && (
-              <>
-                <Button variant="success" disabled>Completed</Button>
-                {job.verifyRequired && job.reviewedAt && (
-                  <span className="text-sm text-success font-medium flex items-center">
-                    ✓ Reviewed on {new Date(job.reviewedAt!).toLocaleDateString()}
-                  </span>
-                )}
-              </>
+            {job.status === "done" && job.verifyRequired && job.reviewedAt && (
+              <span className="text-sm text-success font-medium flex items-center">
+                ✓ Reviewed on {new Date(job.reviewedAt!).toLocaleDateString()}
+              </span>
             )}
           </div>
         </Card>
@@ -392,6 +374,38 @@ export default function JobPage() {
           objectType="job"
           objectId={job.id}
         />
+      )}
+
+      {/* FAB: Primary status action */}
+      {job.status === "todo" && (
+        <button
+          onClick={() => handleStatusChange("doing")}
+          title="Start Job"
+          className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-grape hover:bg-grape/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+          aria-label="Start job"
+        >
+          <Play size={20} />
+        </button>
+      )}
+      {job.status === "doing" && (
+        <button
+          onClick={() => handleStatusChange(job.verifyRequired ? "under_review" : "done")}
+          title={job.verifyRequired ? "Submit for Review" : "Mark Done"}
+          className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-teal hover:bg-teal/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+          aria-label={job.verifyRequired ? "Submit for review" : "Mark done"}
+        >
+          {job.verifyRequired ? <CheckCircle2 size={20} /> : <CheckCircle2 size={20} />}
+        </button>
+      )}
+      {job.status === "under_review" && (
+        <button
+          onClick={() => handleStatusChange("done")}
+          title="Mark Complete"
+          className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-teal hover:bg-teal/90 text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+          aria-label="Mark complete"
+        >
+          <CheckCircle2 size={20} />
+        </button>
       )}
     </PageShell>
   );

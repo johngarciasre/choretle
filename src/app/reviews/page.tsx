@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { Button } from "@/components/ui";
+import { CheckCircle2, XCircle } from "lucide-react";
 
 interface ReviewItem {
   review: {
