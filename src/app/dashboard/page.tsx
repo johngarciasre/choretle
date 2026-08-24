@@ -66,7 +66,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="font-display text-2xl font-bold text-ink mb-3">Rotations</h2>
             <p className="text-ink/60 text-sm mb-4">View and manage your chore rotation schedule.</p>
-            <Button variant="grape" size="md" href="/dashboard/rotations">
+            <Button variant="grape" size="md" href="/rotations">
               View Rotations
             </Button>
           </Card>
@@ -77,7 +77,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="font-display text-2xl font-bold text-ink mb-3">Tasks</h2>
             <p className="text-ink/60 text-sm mb-4">Manage your assigned chores and tasks.</p>
-            <Button variant="success" size="md" href="/dashboard/tasks">
+            <Button variant="success" size="md" href="/tasks">
               View Tasks
             </Button>
           </Card>
@@ -88,7 +88,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="font-display text-2xl font-bold text-ink mb-3">Your Profile</h2>
             <p className="text-ink/60 text-sm mb-4">View your stats, streaks, and achievements.</p>
-            <Button variant="ghost" size="md" href="/dashboard/profile">
+            <Button variant="ghost" size="md" href={user ? `/profile/${user.id}` : undefined}>
               View Profile
             </Button>
           </Card>

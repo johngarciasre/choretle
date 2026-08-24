@@ -14,10 +14,10 @@ export default function ProfilePage() {
             Manage your personal settings and preferences.
           </p>
           <div className="space-y-3 max-w-md mx-auto">
-            <Link href="/dashboard/rotations" className="block bg-sunny/20 border-2 border-sunny hover:bg-sunny/30 text-sunny px-6 py-3 rounded-xl font-bold transition">
+            <Link href="/rotations" className="block bg-sunny/20 border-2 border-sunny hover:bg-sunny/30 text-sunny px-6 py-3 rounded-xl font-bold transition">
               View Chore Rotations
             </Link>
-            <Link href="/dashboard/tasks" className="block bg-teal/20 border-2 border-teal hover:bg-teal/30 text-teal px-6 py-3 rounded-xl font-bold transition">
+            <Link href="/tasks" className="block bg-teal/20 border-2 border-teal hover:bg-teal/30 text-teal px-6 py-3 rounded-xl font-bold transition">
               Manage Tasks
             </Link>
           </div>
