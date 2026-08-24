@@ -677,6 +677,128 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
   }
 }
 
+// ─── Subtask CRUD (additional) ──────────────────────────────────────
+
+export async function updateSubtask(id: string, data: Partial<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.update(schema.subtasks).set(data).where({ id }).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function deleteSubtask(id: string) {
+  const db = await ensureDb();
+  if (!db) return false;
+  await safeQuery(db.delete(schema.subtasks).where({ id }));
+  return true;
+}
+
+export async function getSubtasksByFamily(familyId: string) {
+  const db = await ensureDb();
+  if (!db) return [];
+  const res = await safeQuery(
+    db.select().from(schema.subtasks).where({ familyId })
+  );
+  return (res as any[]) || [];
+}
+
+// ─── Photos CRUD ──────────────────────────────────────────────────────
+
+export async function getPhotosByObject(objectType: string, objectId: string) {
+  const db = await ensureDb();
+  if (!db) return [];
+  const res = await safeQuery(
+    db.select().from(schema.photos).where({ objectType, objectId }).orderBy(sql`${schema.photos.order} ASC`)
+  );
+  return (res as any[]) || [];
+}
+
+export async function createPhoto(data: Insertable<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.insert(schema.photos).values(data).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function updatePhoto(id: string, data: Partial<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.update(schema.photos).set(data).where({ id }).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function deletePhoto(id: string) {
+  const db = await ensureDb();
+  if (!db) return false;
+  await safeQuery(db.delete(schema.photos).where({ id }));
+  return true;
+}
+
+// ─── Reviews CRUD ──────────────────────────────────────────────────────
+
+export async function getReviewsByFamily(familyId: string, status?: string) {
+  const db = await ensureDb();
+  if (!db) return [];
+  
+  let query = db.select({
+    review: schema.reviews,
+    job: schema.jobs,
+    user: schema.users,
+  })
+    .from(schema.reviews)
+    .leftJoin(schema.jobs, eq(schema.reviews.jobId, schema.jobs.id))
+    .leftJoin(schema.users, eq(schema.reviews.reviewerId, schema.users.id))
+    .where({ familyId })
+    .orderBy(desc(schema.reviews.createdAt));
+  
+  if (status) {
+    query = db.select({
+      review: schema.reviews,
+      job: schema.jobs,
+      user: schema.users,
+    })
+      .from(schema.reviews)
+      .leftJoin(schema.jobs, eq(schema.reviews.jobId, schema.jobs.id))
+      .leftJoin(schema.users, eq(schema.reviews.reviewerId, schema.users.id))
+      .where(and(eq(schema.reviews.familyId, familyId), eq(schema.reviews.status, status)))
+      .orderBy(desc(schema.reviews.createdAt));
+  }
+  
+  const res = await safeQuery(query);
+  return (res as any[]) || [];
+}
+
+export async function createReview(data: Insertable<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.insert(schema.reviews).values(data).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function updateReview(id: string, data: Partial<any>) {
+  const db = await ensureDb();
+  if (!db) return null;
+  const res = await safeQuery(
+    db.update(schema.reviews).set(data).where({ id }).returning("*")
+  );
+  return (res as any[])?.[0] || null;
+}
+
+export async function deleteReview(id: string) {
+  const db = await ensureDb();
+  if (!db) return false;
+  await safeQuery(db.delete(schema.reviews).where({ id }));
+  return true;
+}
+
 // ─── Invites ────────────────────────────────────────────────────────
 
 export async function getInviteByCode(code: string) {

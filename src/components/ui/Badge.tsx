@@ -3,19 +3,23 @@
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Status = "todo" | "doing" | "done" | "points" | "neutral";
+type Status = "todo" | "doing" | "done" | "points" | "neutral" | "warning" | "success" | "info" | "error";
 
 interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
   status?: Status;
   children: React.ReactNode;
 }
 
-const badgeStyles = {
+const badgeStyles: Record<Status, string> = {
   todo: "bg-ink/10 text-ink",
   doing: "bg-sunny text-ink",
   done: "bg-teal text-white",
   points: "bg-sunny text-ink",
   neutral: "bg-grape/15 text-grape",
+  warning: "bg-red/15 text-red",
+  success: "bg-teal text-white",
+  info: "bg-blue/15 text-blue",
+  error: "bg-red text-white",
 };
 
 export function Badge({ status = "neutral", className, children, ...props }: BadgeProps) {

@@ -6,8 +6,9 @@ import { eq, and, sql } from "drizzle-orm";
 
 export const VALID_TRANSITIONS: Record<string, string[]> = {
   todo: ["doing"],
-  doing: ["todo", "done"],
+  doing: ["todo", "done", "under_review"],
   done: [],
+  under_review: ["done", "doing"],
 };
 
 /**

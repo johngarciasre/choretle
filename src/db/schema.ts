@@ -63,13 +63,15 @@ export const tasks = pgTable("tasks", {
   icon: varchar("icon", { length: 50 }),
   archtype: varchar("archtype", { length: 50 }).default("job").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  verifyRequired: boolean("verify_required").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
 });
 
 export const subtasks = pgTable("subtasks", {
   id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
-  taskId: uuid("task_id").notNull(),
+  familyId: uuid("family_id").notNull(),
+  taskId: uuid("task_id"),
   name: varchar("name", { length: 255 }).notNull(),
   points: integer("points").default(0).notNull(),
   order: integer("order").default(0).notNull(),
@@ -87,6 +89,7 @@ export const slates = pgTable("slates", {
   frequency: varchar("frequency", { length: 20 }).default("weekly").notNull(),
   interval: integer("interval").default(1).notNull(),
   defaultDueDateOffset: integer("default_due_date_offset").default(0).notNull(),
+  subtaskMinRequired: integer("subtask_min_required"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
@@ -131,6 +134,8 @@ export const jobs = pgTable("jobs", {
   description: text("description"),
   points: integer("points").default(0).notNull(),
   status: varchar("status", { length: 20 }).default("todo").notNull(),
+  verifyRequired: boolean("verify_required").default(false).notNull(),
+  reviewedAt: timestamp("reviewed_at"),
   dueDate: timestamp("due_date"),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
@@ -218,6 +223,35 @@ export const slateTags = pgTable("slate_tags", {
   id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
   slateId: uuid("slate_id").notNull(),
   tagId: uuid("tag_id").notNull(),
+});
+
+// ─── Photos ─────────────────────────────────────────────────────────
+
+export const photos = pgTable("photos", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  familyId: uuid("family_id").notNull(),
+  objectType: varchar("object_type", { length: 20 }).notNull(),
+  objectId: uuid("object_id").notNull(),
+  url: text("url").notNull(),
+  title: varchar("title", { length: 255 }),
+  type: varchar("type", { length: 20 }).default("probative").notNull(),
+  isProbative: boolean("is_probative").default(false).notNull(),
+  order: integer("order").default(0).notNull(),
+  createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+});
+
+// ─── Reviews ────────────────────────────────────────────────────────
+
+export const reviews = pgTable("reviews", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  jobId: uuid("job_id").notNull(),
+  familyId: uuid("family_id").notNull(),
+  reviewerId: uuid("reviewer_id"),
+  approvedBy: uuid("approved_by"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
 });
 
 // ─── Invites ────────────────────────────────────────────────────────

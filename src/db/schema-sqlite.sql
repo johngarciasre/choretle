@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   icon TEXT,
   archtype TEXT DEFAULT 'job' NOT NULL,
   is_active BOOLEAN DEFAULT 1 NOT NULL,
+  verify_required BOOLEAN DEFAULT 0 NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -61,7 +62,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS subtasks (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
     CHECK(id != ''),
-  task_id TEXT REFERENCES tasks(id) NOT NULL,
+  family_id TEXT REFERENCES families(id) NOT NULL,
+  task_id TEXT REFERENCES tasks(id),
   name TEXT NOT NULL,
   points INTEGER DEFAULT 0 NOT NULL,
   "order" INTEGER DEFAULT 0 NOT NULL,
@@ -78,6 +80,7 @@ CREATE TABLE IF NOT EXISTS slates (
   frequency TEXT DEFAULT 'weekly' NOT NULL,
   "interval" INTEGER DEFAULT 1 NOT NULL,
   default_due_date_offset INTEGER DEFAULT 0 NOT NULL,
+  subtask_min_required INTEGER,
   is_active BOOLEAN DEFAULT 1 NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -124,6 +127,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   description TEXT,
   points INTEGER DEFAULT 0 NOT NULL,
   status TEXT DEFAULT 'todo' NOT NULL,
+  verify_required BOOLEAN DEFAULT 0 NOT NULL,
+  reviewed_at TIMESTAMP,
   due_date TIMESTAMP,
   completed_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -199,6 +204,35 @@ CREATE TABLE IF NOT EXISTS invites (
   expires_at TIMESTAMP,
   used BOOLEAN DEFAULT 0 NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Photos table
+CREATE TABLE IF NOT EXISTS photos (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
+    CHECK(id != ''),
+  family_id TEXT REFERENCES families(id) NOT NULL,
+  object_type TEXT NOT NULL,
+  object_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  title TEXT,
+  type TEXT DEFAULT 'probative' NOT NULL,
+  is_probative BOOLEAN DEFAULT 0 NOT NULL,
+  "order" INTEGER DEFAULT 0 NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Reviews table (review queue)
+CREATE TABLE IF NOT EXISTS reviews (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))
+    CHECK(id != ''),
+  job_id TEXT REFERENCES jobs(id) NOT NULL,
+  family_id TEXT REFERENCES families(id) NOT NULL,
+  reviewer_id TEXT REFERENCES users(id),
+  approved_by TEXT REFERENCES users(id),
+  status TEXT DEFAULT 'pending' NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 -- Tags tables

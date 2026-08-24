@@ -31,6 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({
       ...taskWithTags[0].task,
       tagIds: result,
+      verifyRequired: taskWithTags[0].task.verifyRequired ?? false,
     });
   } catch (error) {
     console.error("Task GET failed:", error);
@@ -47,11 +48,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const taskId = (await params).taskId;
     const body = await request.json();
-    const { name, description, points, icon, archtype, isActive, tagIds } = body;
+    const { name, description, points, icon, archtype, isActive, tagIds, verifyRequired } = body;
 
     // Update task fields
     await db.update(schema.tasks)
-      .set({ name, description, points, icon, archtype, isActive })
+      .set({ name, description, points, icon, archtype, isActive, verifyRequired })
       .where(eq(schema.tasks.id, taskId));
 
     // Handle tags

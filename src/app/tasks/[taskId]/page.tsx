@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import PhotoUploadModal from "@/components/PhotoUploadModal";
 
 interface Task {
   id: string;
@@ -14,12 +15,20 @@ interface Task {
   icon?: string;
   archtype?: string;
   isActive?: boolean;
+  verifyRequired?: boolean;
 }
 
 interface Tag {
   id: string;
   name: string;
   color?: string;
+}
+
+interface Subtask {
+  id: string;
+  name: string;
+  points: number;
+  order: number;
 }
 
 const fetchTask = async (id: string) => {
@@ -44,26 +53,44 @@ const fetchTags = async () => {
   }
 };
 
+const fetchSubtasks = async (taskId: string) => {
+  try {
+    const res = await fetch(`/api/tasks/subtasks?taskId=${taskId}`);
+    if (!res.ok) throw new Error("Failed to fetch subtasks");
+    return await res.json();
+  } catch (error) {
+    console.error("Fetch subtasks failed:", error);
+    return [];
+  }
+};
+
 export default function TaskPage() {
   const router = useRouter();
   const taskId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
   
   const [task, setTask] = useState<Task | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [showUpload, setShowUpload] = useState(false);
+
+  // New subtask form state
+  const [newSubtaskName, setNewSubtaskName] = useState("");
+  const [newSubtaskPoints, setNewSubtaskPoints] = useState(0);
 
   useEffect(() => {
     if (!taskId) return;
-    Promise.all([fetchTask(taskId), fetchTags()]).then(([taskData, tags]) => {
+    Promise.all([fetchTask(taskId), fetchTags(), fetchSubtasks(taskId)]).then(([taskData, tags, subtasks]) => {
       if (taskData) {
         setTask(taskData);
         setNameValue(taskData.name);
         setSelectedTagIds(taskData.tagIds || []);
       }
       setTags(tags);
+      setSubtasks(subtasks || []);
       setLoading(false);
     });
   }, [taskId]);
@@ -77,6 +104,7 @@ export default function TaskPage() {
         name: nameValue,
         description: task.description,
         points: task.points,
+        verifyRequired: task.verifyRequired,
         tagIds: selectedTagIds,
       };
       
@@ -95,6 +123,46 @@ export default function TaskPage() {
     } catch (error) {
       console.error("Update task failed:", error);
       alert("Failed to save changes");
+    }
+  }
+
+  async function handleAddSubtask() {
+    if (!taskId || !newSubtaskName.trim()) return;
+
+    try {
+      const res = await fetch("/api/tasks/subtasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId,
+          name: newSubtaskName.trim(),
+          points: newSubtaskPoints,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to add subtask");
+
+      const added = await res.json();
+      setSubtasks([...subtasks, added]);
+      setNewSubtaskName("");
+      setNewSubtaskPoints(0);
+    } catch (error) {
+      console.error("Add subtask failed:", error);
+      alert("Failed to add subtask");
+    }
+  }
+
+  async function handleDeleteSubtask(subtaskId: string) {
+    try {
+      const res = await fetch(`/api/tasks/subtasks/${subtaskId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Failed to delete subtask");
+      setSubtasks(subtasks.filter((s) => s.id !== subtaskId));
+    } catch (error) {
+      console.error("Delete subtask failed:", error);
+      alert("Failed to delete subtask");
     }
   }
 
@@ -144,30 +212,98 @@ export default function TaskPage() {
             )}
           </div>
 
-          {/* Tag Editor */}
-          <div className="pt-4 border-t border-ink/10">
-            <h3 className="font-display text-lg font-bold text-ink mb-3">Tags</h3>
-            
-            {tags.length === 0 ? (
-              <p className="text-sm text-ink/60">No tags available. Create tags in the app settings.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {tags.map(tag => (
-                  <TagPill
-                    key={tag.id}
-                    active={selectedTagIds.includes(tag.id)}
-                    onClick={() => toggleTag(tag.id)}
-                  >
-                    {tag.name}
-                  </TagPill>
-                ))}
-              </div>
-            )}
-
-            <p className="mt-2 text-sm text-ink/60">
-              Select tags to assign to this task. Tags can be used for filtering and auto-inclusion in slates.
-            </p>
+          {/* Verify Required Toggle */}
+          <div className="flex items-center gap-3 pt-2 border-t border-ink/10 pt-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={task.verifyRequired || false}
+                onChange={(e) => setTask({ ...task, verifyRequired: e.target.checked })}
+                className="mr-1 accent-grape"
+              />
+              <span className="text-sm font-medium text-ink">Require verification on completion</span>
+            </label>
           </div>
+        </section>
+
+        {/* Subtasks Section */}
+        <Card accent="teal" className="pt-6 space-y-4">
+          <h3 className="font-display text-lg font-bold text-ink">Subtasks ({subtasks.length})</h3>
+          
+          {subtasks.length === 0 ? (
+            <p className="text-sm text-ink/60">No subtasks yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {subtasks.map((subtask) => (
+                <li key={subtask.id} className="flex items-center justify-between p-3 bg-white rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2 h-2 rounded-full bg-grape flex-shrink-0" />
+                    <div>
+                      <span className="font-medium text-ink">{subtask.name}</span>
+                      {subtask.points > 0 && (
+                        <Badge status="points" className="ml-2 text-xs">{subtask.points} pts</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteSubtask(subtask.id)}
+                    className="text-red/60 hover:text-red transition-colors text-sm font-bold"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Add Subtask Form */}
+          <div className="pt-3 border-t border-ink/10">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSubtaskName}
+                onChange={(e) => setNewSubtaskName(e.target.value)}
+                placeholder="New subtask name..."
+                onKeyDown={(e) => e.key === "Enter" && handleAddSubtask()}
+                className="flex-1 px-4 py-2 rounded-xl border-2 border-ink/15 bg-white focus:border-grape focus:outline-none font-bold text-ink"
+              />
+              <input
+                type="number"
+                value={newSubtaskPoints}
+                onChange={(e) => setNewSubtaskPoints(parseInt(e.target.value) || 0)}
+                placeholder="Pts"
+                className="w-80 px-4 py-2 rounded-xl border-2 border-ink/15 bg-white focus:border-grape focus:outline-none font-bold text-ink"
+              />
+              <Button variant="primary" onClick={handleAddSubtask}>
+                Add
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Tag Editor */}
+        <section className="pt-4 border-t border-ink/10">
+          <h3 className="font-display text-lg font-bold text-ink mb-3">Tags</h3>
+          
+          {tags.length === 0 ? (
+            <p className="text-sm text-ink/60">No tags available. Create tags in the app settings.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {tags.map(tag => (
+                <TagPill
+                  key={tag.id}
+                  active={selectedTagIds.includes(tag.id)}
+                  onClick={() => toggleTag(tag.id)}
+                >
+                  {tag.name}
+                </TagPill>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-2 text-sm text-ink/60">
+            Select tags to assign to this task. Tags can be used for filtering and auto-inclusion in slates.
+          </p>
         </section>
 
         {/* Action Buttons */}
@@ -191,22 +327,16 @@ export default function TaskPage() {
             Back to Tasks
           </Link>
         </section>
-
-        {/* Comments Section */}
-        <Card accent="teal" className="pt-6 space-y-4">
-          <h3 className="font-display text-lg font-bold text-ink">Comments</h3>
-          <div className="space-y-3">
-            <textarea 
-              placeholder="Add a comment..." 
-              className="w-full px-4 py-2 rounded-xl border-2 border-ink/15 bg-cream focus:border-grape focus:outline-none font-bold text-ink"
-              rows={4}
-            />
-            <Button variant="primary">
-              Post Comment
-            </Button>
-          </div>
-        </Card>
       </Card>
+
+      {showUpload && (
+        <PhotoUploadModal
+          isOpen={showUpload}
+          onClose={() => setShowUpload(false)}
+          objectType="task"
+          objectId={taskId}
+        />
+      )}
     </PageShell>
   );
 }

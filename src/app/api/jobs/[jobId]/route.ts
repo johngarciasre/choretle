@@ -65,8 +65,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Check family access (jobs are accessed via slate/tasks which belong to families)
-    if (job.familyId && job.familyId !== authResult.familyId) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    if ((job as any).listId) {
+      const list = await db.select().from(schema.lists).where(eq(schema.lists.id, job.listId)).first();
+      if (list && list.familyId && list.familyId !== authResult.familyId) {
+        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      }
     }
 
     // Fetch associated task info (truncated for job view)
@@ -93,7 +96,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Get valid next statuses based on current status
     const validNextStatuses = [
       ...(job.status === "todo" ? ["doing"] : []),
-      ...(job.status === "doing" ? ["done", "todo"] : []),
+      ...(job.status === "doing" ? ["done", "todo", "under_review"] : []),
+      ...(job.status === "under_review" ? ["done", "doing"] : []),
       ...(job.status === "done" ? [] : []),
     ];
 
@@ -104,6 +108,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         description: job.description || "",
         points: job.points || 0,
         status: job.status,
+        verifyRequired: job.verifyRequired ?? false,
+        reviewedAt: job.reviewedAt ? new Date(job.reviewedAt).toISOString() : "",
         assignedTo: job.assignedTo,
         dueDate: job.dueDate ? new Date(job.dueDate).toISOString() : "",
         completedAt: job.completedAt ? new Date(job.completedAt).toISOString() : "",
@@ -117,6 +123,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         points: task.points || 0,
         icon: task.icon,
         archtype: task.archtype,
+        verifyRequired: task.verifyRequired ?? false,
       } : null,
       comments: comments.map(({ comment, user }: { comment: any; user: any }) => ({
         id: comment.id,
@@ -157,10 +164,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const body = await request.json();
-    const { status } = body;
+    const { status, verifyRequired } = body;
 
-    if (!status || !["todo", "doing", "done"].includes(status)) {
-      return NextResponse.json({ error: "Invalid status. Must be 'todo', 'doing', or 'done'" }, { status: 400 });
+    if (!status || !["todo", "doing", "done", "under_review"].includes(status)) {
+      return NextResponse.json({ error: "Invalid status. Must be 'todo', 'doing', 'done', or 'under_review'" }, { status: 400 });
     }
 
     const db = await initDb();
@@ -181,7 +188,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (currentStatus === "todo") {
       validNextStatuses = ["doing"];
     } else if (currentStatus === "doing") {
-      validNextStatuses = ["todo", "done"];
+      validNextStatuses = ["todo", "done", "under_review"];
+    } else if (currentStatus === "under_review") {
+      validNextStatuses = ["done", "doing"];
     }
     
     if (!validNextStatuses.includes(status)) {
@@ -196,6 +205,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     if (status === "done") {
       updateData.completedAt = now;
+    }
+    if (status === "under_review") {
+      // Trigger review creation for the family
+      const familyId = authResult.familyId;
+      if (familyId) {
+        await db.insert(schema.reviews).values({
+          jobId,
+          familyId,
+          reviewerId: null,
+          status: "pending",
+          notes: `Job "${job.name}" submitted for review`,
+        });
+      }
+    }
+
+    // Update verifyRequired if provided
+    if (verifyRequired !== undefined) {
+      updateData.verifyRequired = verifyRequired;
     }
 
     // Update job
@@ -214,7 +241,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
         // Award points if transitioning to done
         if (status === "done") {
-          // Calculate points: base job points + completed subtask points
           const totalPoints = (result as any).points || 0;
           
           // Mark all uncompleted subtasks as completed

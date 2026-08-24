@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, name, description, points, icon, archtype, tagIds } = body;
+    const { title, name, description, points, icon, archtype, tagIds, verifyRequired } = body;
 
     const familyId = request.headers.get("x-family-id");
     if (!familyId || !title && !name) {
@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       icon: icon || null,
       archtype: archtype || "job",
       isActive: true,
+      verifyRequired: verifyRequired ?? false,
     }).returning("*");
 
     // Handle tags if provided
@@ -74,7 +75,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, title, name, description, points, icon, archtype, isActive, tagIds } = body;
+    const { id, title, name, description, points, icon, archtype, isActive, tagIds, verifyRequired } = body;
 
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
@@ -87,6 +88,7 @@ export async function PUT(request: NextRequest) {
         icon,
         archtype,
         isActive,
+        verifyRequired,
       })
       .where(eq(schema.tasks.id, id));
 

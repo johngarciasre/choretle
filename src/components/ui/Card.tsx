@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Accent = "coral" | "teal" | "sunny" | "grape" | "bubblegum";
+type Accent = "coral" | "teal" | "sunny" | "grape" | "bubblegum" | "success";
 
 interface CardProps {
   accent?: Accent;
@@ -8,12 +8,13 @@ interface CardProps {
   children: React.ReactNode;
 }
 
-const accentBorders = {
+const accentBorders: Record<Accent, string> = {
   coral: "border-t-4 border-coral",
   teal: "border-t-4 border-teal",
   sunny: "border-t-4 border-sunny",
   grape: "border-t-4 border-grape",
   bubblegum: "border-t-4 border-bubblegum",
+  success: "border-t-4 border-teal",
 };
 
 export function Card({ accent, className, children }: CardProps) {
