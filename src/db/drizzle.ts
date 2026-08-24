@@ -1,16 +1,162 @@
-import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
+import { drizzle as construct } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import * as schema from "@/db/schema";
+import * as schema from "@/db/schema-sqlite";
 
+const DB_PATH = process.env.SQLITE_DB || ":memory:";
+
+function createTables(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS families (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL,
+      logo_url TEXT, timezone TEXT DEFAULT 'America/New_York' NOT NULL,
+      week_start_day INTEGER DEFAULT 0 NOT NULL, theme TEXT DEFAULT 'coral' NOT NULL,
+      teams_enabled INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS routines (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, week_start_day INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+      avatar_url TEXT, role TEXT DEFAULT 'child' NOT NULL, family_id TEXT,
+      points_total INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, name TEXT NOT NULL,
+      logo_url TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY, team_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      joined_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, name TEXT NOT NULL,
+      description TEXT, points INTEGER DEFAULT 0 NOT NULL, icon TEXT,
+      archtype TEXT DEFAULT 'job' NOT NULL, is_active INTEGER DEFAULT 1 NOT NULL,
+      verify_required INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS subtasks (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, task_id TEXT,
+      name TEXT NOT NULL, points INTEGER DEFAULT 0 NOT NULL,
+      "order" INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS slates (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, name TEXT NOT NULL,
+      description TEXT, room_location TEXT, frequency TEXT DEFAULT 'weekly' NOT NULL,
+      interval INTEGER DEFAULT 1 NOT NULL, default_due_date_offset INTEGER DEFAULT 0 NOT NULL,
+      subtask_min_required INTEGER, is_active INTEGER DEFAULT 1 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS slate_tasks (
+      id TEXT PRIMARY KEY, slate_id TEXT NOT NULL, task_id TEXT NOT NULL,
+      points_override INTEGER, "order" INTEGER DEFAULT 0 NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS lists (
+      id TEXT PRIMARY KEY, slate_id TEXT NOT NULL, family_id TEXT NOT NULL,
+      name TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT,
+      period TEXT DEFAULT 'day' NOT NULL, status TEXT DEFAULT 'active' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS list_tasks (
+      id TEXT PRIMARY KEY, list_id TEXT NOT NULL, slate_task_id TEXT NOT NULL,
+      points_override INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY, list_id TEXT NOT NULL, slate_task_id TEXT,
+      list_task_id TEXT, assigned_to TEXT, name TEXT NOT NULL, description TEXT,
+      points INTEGER DEFAULT 0 NOT NULL, status TEXT DEFAULT 'todo' NOT NULL,
+      verify_required INTEGER DEFAULT 0 NOT NULL, reviewed_at TEXT,
+      due_date TEXT, completed_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS job_subtasks (
+      id TEXT PRIMARY KEY, job_id TEXT NOT NULL, subtask_id TEXT NOT NULL,
+      completed_at TEXT, points_awarded INTEGER DEFAULT 0 NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS comments (
+      id TEXT PRIMARY KEY, job_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      content TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS job_history (
+      id TEXT PRIMARY KEY, job_id TEXT NOT NULL, action TEXT NOT NULL,
+      details TEXT, user_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, type TEXT NOT NULL,
+      period_start TEXT NOT NULL, period_end TEXT, data TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS rotations (
+      id TEXT PRIMARY KEY, slate_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      "order" INTEGER DEFAULT 0 NOT NULL, interval_days INTEGER DEFAULT 7 NOT NULL,
+      is_active INTEGER DEFAULT 1 NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS swap_meet (
+      id TEXT PRIMARY KEY, slate_id TEXT NOT NULL, sharing_family_id TEXT NOT NULL,
+      requested_by TEXT, status TEXT DEFAULT 'pending' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tags (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, name TEXT NOT NULL,
+      color TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS task_tags (
+      id TEXT PRIMARY KEY, tag_id TEXT NOT NULL, task_id TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS slate_tags (
+      id TEXT PRIMARY KEY, slate_id TEXT NOT NULL, tag_id TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS photos (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, object_type TEXT NOT NULL,
+      object_id TEXT NOT NULL, url TEXT NOT NULL, title TEXT,
+      type TEXT DEFAULT 'probative' NOT NULL, is_probative INTEGER DEFAULT 0 NOT NULL,
+      "order" INTEGER DEFAULT 0 NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS reviews (
+      id TEXT PRIMARY KEY, job_id TEXT NOT NULL, family_id TEXT NOT NULL,
+      reviewer_id TEXT, approved_by TEXT, status TEXT DEFAULT 'pending' NOT NULL,
+      notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS invites (
+      id TEXT PRIMARY KEY, family_id TEXT NOT NULL, code TEXT UNIQUE NOT NULL,
+      email TEXT, role TEXT DEFAULT 'child' NOT NULL, expires_at TEXT,
+      used INTEGER DEFAULT 0 NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_family ON tasks(family_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_archtype ON tasks(archtype);
+    CREATE INDEX IF NOT EXISTS idx_jobs_list ON jobs(list_id);
+    CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_rotations_slate ON rotations(slate_id);
+    CREATE INDEX IF NOT EXISTS idx_tags_family ON tags(family_id);
+  `);
+}
+
+let _db: any = null;
 export const db: any = null;
 
-const DB_URL = process.env.POSTGRES_URL;
-
-/**
- * Initialize database only if POSTGRES_URL is provided.
- */
 export async function initDb(): Promise<any> {
-  // Always return null in this environment (Vercel doesn't have POSTGRES_URL set)
-  console.warn("[DB] Not initializing - running on Vercel without POSTGRES_URL");
-  return null;
+  if (_db) return _db;
+  try {
+    const Database = require("better-sqlite3");
+    const dbRaw = new Database(DB_PATH);
+    createTables(dbRaw);
+    _db = construct(dbRaw, { schema });
+    console.log("[DB] Initialized SQLite database at", DB_PATH === ":memory:" ? "in-memory" : DB_PATH);
+  } catch (error) {
+    console.error("[DB] Failed to initialize SQLite:", error);
+    throw error;
+  }
+  return _db;
 }
