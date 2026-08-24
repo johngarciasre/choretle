@@ -1,5 +1,10 @@
 # Choretle - Project Status (Updated Aug 23, 2026)
 
+## CRITICAL RULES
+- **NEVER** push to `production` branch without explicit user permission
+- **NEVER** use `--force` or `-f` flag on any git push — ever. This can destroy commits.
+- Always check which branches exist and what's ahead/behind before pushing anywhere except `main`.
+
 ## Objective
 Complete Choretle's core workflow, auto-generation, and scoring logic while enabling a seamless local SQLite fallback for development without requiring PostgreSQL/Supabase setup.
 
