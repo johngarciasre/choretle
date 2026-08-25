@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { autoGenerateJobs } from "@/lib/slateAutoGen";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 export async function POST(request: NextRequest) {
   try {

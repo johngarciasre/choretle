@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc, sql, or } from "drizzle-orm";
-import { error, warn } from "@/lib/logger";
+import { error, warn } from "@/lib/logger.server";
 
 // ─── Middleware: Verify Auth Token ──────────────────────────────────
 async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {

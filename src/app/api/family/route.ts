@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createFamily } from "@/lib/db/service";
 import { slugify } from "@/lib/slugify";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 export async function POST(request: NextRequest) {
   try {

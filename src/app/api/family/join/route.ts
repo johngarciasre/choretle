@@ -3,7 +3,7 @@ import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { getInviteByCode } from "@/lib/db/service";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 export async function POST(request: NextRequest) {
   try {

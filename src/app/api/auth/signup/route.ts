@@ -4,7 +4,7 @@ import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { error, info } from "@/lib/logger";
+import { error, info } from "@/lib/logger.server";
 
 /**
  * Check if Supabase credentials are properly configured.

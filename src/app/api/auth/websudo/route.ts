@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import crypto from "crypto";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 const WEBSUDO_COOKIE = "webserversudo-session";
 const ELEVATION_TTL_MS = 15 * 60 * 1000; // 15 minutes

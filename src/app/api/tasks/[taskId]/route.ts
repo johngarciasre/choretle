@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql, desc } from "drizzle-orm";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {

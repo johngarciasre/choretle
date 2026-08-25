@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { info, error } from "@/lib/logger";
+import { info, error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest) {
   const cookieHeader = request.headers.get("cookie") || "";

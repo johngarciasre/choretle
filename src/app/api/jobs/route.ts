@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJobsByList, createJob, updateJob } from "@/lib/db/service";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest) {
   try {

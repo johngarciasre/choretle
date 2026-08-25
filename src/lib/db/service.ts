@@ -1,7 +1,7 @@
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 // ─── Global DB Initialization ────────────────────────────────────────
 

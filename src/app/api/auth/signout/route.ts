@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { clearDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
-import { error } from "@/lib/logger";
+import { error } from "@/lib/logger.server";
 
 /**
  * Check if Supabase credentials are properly configured.
