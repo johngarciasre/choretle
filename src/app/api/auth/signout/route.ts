@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { clearDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
+import { error } from "@/lib/logger";
 
 /**
  * Check if Supabase credentials are properly configured.
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Sign out failed:", error);
+    error({ err: error }, "Sign out failed");
     
     // Even if logout fails, clear cookies as a fallback
     return NextResponse.json(
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ authenticated: false });
   } catch (error) {
-    console.error("Sign out GET failed:", error);
+    error({ err: error }, "Sign out GET failed");
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }

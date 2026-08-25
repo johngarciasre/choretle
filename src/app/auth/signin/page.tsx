@@ -6,6 +6,7 @@ import { PageShell } from "@/components/ui/PageShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertCircle } from "lucide-react";
+import { info, error } from "@/lib/logger";
 
 export default function SignInPage() {
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function SignInPage() {
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    console.log("[SIGNIN PAGE] Starting sign in");
+    info("[SIGNIN PAGE] Starting sign in");
     setError("");
     setLoading(true);
     
@@ -32,10 +33,10 @@ export default function SignInPage() {
         body: JSON.stringify({ email, password }),
       });
       
-      console.log("[SIGNIN PAGE] Response status:", response.status);
+    info({ status: response.status }, "[SIGNIN PAGE] Response status");
       
       const data = await response.json();
-      console.log("[SIGNIN PAGE] Response data:", data);
+      info({ data }, "[SIGNIN PAGE] Response data");
       
       if (response.ok) {
         window.location.href = "/";
@@ -43,7 +44,7 @@ export default function SignInPage() {
         setError(data.error || "Sign in failed");
       }
     } catch (err) {
-      console.error("[SIGNIN PAGE] Error:", err);
+      error({ err: err }, "[SIGNIN PAGE] Error");
       setError("An error occurred");
     } finally {
       setLoading(false);

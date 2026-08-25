@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb, getRawDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(slates);
   } catch (error) {
-    console.error("Slates GET failed:", error);
+    error({ err: error }, "Slates GET failed");
     return NextResponse.json({ error: "Failed to fetch slates" }, { status: 500 });
   }
 }
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(slate, { status: 201 });
   } catch (error) {
-    console.error("Slates POST failed:", error);
+    error({ err: error }, "Slates POST failed");
     return NextResponse.json({ error: "Failed to create slate" }, { status: 500 });
   }
 }

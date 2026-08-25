@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (dbError) {
-      console.error("[DEV SIGNIN] Database sync failed:", dbError);
+      error({ err: dbError }, "[DEV SIGNIN] Database sync failed");
     }
 
     const response = NextResponse.json({ 
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (dbError) {
-    console.error("[SIGNIN] Database sync failed:", dbError);
+    error({ err: dbError }, "[SIGNIN] Database sync failed");
   }
 
   const response = new Response(

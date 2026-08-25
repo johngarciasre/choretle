@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Tags GET failed:", error);
+    error({ err: error }, "Tags GET failed");
     return NextResponse.json({ error: "Failed to fetch tags" }, { status: 500 });
   }
 }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(tag[0], { status: 201 });
   } catch (error) {
-    console.error("Tags POST failed:", error);
+    error({ err: error }, "Tags POST failed");
     return NextResponse.json({ error: "Failed to create tag" }, { status: 500 });
   }
 }
@@ -91,7 +92,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(result[0]);
   } catch (error) {
-    console.error("Tags PUT failed:", error);
+    error({ err: error }, "Tags PUT failed");
     return NextResponse.json({ error: "Failed to update tag" }, { status: 500 });
   }
 }
@@ -117,7 +118,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Tags DELETE failed:", error);
+    error({ err: error }, "Tags DELETE failed");
     return NextResponse.json({ error: "Failed to delete tag" }, { status: 500 });
   }
 }

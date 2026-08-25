@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { Button } from "@/components/ui";
+import { error } from "@/lib/logger";
 
 interface ReviewItem {
   review: {
@@ -52,7 +53,7 @@ export default function ReviewQueuePage() {
         setReviews(data);
       }
     } catch (error) {
-      console.error("Fetch reviews failed:", error);
+      error({ err: error }, "Fetch reviews failed");
     } finally {
       setLoading(false);
     }
@@ -74,7 +75,7 @@ export default function ReviewQueuePage() {
       setNotes("");
       fetchReviews();
     } catch (error) {
-      console.error("Review action failed:", error);
+      error({ err: error }, "Review action failed");
       alert("Failed to update review");
     }
   }

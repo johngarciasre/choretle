@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
 import PhotoUploadModal from "@/components/PhotoUploadModal";
+import { error } from "@/lib/logger";
 
 interface Task {
   id: string;
@@ -37,7 +38,7 @@ const fetchTask = async (id: string) => {
     if (!res.ok) throw new Error("Failed to fetch task");
     return await res.json();
   } catch (error) {
-    console.error("Fetch task failed:", error);
+    error({ err: error }, "Fetch task failed");
     return null;
   }
 };
@@ -48,7 +49,7 @@ const fetchTags = async () => {
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (error) {
-    console.error("Fetch tags failed:", error);
+    error({ err: error }, "Fetch tags failed");
     return [];
   }
 };
@@ -59,7 +60,7 @@ const fetchSubtasks = async (taskId: string) => {
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
   } catch (error) {
-    console.error("Fetch subtasks failed:", error);
+    error({ err: error }, "Fetch subtasks failed");
     return [];
   }
 };
@@ -122,7 +123,7 @@ export default function TaskPage() {
       setNameValue(updated.name);
       setSelectedTagIds(updated.tagIds || []);
     } catch (error) {
-      console.error("Update task failed:", error);
+      error({ err: error }, "Update task failed");
       alert("Failed to save changes");
     }
   }
@@ -148,7 +149,7 @@ export default function TaskPage() {
       setNewSubtaskName("");
       setNewSubtaskPoints(0);
     } catch (error) {
-      console.error("Add subtask failed:", error);
+      error({ err: error }, "Add subtask failed");
       alert("Failed to add subtask");
     }
   }
@@ -162,7 +163,7 @@ export default function TaskPage() {
       if (!res.ok) throw new Error("Failed to delete subtask");
       setSubtasks(subtasks.filter((s) => s.id !== subtaskId));
     } catch (error) {
-      console.error("Delete subtask failed:", error);
+      error({ err: error }, "Delete subtask failed");
       alert("Failed to delete subtask");
     }
   }

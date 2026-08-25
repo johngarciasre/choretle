@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 // ─── Middleware: Verify Auth Token ──────────────────────────────────
 async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId: string } | { error: string }> {
@@ -35,7 +36,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
 
     return { userId: payload.userId, familyId: payload.familyId || user.familyId || "" };
   } catch (error) {
-    console.error("Token verification failed:", error);
+    error({ err: error }, "Token verification failed");
     return { error: "Invalid token" };
   }
 }
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
       users: (users as any[]),
     });
   } catch (error) {
-    console.error("Family GET failed:", error);
+    error({ err: error }, "Family GET failed");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Family POST failed:", error);
+    error({ err: error }, "Family POST failed");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
@@ -208,7 +209,7 @@ export async function PATCH(request: NextRequest) {
       family: updatedFamily[0],
     });
   } catch (error) {
-    console.error("Family PATCH failed:", error);
+    error({ err: error }, "Family PATCH failed");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }

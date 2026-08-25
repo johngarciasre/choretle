@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ subtaskId: string }> }) {
   try {
@@ -32,7 +33,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(result[0]);
   } catch (error) {
-    console.error("Update subtask failed:", error);
+    error({ err: error }, "Update subtask failed");
     return NextResponse.json({ error: "Failed to update subtask" }, { status: 500 });
   }
 }
@@ -56,7 +57,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete subtask failed:", error);
+    error({ err: error }, "Delete subtask failed");
     return NextResponse.json({ error: "Failed to delete subtask" }, { status: 500 });
   }
 }

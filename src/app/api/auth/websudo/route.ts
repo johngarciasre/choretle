@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import crypto from "crypto";
+import { error } from "@/lib/logger";
 
 const WEBSUDO_COOKIE = "webserversudo-session";
 const ELEVATION_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -18,7 +19,7 @@ interface WebsudoPayload {
 function signWebsudo(payload: WebsudoPayload): string {
   const secret = process.env.WEBSUDO_SECRET;
   if (!secret) {
-    console.error("[websudo] WEBSUDO_SECRET is not configured. Aborting.");
+    error("[websudo] WEBSUDO_SECRET is not configured. Aborting.");
     throw new Error("WEBSUDO_SECRET environment variable must be set");
   }
   const json = JSON.stringify(payload);
@@ -44,7 +45,7 @@ function verifyWebsudo(cookieValue?: string): WebsudoPayload | null {
     // Verify signature
     const secret = process.env.WEBSUDO_SECRET;
     if (!secret) {
-      console.error("[websudo] WEBSUDO_SECRET is not configured. Aborting.");
+    error("[websudo] WEBSUDO_SECRET is not configured. Aborting.");
       throw new Error("WEBSUDO_SECRET environment variable must be set");
     }
     const expectedHash = crypto.createHmac("sha256", secret).update(json).digest("hex");

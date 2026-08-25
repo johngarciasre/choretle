@@ -4,6 +4,7 @@ import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { error, info } from "@/lib/logger";
 
 /**
  * Check if Supabase credentials are properly configured.
@@ -64,10 +65,7 @@ export async function POST(request: NextRequest) {
     // ─── Production Mode: Use Supabase Auth ────────────────
     
     if (!hasSupabaseConfig()) {
-      console.error("[SIGNUP] Missing Supabase credentials:", {
-        url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-        anonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      });
+      error({ url: !!process.env.NEXT_PUBLIC_SUPABASE_URL, anonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY }, "[SIGNUP] Missing Supabase credentials");
       return NextResponse.json(
         { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
         { status: 500 }
@@ -75,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate input - log what we received
-    console.log("[SIGNUP] Received body:", JSON.stringify(body));
+    info({ body }, "[SIGNUP] Received body");
     
     if (!body?.email || !body?.password || !body?.name) {
       return NextResponse.json(
@@ -86,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = await getSupabaseMiddlewareClient(request);
     if (!supabase) {
-      console.error("[SIGNUP] Failed to initialize Supabase client");
+      error("Failed to initialize Supabase client");
       return NextResponse.json(
         { error: "Failed to initialize authentication service" },
         { status: 500 }
@@ -106,7 +104,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (signUpResult.error) {
-      console.log("[SIGNUP] Supabase error:", signUpResult.error.message);
+      info({ message: signUpResult.error.message }, "[SIGNUP] Supabase error");
       
       if (signUpResult.error.message?.includes("Email already registered")) {
         return NextResponse.json(
@@ -129,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!signUpResult.data?.user) {
-      console.error("[SIGNUP] No user created in Supabase Auth");
+      error("No user created in Supabase Auth");
       return NextResponse.json(
         { error: "User registration failed" },
         { status: 500 }
@@ -189,7 +187,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (dbError) {
-      console.error("[SIGNUP] Database operations failed:", dbError);
+      error({ err: dbError }, "[SIGNUP] Database operations failed");
       // Silently fail - user is created in Supabase Auth anyway
     }
 
@@ -212,7 +210,7 @@ export async function POST(request: NextRequest) {
       }
     );
   } catch (error) {
-    console.error("[SIGNUP] Unhandled error:", error);
+    error({ err: error }, "[SIGNUP] Unhandled error");
     
     if (error instanceof Error) {
       return NextResponse.json(

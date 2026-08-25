@@ -1,6 +1,7 @@
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 // ─── Global DB Initialization ────────────────────────────────────────
 
@@ -27,7 +28,7 @@ async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | nu
   try {
     return await query;
   } catch (error) {
-    console.error("safeQuery failed:", error);
+    error({ err: error }, "safeQuery failed");
     return null;
   }
 }
@@ -537,7 +538,7 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
 
   const currentStatus = (job as any).status;
   if (!canTransition(currentStatus, newStatus)) {
-    console.error(`Invalid job transition: ${currentStatus} -> ${newStatus} for job ${id}`);
+    error({ currentStatus, newStatus, id }, `Invalid job transition: ${currentStatus} -> ${newStatus} for job ${id}`);
     throw new Error(`Invalid transition from "${currentStatus}" to "${newStatus}"`);
   }
 
@@ -555,7 +556,7 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
     try {
       _createJobHistory(id, "status_change", `Status changed from "${currentStatus}" to "${newStatus}"`, userId);
     } catch (historyErr) {
-      console.error("Failed to write job history:", historyErr);
+      error({ err: historyErr }, "Failed to write job history");
     }
   }
 
@@ -606,7 +607,7 @@ export async function completeJob(id: string, userId?: string) {
       }
     }
   } catch (error) {
-    console.error("completeJob failed:", error);
+    error({ err: error }, "completeJob failed");
     throw error;
   }
 
@@ -672,7 +673,7 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
 
     return pointsAwarded;
   } catch (error) {
-    console.error("completeSubtask failed:", error);
+    error({ err: error }, "completeSubtask failed");
     throw error;
   }
 }
@@ -917,7 +918,7 @@ export async function swapRotationEntries(
 
     // Verify both rotations belong to the same slate
     if ((rotation1 as any).slateId !== (rotation2 as any).slateId) {
-      console.error(`Cannot swap rotations from different slates: ${rotationId1} vs ${rotationId2}`);
+      error({ rotationId1, rotationId2 }, `Cannot swap rotations from different slates: ${rotationId1} vs ${rotationId2}`);
       throw new Error("Cannot swap rotations from different slates");
     }
 
@@ -947,13 +948,13 @@ export async function swapRotationEntries(
           })
         );
       } catch (historyErr) {
-        console.error("Failed to write swap history:", historyErr);
+        error({ err: historyErr }, "Failed to write swap history");
       }
     }
 
     return { success: true };
   } catch (error) {
-    console.error("swapRotationEntries failed:", error);
+    error({ err: error }, "swapRotationEntries failed");
     throw error;
   }
 }

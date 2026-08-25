@@ -6,6 +6,7 @@ import { Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
+import { error } from "@/lib/logger";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -42,7 +43,7 @@ export function NavBar() {
       await fetch("/api/auth/signout", { method: "POST" });
       router.push("/auth/signin");
     } catch (error) {
-      console.error("Sign out failed:", error);
+      error({ err: error }, "Sign out failed");
     }
   };
 

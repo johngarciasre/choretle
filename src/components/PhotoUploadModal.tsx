@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { error } from "@/lib/logger";
 
 interface PhotoUploadModalProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export default function PhotoUploadModal({ isOpen, onClose, objectType, objectId
       setIsProbative(true);
       window.location.reload();
     } catch (error) {
-      console.error("Upload failed:", error);
+      error({ err: error }, "Upload failed");
       alert("Failed to upload photo");
     } finally {
       setUploading(false);

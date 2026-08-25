@@ -3,6 +3,7 @@ import { getTasksByFamily, createTask, updateTask, deleteTask } from "@/lib/db/s
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(tasks);
   } catch (error) {
-    console.error("Get tasks failed:", error);
+    error({ err: error }, "Get tasks failed");
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
 }
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(task[0]);
   } catch (error) {
-    console.error("Create task failed:", error);
+    error({ err: error }, "Create task failed");
     return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
   }
 }
@@ -107,7 +108,7 @@ export async function PUT(request: NextRequest) {
     
     return NextResponse.json(updatedTask[0]);
   } catch (error) {
-    console.error("Update task failed:", error);
+    error({ err: error }, "Update task failed");
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }
@@ -130,7 +131,7 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete task failed:", error);
+    error({ err: error }, "Delete task failed");
     return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJobsByList, createJob, updateJob } from "@/lib/db/service";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
     const jobs = await getJobsByList(listId);
     return NextResponse.json(jobs);
   } catch (error) {
-    console.error("Get jobs failed:", error);
+    error({ err: error }, "Get jobs failed");
     return NextResponse.json({ error: "Failed to fetch jobs" }, { status: 500 });
   }
 }
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     if (!job) throw new Error("Failed to create job");
     return NextResponse.json(job);
   } catch (error) {
-    console.error("Create job failed:", error);
+    error({ err: error }, "Create job failed");
     return NextResponse.json({ error: "Failed to create job" }, { status: 500 });
   }
 }
@@ -38,7 +39,7 @@ export async function PUT(request: NextRequest) {
     if (!job) throw new Error("Failed to update job");
     return NextResponse.json(job);
   } catch (error) {
-    console.error("Update job failed:", error);
+    error({ err: error }, "Update job failed");
     return NextResponse.json({ error: "Failed to update job" }, { status: 500 });
   }
 }

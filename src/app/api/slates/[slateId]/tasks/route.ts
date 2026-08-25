@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
@@ -33,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({ success: true, count: taskIds.length });
   } catch (error) {
-    console.error("Slate tasks PUT failed:", error);
+    error({ err: error }, "Slate tasks PUT failed");
     return NextResponse.json({ error: "Failed to update slate tasks" }, { status: 500 });
   }
 }
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(tasks);
   } catch (error) {
-    console.error("Slate tasks GET failed:", error);
+    error({ err: error }, "Slate tasks GET failed");
     return NextResponse.json({ error: "Failed to fetch slate tasks" }, { status: 500 });
   }
 }

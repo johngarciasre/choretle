@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, Badge, PageLoader } from "@/components/ui";
+import { error } from "@/lib/logger";
 
 interface Job {
   id: string;
@@ -21,7 +22,7 @@ async function fetchJobs() {
     const data = await res.json();
     return data;
   } catch (error) {
-    console.error("Fetch jobs failed:", error);
+    error({ err: error }, "Fetch jobs failed");
     // Mock data for now
     return [
       { id: "1", name: "Clean the kitchen", description: "Clean up the kitchen", points: 10, status: "todo" },

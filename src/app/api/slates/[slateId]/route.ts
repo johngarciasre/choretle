@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(slate[0]);
   } catch (error) {
-    console.error("Slate GET failed:", error);
+    error({ err: error }, "Slate GET failed");
     return NextResponse.json({ error: "Failed to fetch slate" }, { status: 500 });
   }
 }
@@ -47,7 +48,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(result[0]);
   } catch (error) {
-    console.error("Slate PUT failed:", error);
+    error({ err: error }, "Slate PUT failed");
     return NextResponse.json({ error: "Failed to update slate" }, { status: 500 });
   }
 }
@@ -69,7 +70,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Slate DELETE failed:", error);
+    error({ err: error }, "Slate DELETE failed");
     return NextResponse.json({ error: "Failed to delete slate" }, { status: 500 });
   }
 }

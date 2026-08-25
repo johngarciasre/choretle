@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ reviewId: string }> }) {
   try {
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(result[0]);
   } catch (error) {
-    console.error("Get review failed:", error);
+    error({ err: error }, "Get review failed");
     return NextResponse.json({ error: "Failed to fetch review" }, { status: 500 });
   }
 }
@@ -62,7 +63,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(result[0]);
   } catch (error) {
-    console.error("Update review failed:", error);
+    error({ err: error }, "Update review failed");
     return NextResponse.json({ error: "Failed to update review" }, { status: 500 });
   }
 }
@@ -79,7 +80,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await db.delete(schema.reviews).where(eq(schema.reviews.id, reviewId));
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete review failed:", error);
+    error({ err: error }, "Delete review failed");
     return NextResponse.json({ error: "Failed to delete review" }, { status: 500 });
   }
 }

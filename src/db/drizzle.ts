@@ -1,6 +1,7 @@
 import { drizzle as construct } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import * as schema from "@/db/schema-sqlite";
+import { info, error } from "@/lib/logger";
 
 const DB_PATH = process.env.SQLITE_DB || ":memory:";
 
@@ -154,9 +155,9 @@ export async function initDb(): Promise<any> {
     _rawDb = new Database(DB_PATH);
     createTables(_rawDb);
     _db = construct(_rawDb, { schema });
-    console.log("[DB] Initialized SQLite database at", DB_PATH === ":memory:" ? "in-memory" : DB_PATH);
+    info({ path: DB_PATH === ":memory:" ? "in-memory" : DB_PATH }, "[DB] Initialized SQLite database");
   } catch (error) {
-    console.error("[DB] Failed to initialize SQLite:", error);
+    error({ err: error }, "[DB] Failed to initialize SQLite");
     throw error;
   }
   return _db;

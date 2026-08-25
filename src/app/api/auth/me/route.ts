@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { info, error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   const cookieHeader = request.headers.get("cookie") || "";
   
-  console.log("[AUTH_ME] Cookie header:", cookieHeader ? `${cookieHeader.substring(0, 100)}...` : "EMPTY");
+  info({ hasCookie: !!cookieHeader }, "[AUTH_ME] Cookie header");
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
         }
       }
     } catch (err) {
-      console.error("[AUTH_ME] Failed to query DB for user:", err);
+      error({ err: err }, "[AUTH_ME] Failed to query DB for user");
     }
 
     return NextResponse.json({

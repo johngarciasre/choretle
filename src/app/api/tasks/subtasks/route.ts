@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
     const subtasks = await query;
     return NextResponse.json(subtasks);
   } catch (error) {
-    console.error("Get subtasks failed:", error);
+    error({ err: error }, "Get subtasks failed");
     return NextResponse.json({ error: "Failed to fetch subtasks" }, { status: 500 });
   }
 }
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "taskId + name OR jobId + subtaskId required" }, { status: 400 });
   } catch (error) {
-    console.error("Create subtask failed:", error);
+    error({ err: error }, "Create subtask failed");
     return NextResponse.json({ error: "Failed to create subtask" }, { status: 500 });
   }
 }

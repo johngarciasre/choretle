@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ListChecks, Trophy, User } from "lucide-react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { error } from "@/lib/logger";
 
 interface User extends SupabaseUser {
   id: string;
@@ -25,7 +26,7 @@ async function checkAuthInternal() {
       return null;
     }
   } catch (e) {
-    console.error("Auth check failed:", e);
+    error({ err: e }, "Auth check failed");
     window.location.href = "/auth/signin";
     return null;
   }

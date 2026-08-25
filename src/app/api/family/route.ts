@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createFamily } from "@/lib/db/service";
 import { slugify } from "@/lib/slugify";
+import { error } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     if (!family) throw new Error("Failed to create family");
     return NextResponse.json(family);
   } catch (error) {
-    console.error("Create family failed:", error);
+    error({ err: error }, "Create family failed");
     return NextResponse.json({ error: "Failed to create family" }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@ import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { getInviteByCode } from "@/lib/db/service";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
         const { data: { session } } = await supabase.auth.getSession();
         userId = session?.user?.id || null;
       } catch (e) {
-        console.error("[JOIN] Supabase session check failed:", e);
+        error({ err: e }, "[JOIN] Supabase session check failed");
       }
     }
 
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       name: "Family" 
     });
   } catch (error) {
-    console.error("Join family failed:", error);
+    error({ err: error }, "Join family failed");
     return NextResponse.json({ error: "Failed to join family" }, { status: 500 });
   }
 }

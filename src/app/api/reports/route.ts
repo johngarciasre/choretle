@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 // ─── Simple Auth Verification ──────────────────────────────────────
 async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
@@ -35,7 +36,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
 
     return { userId: payload.userId, familyId: payload.familyId || user.familyId };
   } catch (error) {
-    console.error("Token verification failed:", error);
+    error({ err: error }, "Token verification failed");
     return { error: "Invalid token" };
   }
 }
@@ -146,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(report);
   } catch (error) {
-    console.error("Reports GET failed:", error);
+    error({ err: error }, "Reports GET failed");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }

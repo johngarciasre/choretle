@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     const photos = await (query as any);
     return NextResponse.json(photos);
   } catch (error) {
-    console.error("Get photos failed:", error);
+    error({ err: error }, "Get photos failed");
     return NextResponse.json({ error: "Failed to fetch photos" }, { status: 500 });
   }
 }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(photo[0]);
   } catch (error) {
-    console.error("Create photo failed:", error);
+    error({ err: error }, "Create photo failed");
     return NextResponse.json({ error: "Failed to create photo" }, { status: 500 });
   }
 }

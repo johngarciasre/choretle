@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { PageShell, PageHeader, PageLoader } from "@/components/ui";
 import RotationBoard from "@/components/RotationBoard";
 import type { UserRotation, SlateWithRotations, RotationAssignment } from "@/components/AssignmentCard";
+import { error } from "@/lib/logger";
 
 interface Family {
   id: string;
@@ -153,7 +154,7 @@ export default function RotationsPage() {
         });
       }
     } catch (err) {
-      console.error("Failed to save rotation:", err);
+      error({ err: err }, "Failed to save rotation");
       throw err;
     }
   };

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ photoId: string }> }) {
   try {
@@ -17,7 +18,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete photo failed:", error);
+    error({ err: error }, "Delete photo failed");
     return NextResponse.json({ error: "Failed to delete photo" }, { status: 500 });
   }
 }

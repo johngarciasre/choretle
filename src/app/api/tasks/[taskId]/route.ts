@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql, desc } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       verifyRequired: taskWithTags[0].task.verifyRequired ?? false,
     });
   } catch (error) {
-    console.error("Task GET failed:", error);
+    error({ err: error }, "Task GET failed");
     return NextResponse.json({ error: "Failed to fetch task" }, { status: 500 });
   }
 }
@@ -86,7 +87,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       tagIds: result,
     });
   } catch (error) {
-    console.error("Task PUT failed:", error);
+    error({ err: error }, "Task PUT failed");
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }
@@ -105,7 +106,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     // Cascade delete of tags handled by FK constraint
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Task DELETE failed:", error);
+    error({ err: error }, "Task DELETE failed");
     return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }

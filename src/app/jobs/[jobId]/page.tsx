@@ -6,6 +6,7 @@ import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui"
 import { Button } from "@/components/ui";
 import PhotoCarousel from "@/components/PhotoCarousel";
 import PhotoUploadModal from "@/components/PhotoUploadModal";
+import { error } from "@/lib/logger";
 
 interface Job {
   id: string;
@@ -58,7 +59,7 @@ const fetchJob = async () => {
     if (!res.ok) throw new Error("Failed to fetch job");
     return await res.json();
   } catch (error) {
-    console.error("Fetch job failed:", error);
+    error({ err: error }, "Fetch job failed");
     return null;
   }
 };
@@ -69,7 +70,7 @@ const fetchSubtasks = async (jobId: string) => {
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
   } catch (error) {
-    console.error("Fetch subtasks failed:", error);
+    error({ err: error }, "Fetch subtasks failed");
     return [];
   }
 };
@@ -80,7 +81,7 @@ const fetchPhotos = async (objectType: string, objectId: string) => {
     if (!res.ok) throw new Error("Failed to fetch photos");
     return await res.json();
   } catch (error) {
-    console.error("Fetch photos failed:", error);
+    error({ err: error }, "Fetch photos failed");
     return [];
   }
 };
@@ -134,7 +135,7 @@ export default function JobPage() {
         window.location.reload();
       }
     } catch (error) {
-      console.error(error);
+      error({ err: error });
       alert(error instanceof Error ? error.message : "Failed to update job status");
     }
   };
@@ -153,7 +154,7 @@ export default function JobPage() {
       setCommentText("");
       window.location.reload();
     } catch (error) {
-      console.error("Add comment failed:", error);
+      error({ err: error }, "Add comment failed");
       alert("Failed to add comment");
     }
   };
@@ -176,7 +177,7 @@ export default function JobPage() {
         )
       );
     } catch (error) {
-      console.error("Complete subtask failed:", error);
+      error({ err: error }, "Complete subtask failed");
       alert("Failed to complete subtask");
     }
   };

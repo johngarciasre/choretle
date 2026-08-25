@@ -5,6 +5,7 @@ import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, Badge, PageLoader, Card } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
 import { Trash2, Plus, Edit, X } from "lucide-react";
+import { error } from "@/lib/logger";
 
 interface Task {
   id: string;
@@ -33,7 +34,7 @@ const fetchTasks = async () => {
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
   } catch (error) {
-    console.error("Fetch tasks failed:", error);
+    error({ err: error }, "Fetch tasks failed");
     return [];
   }
 };
@@ -44,7 +45,7 @@ const fetchTags = async () => {
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (error) {
-    console.error("Fetch tags failed:", error);
+    error({ err: error }, "Fetch tags failed");
     return [];
   }
 };
@@ -126,7 +127,7 @@ export default function TasksPage() {
       }
       closeModal();
     } catch (error) {
-      console.error("Save task failed:", error);
+      error({ err: error }, "Save task failed");
       alert("Failed to save task");
     }
   }
@@ -145,7 +146,7 @@ export default function TasksPage() {
       
       setTasks(prev => prev.filter(t => t.id !== taskId));
     } catch (error) {
-      console.error("Delete task failed:", error);
+      error({ err: error }, "Delete task failed");
       alert("Failed to delete task");
     }
   }

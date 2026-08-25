@@ -4,6 +4,7 @@ import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { error } from "@/lib/logger";
 
 interface RotationAssignment {
   date: string;
@@ -88,7 +89,7 @@ export default function SwapMeetPage() {
         await fetchRotations(fid, slateId);
       }
     } catch (error) {
-      console.error("Failed to fetch rotation schedule:", error);
+      error({ err: error }, "Failed to fetch rotation schedule");
     } finally {
       setLoading(false);
     }
@@ -101,7 +102,7 @@ export default function SwapMeetPage() {
       const data = await response.json();
       setRotations(data.rotations || []);
     } catch (error) {
-      console.error("Failed to fetch rotations:", error);
+      error({ err: error }, "Failed to fetch rotations");
     }
   };
 
@@ -112,7 +113,7 @@ export default function SwapMeetPage() {
       const data = await response.json();
       setSwaps(data.swaps || []);
     } catch (error) {
-      console.error("Failed to fetch swaps:", error);
+      error({ err: error }, "Failed to fetch swaps");
     }
   };
 
@@ -161,7 +162,7 @@ export default function SwapMeetPage() {
         alert(data.error || "Failed to swap rotations.");
       }
     } catch (error) {
-      console.error("Swap failed:", error);
+      error({ err: error }, "Swap failed");
       alert("An error occurred while swapping rotations.");
     }
   };
@@ -205,7 +206,7 @@ export default function SwapMeetPage() {
         alert(data.error || "Failed to share slate.");
       }
     } catch (error) {
-      console.error("Share failed:", error);
+      error({ err: error }, "Share failed");
       alert("An error occurred while sharing slates.");
     }
   };
@@ -221,7 +222,7 @@ export default function SwapMeetPage() {
       
       await fetchSwaps(familyId);
     } catch (error) {
-      console.error("Failed to open share modal:", error);
+      error({ err: error }, "Failed to open share modal");
     }
   };
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc, sql, or } from "drizzle-orm";
+import { error, warn } from "@/lib/logger";
 
 // ─── Middleware: Verify Auth Token ──────────────────────────────────
 async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
@@ -36,7 +37,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
 
     return { userId: payload.userId, familyId: payload.familyId || undefined };
   } catch (error) {
-    console.error("Token verification failed:", error);
+    error({ err: error }, "Token verification failed");
     return { error: "Invalid token" };
   }
 }
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ assignments });
   } catch (error) {
-    console.error("Failed to fetch rotation schedule:", error);
+    error({ err: error }, "Failed to fetch rotation schedule");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
@@ -151,7 +152,7 @@ export async function POST(request: NextRequest) {
         if (slate) {
           validSlateIds.push(slate.id);
         } else {
-          console.warn(`Slate ${slateId} not found or doesn't belong to sharing family`);
+          warn({ slateId }, `Slate ${slateId} not found or doesn't belong to sharing family`);
         }
       }
     }
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
           userId,
         });
       } catch (historyErr) {
-        console.error("Failed to create swap meet history:", historyErr);
+        error({ err: historyErr }, "Failed to create swap meet history");
       }
     }
 
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
       entries: createdEntries,
     });
   } catch (error) {
-    console.error("Swap meet POST failed:", error);
+    error({ err: error }, "Swap meet POST failed");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }

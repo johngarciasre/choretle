@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from "@/components/ui";
 import { Star, Users, Plus, X, Pencil, Trash2, Tag as TagIcon } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
+import { error } from "@/lib/logger";
 
 interface Family {
   id: string;
@@ -122,7 +123,7 @@ export default function FamilyPage() {
         setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error("Auth check failed:", error);
+      error({ err: error }, "Auth check failed");
       setIsAuthenticated(false);
     }
   };
@@ -149,7 +150,7 @@ export default function FamilyPage() {
       setUsers(usersData.users);
       setTeams(teamsData.teams);
     } catch (error) {
-      console.error("Failed to load family data:", error);
+      error({ err: error }, "Failed to load family data");
     } finally {
       setLoading(false);
     }
@@ -206,7 +207,7 @@ export default function FamilyPage() {
       // Redirect to the new family view
       router.push(`/family/${data.family.id}`);
     } catch (error) {
-      console.error("Failed to create family:", error);
+      error({ err: error }, "Failed to create family");
       alert("Failed to create family. Please try again.");
     }
   };
@@ -231,7 +232,7 @@ export default function FamilyPage() {
       
       router.push(`/family/${data.family.id}`);
     } catch (error) {
-      console.error("Failed to join family:", error);
+      error({ err: error }, "Failed to join family");
       alert("Failed to join family. Please try again.");
     }
   };
@@ -255,7 +256,7 @@ export default function FamilyPage() {
       setNewTeamName("");
       setNewTeamLogoUrl("");
     } catch (error) {
-      console.error("Failed to create team:", error);
+      error({ err: error }, "Failed to create team");
       alert("Failed to create team.");
     }
   };
@@ -281,7 +282,7 @@ export default function FamilyPage() {
       setSelectedUser(null);
       alert(`Successfully assigned ${selectedUser.name} to team!`);
     } catch (error) {
-      console.error("Failed to assign user:", error);
+      error({ err: error }, "Failed to assign user");
       alert("Failed to assign user to team.");
     }
   };
@@ -303,7 +304,7 @@ export default function FamilyPage() {
       setFamily(data.family);
       setShowToggleModal(false);
     } catch (error) {
-      console.error("Failed to toggle teams:", error);
+      error({ err: error }, "Failed to toggle teams");
       alert("Failed to update teams setting.");
     }
   };
@@ -319,7 +320,7 @@ export default function FamilyPage() {
         setTags(data);
       }
     } catch (error) {
-      console.error("Failed to load tags:", error);
+      error({ err: error }, "Failed to load tags");
     } finally {
       setLoadingTags(false);
     }
@@ -344,7 +345,7 @@ export default function FamilyPage() {
       setTagName("");
       setTagColor("#6366ee");
     } catch (error) {
-      console.error("Failed to create tag:", error);
+      error({ err: error }, "Failed to create tag");
       alert("Failed to create tag.");
     }
   };
@@ -369,7 +370,7 @@ export default function FamilyPage() {
       setTagName("");
       setTagColor("#6366ee");
     } catch (error) {
-      console.error("Failed to update tag:", error);
+      error({ err: error }, "Failed to update tag");
       alert("Failed to update tag.");
     }
   };
@@ -389,7 +390,7 @@ export default function FamilyPage() {
 
       setTags(tags.filter(t => t.id !== tagId));
     } catch (error) {
-      console.error("Failed to delete tag:", error);
+      error({ err: error }, "Failed to delete tag");
       alert("Failed to delete tag.");
     }
   };
@@ -411,7 +412,7 @@ export default function FamilyPage() {
       setFamily(data.family);
       setEditingName(false);
     } catch (error) {
-      console.error("Failed to update family name:", error);
+      error({ err: error }, "Failed to update family name");
       alert("Failed to update family name.");
     }
   };
@@ -433,7 +434,7 @@ export default function FamilyPage() {
       setFamily(data.family);
       setSelectedTheme(data.family.theme || selectedTheme);
     } catch (error) {
-      console.error("Failed to update theme:", error);
+      error({ err: error }, "Failed to update theme");
       alert("Failed to update theme.");
     }
   };

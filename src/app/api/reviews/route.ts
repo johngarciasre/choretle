@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { error } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
     const reviews = await query;
     return NextResponse.json(reviews);
   } catch (error) {
-    console.error("Get reviews failed:", error);
+    error({ err: error }, "Get reviews failed");
     return NextResponse.json({ error: "Failed to fetch reviews" }, { status: 500 });
   }
 }
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(review[0]);
   } catch (error) {
-    console.error("Create review failed:", error);
+    error({ err: error }, "Create review failed");
     return NextResponse.json({ error: "Failed to create review" }, { status: 500 });
   }
 }

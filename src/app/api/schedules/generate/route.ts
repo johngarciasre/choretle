@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { autoGenerateJobs } from "@/lib/slateAutoGen";
+import { error } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ jobs, count: jobs.length });
   } catch (error) {
-    console.error("Auto-generation failed:", error);
+    error({ err: error }, "Auto-generation failed");
     return NextResponse.json(
       { error: "Failed to generate jobs" },
       { status: 500 },
