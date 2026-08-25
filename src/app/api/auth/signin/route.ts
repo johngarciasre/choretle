@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
             avatarUrl: null,
             familyId: "dev-family-001",
             pointsTotal: 0,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
         }
       }
@@ -130,8 +130,8 @@ export async function POST(request: NextRequest) {
           avatarUrl: session.user.user_metadata?.avatar_url || null,
           familyId: null,
           pointsTotal: 0,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         });
       } else if (existingUser.email !== session.user.email) {
         // Update email if it changed
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
           name: session.user.user_metadata?.name || existingUser.name,
           role: session.user.user_metadata?.role || existingUser.role,
           avatarUrl: session.user.user_metadata?.avatar_url || existingUser.avatarUrl,
-          updatedAt: new Date(),
+          updatedAt: new Date().toISOString(),
         }).where(eq(schema.users.id, session.user.id));
       }
     }

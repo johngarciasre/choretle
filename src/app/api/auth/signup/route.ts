@@ -156,8 +156,8 @@ export async function POST(request: NextRequest) {
           const [newFamily] = await db.insert(schema.families).values({
             name: familyName,
             slug: familySlug,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           }).returning("*");
           
           familyId = newFamily.id;
@@ -175,14 +175,14 @@ export async function POST(request: NextRequest) {
             name: body.name,
             role: "parent",
             familyId: familyId || null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
         } else if (existingUser.familyId !== familyId) {
           await db.update(schema.users).set({ 
             familyId,
             name: body.name,
-            updatedAt: new Date()
+            updatedAt: new Date().toISOString()
           }).where(eq(schema.users.id, existingUser.id));
         }
       }

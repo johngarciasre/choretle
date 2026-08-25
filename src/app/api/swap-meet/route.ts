@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
         sharingFamilyId,
         requestedBy: requestingFamilyId,
         status,
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
       }).returning("*");
 
       createdEntries.push(entry[0]);

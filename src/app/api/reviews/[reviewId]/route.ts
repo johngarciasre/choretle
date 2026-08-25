@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "At least one field to update is required" }, { status: 400 });
     }
 
-    const updateData: Record<string, any> = { updatedAt: new Date() };
+    const updateData: Record<string, any> = { updatedAt: new Date().toISOString() };
     if (status) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
     if (approvedBy) updateData.approvedBy = approvedBy;

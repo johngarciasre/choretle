@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (db) {
       await db.update(schema.users).set({ 
         familyId: invite.familyId,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       }).where(eq(schema.users.id, userId));
     }
 

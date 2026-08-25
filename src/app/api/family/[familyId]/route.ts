@@ -187,7 +187,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Build update object with only provided fields
-    const updates: any = { updatedAt: new Date() };
+    const updates: any = { updatedAt: new Date().toISOString() };
     if (teamsEnabled !== undefined) updates.teamsEnabled = teamsEnabled;
     if (name) {
       const newSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
