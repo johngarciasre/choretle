@@ -3,8 +3,6 @@ import { describe, it, expect } from "vitest";
 // Extract the public route constants from middleware for testing
 const PUBLIC_ROUTES = [
   "/auth/signin",
-  "/auth/signup",
-  "/auth/signup/verify-email",
   "/_next/static",
   "/_next/image",
   "/favicon.ico",
@@ -26,8 +24,6 @@ describe("Middleware Public Route Detection", () => {
   describe("PUBLIC_ROUTES", () => {
     it.each([
       ["/auth/signin", true],
-      ["/auth/signup", true],
-      ["/auth/signup/verify-email", true],
       ["/_next/static/files/app.js", true],
       ["/_next/image/logo.png", true],
       ["/favicon.ico", true],

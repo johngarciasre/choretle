@@ -3,8 +3,34 @@ import { createServerClient } from "@supabase/ssr";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { info, error } from "@/lib/logger.server";
+import { parseDevSession } from "@/lib/dev-auth";
 
 export async function GET(request: NextRequest) {
+  // ─── Dev Mode: Check dev session cookie ────────────────
+  if (process.env.AUTH_MODE === "dev") {
+    const cookieHeader = request.headers.get("cookie") || "";
+    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+
+    if (setCookie) {
+      const value = setCookie.replace("dev-session=", "").trim();
+      const user = parseDevSession(value);
+      if (user) {
+        return NextResponse.json({
+          authenticated: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          },
+          familyId: user.familyId,
+        });
+      }
+    }
+
+    return NextResponse.json({ authenticated: false });
+  }
+
   const cookieHeader = request.headers.get("cookie") || "";
   
   info({ hasCookie: !!cookieHeader }, "[AUTH_ME] Cookie header");

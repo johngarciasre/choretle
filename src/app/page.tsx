@@ -35,7 +35,7 @@ export default function LandingPage() {
             <Button variant="ghost" size="lg" href="/auth/signin" icon={<Star size={18} />}>
               Sign In
             </Button>
-            <Button variant="primary" size="lg" href="/auth/signup" icon={<Sparkles size={18} />}>
+            <Button variant="primary" size="lg" href="/auth/signin" icon={<Sparkles size={18} />}>
               Sign Up
             </Button>
           </div>

@@ -4,8 +4,6 @@ import { createDevSession, setDevSessionCookie, getDevUserFromRequest } from "@/
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
-  "/auth/signup", 
-  "/auth/signup/verify-email",
   "/_next/static",
   "/_next/image",
   "/favicon.ico",
@@ -133,13 +131,19 @@ export async function middleware(request: NextRequest) {
       userId = devUser.id;
       familyId = devUser.familyId || null;
     } else {
-      // Auto-sign in admin user
-      const session = createDevSession({ userId: "dev-user-admin-001" });
-      setDevSessionCookie(response.headers, session);
-      response.headers.set("x-user-id", session.user.id);
-      response.headers.set("x-family-id", "dev-family-001");
-      userId = session.user.id;
-      familyId = "dev-family-001";
+      // Check if user explicitly signed out (persisted flag)
+      const cookieHeader = request.headers.get("cookie") || "";
+      const hasSignoutFlag = cookieHeader.includes("dev-signout=true");
+
+      if (!hasSignoutFlag) {
+        // Auto-sign in admin user only if not explicitly signed out
+        const session = createDevSession({ userId: "dev-user-admin-001" });
+        setDevSessionCookie(response.headers, session);
+        response.headers.set("x-user-id", session.user.id);
+        response.headers.set("x-family-id", "dev-family-001");
+        userId = session.user.id;
+        familyId = "dev-family-001";
+      }
     }
 
     // Set user headers for protected routes

@@ -14,9 +14,13 @@ function hasSupabaseConfig(): boolean {
 /**
  * Sign out user and clear session cookies.
  * In dev mode (AUTH_MODE=dev), clears the dev session cookie.
+ * Supports global signout via body { type: 'global' } to terminate all sessions.
  */
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json().catch(() => ({}));
+    const isGlobal = body.type === "global";
+
     // ─── Dev Mode: Clear dev session cookie ────────────────
     if (process.env.AUTH_MODE === "dev") {
       const response = NextResponse.json(
@@ -27,9 +31,9 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
 
-      // Clear the dev session cookie by setting it to empty
       clearDevSessionCookie(response.headers);
-
+      // Set a persistent flag to prevent middleware from auto-logging back in (no httpOnly for dev)
+      response.cookies.set("dev-signout", "true", { path: "/", secure: false });
       return response;
     }
 
@@ -39,7 +43,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           ok: true, 
-          message: "No active session to log out (dev mode)" 
+          message: "No active session to log out" 
         },
         { status: 200 }
       );
@@ -47,20 +51,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = await getSupabaseMiddlewareClient(request);
 
-    // Logout from Supabase Auth (revoke refresh tokens, clear session)
-    await supabase.auth.signOut();
+    if (isGlobal) {
+      await supabase.auth.signOut({ scope: "global" });
+    } else {
+      await supabase.auth.signOut();
+    }
 
     return NextResponse.json(
       { 
         ok: true, 
-        message: "Successfully logged out" 
+        message: isGlobal ? "Successfully logged out from all sessions" : "Successfully logged out" 
       },
       { status: 200 }
     );
-  } catch (error) {
-    error({ err: error }, "Sign out failed");
+  } catch (e) {
+    error("Sign out failed", { err: e });
     
-    // Even if logout fails, clear cookies as a fallback
     return NextResponse.json(
       { 
         ok: true, 
@@ -122,8 +128,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ authenticated: false });
-  } catch (error) {
-    error({ err: error }, "Sign out GET failed");
+  } catch (e) {
+    error("Sign out GET failed", { err: e });
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }

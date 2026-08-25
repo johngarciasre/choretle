@@ -8,43 +8,78 @@ import { Button } from "@/components/ui/Button";
 import { AlertCircle } from "lucide-react";
 import { info, error } from "@/lib/logger";
 
-export default function SignInPage() {
+type Mode = "signin" | "signup";
+
+export default function AuthPage() {
   useEffect(() => {
     typeof window !== 'undefined' && (document.title = "Choretle - Sign In");
   }, []);
 
-  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<Mode>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem("choretle_mode") as Mode) || "signin";
+    }
+    return "signin";
+  });
+  const [rememberEmail, setRememberEmail] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("choretle_remember_email") === "true";
+    }
+    return false;
+  });
+  const [savedEmail, setSavedEmail] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("choretle_saved_email") || "";
+    }
+    return "";
+  });
+
+  const [email, setEmail] = useState(savedEmail);
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSignIn(e: React.FormEvent) {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("choretle_mode", mode);
+      localStorage.setItem("choretle_remember_email", String(rememberEmail));
+      if (rememberEmail && email) {
+        localStorage.setItem("choretle_saved_email", email);
+      }
+      // Clear signout flag when visiting signin page
+      document.cookie = "dev-signout; path=/; secure=false";
+    }
+  }, [mode, rememberEmail, email]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    info("[SIGNIN PAGE] Starting sign in");
+    info("[AUTH PAGE] Starting auth flow", { mode });
     setError("");
     setLoading(true);
-    
+
     try {
-      const response = await fetch("/api/auth/signin", {
+      const endpoint = mode === "signin" ? "/api/auth/signin" : "/api/auth/signup";
+      const body: Record<string, string> = { email, password };
+      if (mode === "signup") body.name = name;
+
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
-      
-    info({ status: response.status }, "[SIGNIN PAGE] Response status");
-      
+
+      info({ status: response.status }, "[AUTH PAGE] Response status");
       const data = await response.json();
-      info({ data }, "[SIGNIN PAGE] Response data");
-      
+      info({ data }, "[AUTH PAGE] Response data");
+
       if (response.ok) {
         window.location.href = "/";
       } else {
-        setError(data.error || "Sign in failed");
+        setError(data.error || `${mode === "signin" ? "Sign in" : "Sign up"} failed`);
       }
     } catch (err) {
-      error({ err: err }, "[SIGNIN PAGE] Error");
+      error({ err }, "[AUTH PAGE] Error");
       setError("An error occurred");
     } finally {
       setLoading(false);
@@ -55,14 +90,26 @@ export default function SignInPage() {
     <PageShell>
       <main className="flex items-center justify-center min-h-[60vh]">
         <Card accent="bubblegum" className="w-full max-w-md p-8">
-          <h1 className="font-display text-3xl font-bold text-center text-ink mb-6">Sign In</h1>
+          <h1 className="font-display text-3xl font-bold text-center text-ink mb-6">
+            {mode === "signin" ? "Sign In" : "Sign Up"}
+          </h1>
           {error && (
             <div className="flex items-center gap-2 text-coral bg-coral/10 px-4 py-3 rounded-xl mb-4">
               <AlertCircle size={18} />
               <p className="text-sm font-bold">{error}</p>
             </div>
           )}
-          <form onSubmit={handleSignIn} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === "signup" && (
+              <input
+                type="text"
+                placeholder="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+              />
+            )}
             <input
               type="email"
               placeholder="Email"
@@ -79,16 +126,31 @@ export default function SignInPage() {
               required
               className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
             />
+            <label className="flex items-center gap-2 text-sm font-bold text-ink/70 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rememberEmail}
+                onChange={(e) => setRememberEmail(e.target.checked)}
+                className="size-5 accent-grape"
+              />
+              Remember my email
+            </label>
             <Button variant="primary" size="lg" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Loading..." : mode === "signin" ? "Sign In" : "Sign Up"}
             </Button>
           </form>
           <div className="text-center mt-6">
             <p className="text-ink/60 text-sm">
-              Don&apos;t have an account?{" "}
-              <a href="/auth/signup" className="text-grape hover:text-grape/80 font-bold underline">
-                Sign up
-              </a>
+              {mode === "signin"
+                ? "Don't have an account? "
+                : "Already have an account? "}
+              <button
+                type="button"
+                onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                className="text-grape hover:text-grape/80 font-bold underline"
+              >
+                {mode === "signin" ? "Sign up" : "Sign in"}
+              </button>
             </p>
           </div>
         </Card>
