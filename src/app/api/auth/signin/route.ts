@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -13,6 +14,64 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // ─── Dev Mode: Mock sign in ──────────────────────────────
+  if (process.env.AUTH_MODE === "dev") {
+    const email = body?.email?.toLowerCase().trim() || "";
+    
+    let userId = "dev-user-parent-001";
+    let role = "admin";
+    let name = "Parent";
+    
+    if (email.includes("child")) {
+      userId = "dev-user-child-001";
+      role = "child";
+      name = "Child";
+    } else if (email.includes("parent")) {
+      userId = "dev-user-parent-001";
+      role = "admin";
+      name = "Parent";
+    }
+
+    const session = createDevSession({ userId });
+
+    // Ensure DB user record exists in dev mode
+    try {
+      const { initDb } = await import("@/db/drizzle");
+      const db = await initDb();
+      if (db) {
+        const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).first();
+        
+        if (!existingUser) {
+          await db.insert(schema.users).values({
+            id: session.user.id,
+            email: email || null,
+            name: name,
+            role: role,
+            avatarUrl: null,
+            familyId: "dev-family-001",
+            pointsTotal: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+      }
+    } catch (dbError) {
+      console.error("[DEV SIGNIN] Database sync failed:", dbError);
+    }
+
+    const response = NextResponse.json({ 
+      ok: true, 
+      userId: session.user.id,
+      email: session.user.email,
+      role: role,
+      message: "Sign in successful (dev mode)"
+    });
+
+    setDevSessionCookie(response.headers, session);
+    return response;
+  }
+
+  // ─── Production Mode: Use Supabase Auth ────────────────
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
