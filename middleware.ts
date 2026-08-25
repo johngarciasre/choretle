@@ -128,7 +128,15 @@ export async function middleware(request: NextRequest) {
   // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
   if (isDevMode()) {
     const devUser = getDevUserFromRequest(request);
-    
+
+    // Check for signout flag — redirect to homepage if explicitly signed out
+    if (!devUser) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      if (cookieHeader.includes("dev-signout=true")) {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+    }
+
     let userId: string | null = null;
     let familyId: string | null = null;
 
@@ -139,19 +147,13 @@ export async function middleware(request: NextRequest) {
       userId = devUser.id;
       familyId = devUser.familyId || null;
     } else {
-      // Check if user explicitly signed out (persisted flag)
-      const cookieHeader = request.headers.get("cookie") || "";
-      const hasSignoutFlag = cookieHeader.includes("dev-signout=true");
-
-      if (!hasSignoutFlag) {
-        // Auto-sign in admin user only if not explicitly signed out
-        const session = createDevSession({ userId: "dev-user-admin-001" });
-        setDevSessionCookie(response.headers, session);
-        response.headers.set("x-user-id", session.user.id);
-        response.headers.set("x-family-id", "dev-family-001");
-        userId = session.user.id;
-        familyId = "dev-family-001";
-      }
+      // Auto-sign in admin user only if not explicitly signed out
+      const session = createDevSession({ userId: "dev-user-admin-001" });
+      setDevSessionCookie(response.headers, session);
+      response.headers.set("x-user-id", session.user.id);
+      response.headers.set("x-family-id", "dev-family-001");
+      userId = session.user.id;
+      familyId = "dev-family-001";
     }
 
     // Set user headers for protected routes
