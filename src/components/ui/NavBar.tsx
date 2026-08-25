@@ -40,7 +40,7 @@ export function NavBar() {
       .then((data) => setUser(data.user ?? null))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -51,6 +51,14 @@ export function NavBar() {
     };
     document.addEventListener("mousedown", handler);
   }, [menuOpen]);
+
+  useEffect(() => {
+    // Clear cached user when navigating to auth pages
+    if (pathname === "/auth/signin") {
+      setUser(null);
+      setLoading(false);
+    }
+  }, [pathname]);
 
   const isActive = (href: string) => {
     if (pathname === href) return true;
@@ -65,14 +73,11 @@ export function NavBar() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "global" }),
       });
-      // Clear the dev-signout flag so user can sign in again
-      if (typeof window !== 'undefined') {
-        document.cookie = "dev-signout; path=/; secure=false";
-      }
-      router.push("/");
+      // Full reload picks up the signout cookie from server response
+      window.location.href = "/";
     } catch (e) {
       error("Sign out failed", { err: e });
-      router.push("/");
+      window.location.href = "/";
     }
   };
 
@@ -89,60 +94,62 @@ export function NavBar() {
           <span className="font-display text-2xl font-bold text-ink">Choretle</span>
         </Link>
 
-        {/* Right: Nav links + profile */}
+        {/* Right: Profile */}
         <div className="flex items-center gap-3">
-          <nav className="hidden lg:flex items-center gap-1">
-            {NAV_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "px-3 py-2 rounded-full text-sm font-bold transition",
-                  isActive(href)
-                    ? "bg-grape/15 text-grape"
-                    : "text-ink/70 hover:bg-ink/5 hover:text-ink"
-                )}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-
-          {/* Auth area */}
           {loading ? null : user ? (
-            <div ref={menuRef} className="relative">
-              <button
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="flex items-center gap-1 rounded-full bg-white border-2 border-ink/10 px-2 py-1 transition hover:border-grape/40"
-                title={user.email}
-              >
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-grape text-sm font-bold text-white">
-                  {initials}
-                </div>
-              </button>
-
-              {menuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-[200px] rounded-lg border-2 border-ink/10 bg-white shadow-md z-50">
-                  <div className="border-b-2 border-b-ink/10 px-4 py-3">
-                    <p className="text-sm font-bold text-ink truncate">{user.name || user.email}</p>
-                    <p className="text-xs text-ink/60 truncate">{user.email}</p>
-                  </div>
-                  <button
-                    onClick={handleSignOut}
-                    className="flex w-full items-center gap-2 border-t-2 border-t-ink/5 px-4 py-3 text-sm font-bold text-ink/70 transition hover:bg-ink/5 hover:text-ink"
+            <>
+              <nav className="hidden lg:flex items-center gap-1">
+                {NAV_LINKS.map(({ href, label }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "px-3 py-2 rounded-full text-sm font-bold transition",
+                      isActive(href)
+                        ? "bg-grape/15 text-grape"
+                        : "text-ink/70 hover:bg-ink/5 hover:text-ink"
+                    )}
                   >
-                    <LogOut className="size-5" />
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
+                    {label}
+                  </Link>
+                ))}
+              </nav>
+
+              {/* Profile dropdown */}
+              <div ref={menuRef} className="relative">
+                <button
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className="flex items-center gap-1 rounded-full bg-white border-2 border-ink/10 px-2 py-1 transition hover:border-grape/40"
+                  title={user.email}
+                >
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-grape text-sm font-bold text-white">
+                    {initials}
+                  </div>
+                </button>
+
+                {menuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-[200px] rounded-lg border-2 border-ink/10 bg-white shadow-md z-50">
+                    <div className="border-b-2 border-b-ink/10 px-4 py-3">
+                      <p className="text-sm font-bold text-ink truncate">{user.name || user.email}</p>
+                      <p className="text-xs text-ink/60 truncate">{user.email}</p>
+                    </div>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex w-full items-center gap-2 border-t-2 border-t-ink/5 px-4 py-3 text-sm font-bold text-ink/70 transition hover:bg-ink/5 hover:text-ink"
+                    >
+                      <LogOut className="size-5" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             <Link
               href="/auth/signin"
               className="rounded-full bg-grape px-4 py-2 text-sm font-bold text-white transition hover:bg-grape/80"
             >
-              Sign Up
+              Sign In
             </Link>
           )}
         </div>

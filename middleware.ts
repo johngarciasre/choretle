@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { createDevSession, setDevSessionCookie, getDevUserFromRequest } from "@/lib/dev-auth";
+import { getDevUserFromRequest } from "@/lib/dev-auth";
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -129,40 +129,20 @@ export async function middleware(request: NextRequest) {
   if (isDevMode()) {
     const devUser = getDevUserFromRequest(request);
 
-    // Check for signout flag — redirect to homepage if explicitly signed out
+    // Unauthed dev users -> redirect to homepage
     if (!devUser) {
-      const cookieHeader = request.headers.get("cookie") || "";
-      if (cookieHeader.includes("dev-signout=true")) {
-        return NextResponse.redirect(new URL("/", request.url));
-      }
+      return NextResponse.redirect(new URL("/", request.url));
     }
 
-    let userId: string | null = null;
-    let familyId: string | null = null;
-
-    // Create response object to set headers on
-    const response = NextResponse.next();
-
-    if (devUser) {
-      userId = devUser.id;
-      familyId = devUser.familyId || null;
-    } else {
-      // Auto-sign in admin user only if not explicitly signed out
-      const session = createDevSession({ userId: "dev-user-admin-001" });
-      setDevSessionCookie(response.headers, session);
-      response.headers.set("x-user-id", session.user.id);
-      response.headers.set("x-family-id", "dev-family-001");
-      userId = session.user.id;
-      familyId = "dev-family-001";
-    }
+    let userId: string | null = devUser.id;
+    let familyId: string | null = devUser.familyId || null;
 
     // Set user headers for protected routes
-    if (userId) {
-      response.headers.set("x-user-id", userId);
-      response.headers.set("x-email", devUser?.email || "admin@choretle.dev");
-      response.headers.set("x-role", devUser?.role || "admin");
-      response.headers.set("x-family-id", familyId!);
-    }
+    const response = NextResponse.next();
+    response.headers.set("x-user-id", userId!);
+    response.headers.set("x-email", devUser.email);
+    response.headers.set("x-role", devUser.role);
+    response.headers.set("x-family-id", familyId!);
 
     return response;
   }

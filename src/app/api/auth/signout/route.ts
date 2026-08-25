@@ -31,9 +31,8 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
 
-      // Clear dev session cookie using the same API we use to set it
+      // Clear dev session and set signout flag to prevent middleware auto-login
       response.cookies.set(DEV_COOKIE_NAME, "", { path: "/", secure: false });
-      // Set persistent signout flag to prevent middleware auto-login
       response.cookies.set("dev-signout", "true", { path: "/", secure: false });
       return response;
     }
