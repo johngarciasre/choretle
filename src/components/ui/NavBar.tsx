@@ -69,10 +69,10 @@ export function NavBar() {
       if (typeof window !== 'undefined') {
         document.cookie = "dev-signout; path=/; secure=false";
       }
-      router.push("/auth/signin");
+      router.push("/");
     } catch (e) {
       error("Sign out failed", { err: e });
-      router.push("/auth/signin");
+      router.push("/");
     }
   };
 
