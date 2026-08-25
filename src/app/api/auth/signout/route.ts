@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const isGlobal = body.type === "global";
 
-    // ─── Dev Mode: Clear dev session cookie ────────────────
+    // ─── Dev Mode: Clear dev session cookie & set signout flag ────────────────
     if (process.env.AUTH_MODE === "dev") {
       const response = NextResponse.json(
         { 
@@ -31,8 +31,9 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
 
-      clearDevSessionCookie(response.headers);
-      // Set a persistent flag to prevent middleware from auto-logging back in (no httpOnly for dev)
+      // Clear dev session cookie using the same API we use to set it
+      response.cookies.set(DEV_COOKIE_NAME, "", { path: "/", secure: false });
+      // Set persistent signout flag to prevent middleware auto-login
       response.cookies.set("dev-signout", "true", { path: "/", secure: false });
       return response;
     }
