@@ -38,16 +38,24 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Redirect authenticated users away from marketing page ──────────
-  if (pathname === "/" && !isDevMode()) {
-    const supabase = await getSupabaseMiddlewareClient(request);
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session) {
+  if (pathname === "/") {
+    let isAuthenticated = false;
+
+    if (!isDevMode()) {
+      const supabase = await getSupabaseMiddlewareClient(request);
+      const { data: { session } } = await supabase.auth.getSession();
+      isAuthenticated = !!session;
+    } else {
+      const cookieHeader = request.headers.get("cookie") || "";
+      isAuthenticated = cookieHeader.includes("dev-session=") && !cookieHeader.includes("dev-signout=true");
+    }
+
+    if (isAuthenticated) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
-  // ─── Redirect unauthenticated users to sign in ──────────────────────
+  // ─── Redirect unauthenticated users to homepage ──────────────────────
   if (!isDevMode()) {
     const supabase = await getSupabaseMiddlewareClient(request);
     const { data: { session } } = await supabase.auth.getSession();
@@ -113,7 +121,7 @@ export async function middleware(request: NextRequest) {
         }
       }
 
-      return NextResponse.redirect(new URL("/auth/signin", request.url));
+      return NextResponse.redirect(new URL("/", request.url));
     }
   }
 
