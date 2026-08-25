@@ -89,7 +89,7 @@ export function NavBar() {
     <nav className="sticky top-0 z-40 bg-cream/90 backdrop-blur border-b-2 border-ink/5">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
         {/* Left: Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <Star className="text-coral fill-coral size-7" />
           <span className="font-display text-2xl font-bold text-ink">Choretle</span>
         </Link>
