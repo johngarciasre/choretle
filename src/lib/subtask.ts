@@ -47,7 +47,7 @@ export async function completeSubtask(subtaskId: string, jobId: string, userId?:
   if (!db) return 0;
 
   // Get the job to check its status
-  const job = await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).first();
+  const job = (await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
   if (!job) return 0;
 
   // Subtasks can only be completed on active jobs (status !== "done")
@@ -58,7 +58,7 @@ export async function completeSubtask(subtaskId: string, jobId: string, userId?:
   // Get the subtask record to find its points
   const subtaskRecord = await db.select().from(schema.jobSubtasks).where(
     and(eq(schema.jobSubtasks.id, subtaskId), eq(schema.jobSubtasks.jobId, jobId))
-  ).first();
+  ).limit(1)[0];
 
   if (!subtaskRecord) return 0;
 
@@ -81,7 +81,7 @@ export async function completeSubtask(subtaskId: string, jobId: string, userId?:
 
   // Award points to user if userId provided
   if (userId && pointsAwarded > 0) {
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
     if (user) {
       const newTotal = ((user as any).pointsTotal || 0) + pointsAwarded;
       await db.update(schema.users).set({ pointsTotal: newTotal }).where(eq(schema.users.id, userId));

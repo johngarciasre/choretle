@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     if (jobId && subtaskId) {
       // Create a job subtask instance from a task subtask
-      const subtask = await db.select().from(schema.subtasks).where({ id: subtaskId, familyId }).first();
+      const subtask = (await db.select().from(schema.subtasks).where({ id: subtaskId, familyId }).limit(1))[0];
       if (!subtask) {
         return NextResponse.json({ error: "Subtask not found in this family" }, { status: 404 });
       }
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         pointsAwarded: (subtask as any).points || points || 0,
       }).returning("*");
 
-      return NextResponse.json(jobSubtask[0]);
+      return NextResponse.json(jobSubtask ? jobSubtask[0] : null);
     }
 
     if (taskId && name) {
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
         order: order ?? 0,
       }).returning("*");
 
-      return NextResponse.json(subtask[0]);
+      return NextResponse.json(subtask ? subtask[0] : null);
     }
 
     return NextResponse.json({ error: "taskId + name OR jobId + subtaskId required" }, { status: 400 });

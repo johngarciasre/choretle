@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       const { initDb } = await import("@/db/drizzle");
       const db = await initDb();
       if (db) {
-        const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).first();
+        const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).limit(1))[0];
         
         if (!existingUser) {
           await db.insert(schema.users).values({
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     const { initDb } = await import("@/db/drizzle");
     const db = await initDb();
     if (db) {
-      const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).first();
+      const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).limit(1))[0];
       
       if (!existingUser) {
         // Create DB user record on first sign in

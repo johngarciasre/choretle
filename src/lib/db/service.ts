@@ -39,7 +39,7 @@ export async function getFamilyById(id: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.families).where({ id }).first()
+    db.select().from(schema.families).where({ id }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -48,7 +48,7 @@ export async function getFamilyBySlug(slug: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.families).where({ slug }).first()
+    db.select().from(schema.families).where({ slug }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -77,7 +77,7 @@ export async function getUserById(id: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.users).where({ id }).first()
+    db.select().from(schema.users).where({ id }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -86,7 +86,7 @@ export async function getUserByEmail(email: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.users).where({ email }).first()
+    db.select().from(schema.users).where({ email }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -106,7 +106,7 @@ export async function getProfileByUserId(userId: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.users).where({ id: userId }).first()
+    db.select().from(schema.users).where({ id: userId }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -174,7 +174,7 @@ export async function getTaskById(id: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.tasks).where({ id }).first()
+    db.select().from(schema.tasks).where({ id }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -239,7 +239,7 @@ export async function getSlateById(id: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.slates).where({ id }).first()
+    db.select().from(schema.slates).where({ id }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -326,7 +326,7 @@ export async function getJobById(id: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.jobs).where({ id }).first()
+    db.select().from(schema.jobs).where({ id }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -364,7 +364,7 @@ export async function getListBySlateAndDate(slateId: string, startDate: Date) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.lists).where({ slateId, startDate }).first()
+    db.select().from(schema.lists).where({ slateId, startDate }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -440,7 +440,7 @@ export async function upsertRotation(data: {
   const db = await ensureDb();
   if (!db) return null;
   const existing = await safeQuery(
-    db.select().from(schema.rotations).where({ id: data.id }).first()
+    db.select().from(schema.rotations).where({ id: data.id }).limit(1)[0]
   );
 
   if (existing && data.id) {
@@ -532,7 +532,7 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
   if (!db) return null;
 
   const job = await safeQuery(
-    db.select().from(schema.jobs).where({ id }).first()
+    db.select().from(schema.jobs).where({ id }).limit(1)[0]
   );
   if (!job) return null;
 
@@ -568,7 +568,7 @@ export async function completeJob(id: string, userId?: string) {
   if (!db) return null;
 
   const job = await safeQuery(
-    db.select().from(schema.jobs).where({ id }).first()
+    db.select().from(schema.jobs).where({ id }).limit(1)[0]
   );
   if (!job) return null;
 
@@ -597,7 +597,7 @@ export async function completeJob(id: string, userId?: string) {
     // Award points to user if userId provided
     if (userId && totalPoints > 0) {
       const user = await safeQuery(
-        db.select().from(schema.users).where({ id: userId }).first()
+        db.select().from(schema.users).where({ id: userId }).limit(1)[0]
       );
       if (user) {
         const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
@@ -632,7 +632,7 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
   try {
     // Get the job to check its status
     const job = await safeQuery(
-      db.select().from(schema.jobs).where({ id: jobId }).first()
+      db.select().from(schema.jobs).where({ id: jobId }).limit(1)[0]
     );
     if (!job) return 0;
 
@@ -643,7 +643,7 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
 
     // Get the subtask record to find its points
     const subtaskRecord = await safeQuery(
-      db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.id, id), eq(schema.jobSubtasks.jobId, jobId))).first()
+      db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.id, id), eq(schema.jobSubtasks.jobId, jobId))).limit(1)[0]
     );
     if (!subtaskRecord) return 0;
 
@@ -661,7 +661,7 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
     // Award points to user if userId provided
     if (userId && pointsAwarded > 0) {
       const user = await safeQuery(
-        db.select().from(schema.users).where({ id: userId }).first()
+        db.select().from(schema.users).where({ id: userId }).limit(1)[0]
       );
       if (user) {
         const newTotal = ((user as any).pointsTotal || 0) + pointsAwarded;
@@ -806,7 +806,7 @@ export async function getInviteByCode(code: string) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.select().from(schema.invites).where({ code }).first()
+    db.select().from(schema.invites).where({ code }).limit(1)[0]
   );
   return res as Selectable<any> | null;
 }
@@ -846,7 +846,7 @@ export async function getUserStats(userId: string) {
   const db = await ensureDb();
   if (!db) return null;
   const user = await safeQuery(
-    db.select().from(schema.users).where({ id: userId }).first()
+    db.select().from(schema.users).where({ id: userId }).limit(1)[0]
   );
   if (!user) return null;
 
@@ -908,10 +908,10 @@ export async function swapRotationEntries(
 
   try {
     const rotation1 = await safeQuery(
-      db.select().from(schema.rotations).where({ id: rotationId1 }).first()
+      db.select().from(schema.rotations).where({ id: rotationId1 }).limit(1)[0]
     );
     const rotation2 = await safeQuery(
-      db.select().from(schema.rotations).where({ id: rotationId2 }).first()
+      db.select().from(schema.rotations).where({ id: rotationId2 }).limit(1)[0]
     );
 
     if (!rotation1 || !rotation2) return null;

@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
         const existingUserWithFamily = await db.select().from(schema.users).where(
           eq(schema.users.id, userId),
           sql`${schema.users.familyId} IS NOT NULL`
-        ).first();
+        ).limit(1)[0];
 
         if (!existingUserWithFamily) {
           // Create a default family for the new user
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create or update user record in users table
-        const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, userId)).first();
+        const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
         
         if (!existingUser) {
           await db.insert(schema.users).values({

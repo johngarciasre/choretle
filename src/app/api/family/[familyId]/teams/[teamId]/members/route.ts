@@ -29,7 +29,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
       return { error: "Database not initialized" };
     }
 
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
     if (!user) {
       return { error: "User not found" };
     }
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     // Verify user belongs to this family
     const memberFamily = await db.select().from(schema.users).where(
       and(eq(schema.users.id, userId), eq(schema.users.familyId, authResult.familyId))
-    ).first();
+    ).limit(1)[0];
 
     if (!memberFamily) {
       return NextResponse.json({ error: "User not found in this family" }, { status: 404 });
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     // Verify the team belongs to this family and user has access
     const team = await db.select().from(schema.teams).where(
       and(eq(schema.teams.id, teamId), eq(schema.teams.familyId, authResult.familyId))
-    ).first();
+    ).limit(1)[0];
 
     if (!team) {
       return NextResponse.json({ error: "Team not found or access denied" }, { status: 403 });
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Check if user is already a member of this team
     const existingMember = await db.select().from(schema.teamMembers).where(
       and(eq(schema.teamMembers.teamId, teamId), eq(schema.teamMembers.userId, userId))
-    ).first();
+    ).limit(1)[0];
 
     if (existingMember) {
       return NextResponse.json({ error: "User is already a member of this team" }, { status: 409 });

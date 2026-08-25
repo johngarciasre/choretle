@@ -30,7 +30,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
       return { error: "Database not initialized" };
     }
 
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
     if (!user) {
       return { error: "User not found" };
     }
@@ -106,13 +106,13 @@ export async function POST(request: NextRequest) {
     const db = await createDb();
 
     // Verify the sharing family exists and belongs to the authenticated user
-    const sharingFamily = await db.select().from(schema.families).where(eq(schema.families.id, sharingFamilyId)).first();
+    const sharingFamily = (await db.select().from(schema.families).where(eq(schema.families.id, sharingFamilyId)).limit(1))[0];
     if (!sharingFamily) {
       return NextResponse.json({ error: "Sharing family not found" }, { status: 404 });
     }
 
     // Verify requesting family exists
-    const requestingFamily = await db.select().from(schema.families).where(eq(schema.families.id, requestingFamilyId)).first();
+    const requestingFamily = (await db.select().from(schema.families).where(eq(schema.families.id, requestingFamilyId)).limit(1))[0];
     if (!requestingFamily) {
       return NextResponse.json({ error: "Requesting family not found" }, { status: 404 });
     }
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     // Check that the user is part of the sharing family
     const isMember = await db.select().from(schema.users).where(
       and(eq(schema.users.id, userId), eq(schema.users.familyId, sharingFamilyId))
-    ).first();
+    ).limit(1)[0];
 
     if (!isMember) {
       return NextResponse.json({ error: "You are not a member of the sharing family" }, { status: 403 });
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
         eq(schema.swapMeet.sharingFamilyId, sharingFamilyId),
         or(eq(schema.swapMeet.requestedBy, requestingFamilyId))
       )
-    ).first();
+    ).limit(1)[0];
 
     if (existingSwap) {
       return NextResponse.json({ 
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
       for (const slateId of slateIds) {
         const slate = await db.select().from(schema.slates).where(
           and(eq(schema.slates.id, slateId), eq(schema.slates.familyId, sharingFamilyId))
-        ).first();
+        ).limit(1)[0];
 
         if (slate) {
           validSlateIds.push(slate.id);

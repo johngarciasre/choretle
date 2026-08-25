@@ -29,7 +29,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
       return { error: "Database not initialized" };
     }
 
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
     if (!user) {
       return { error: "User not found" };
     }
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch family data
-    const family = await db.select().from(schema.families).where(eq(schema.families.id, familyId)).first();
+    const family = (await db.select().from(schema.families).where(eq(schema.families.id, familyId)).limit(1))[0];
     if (!family) {
       return NextResponse.json({ error: "Family not found" }, { status: 404 });
     }
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
     // Check if family with this slug already exists
-    const existingFamily = await db.select().from(schema.families).where(eq(schema.families.slug, slug)).first();
+    const existingFamily = (await db.select().from(schema.families).where(eq(schema.families.slug, slug)).limit(1))[0];
     if (existingFamily) {
       return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
     }
@@ -180,7 +180,7 @@ export async function PATCH(request: NextRequest) {
     // Verify user owns this family
     const userFamily = await db.select().from(schema.users).where(
       and(eq(schema.users.id, authResult.userId), eq(schema.users.familyId, familyId))
-    ).first();
+    ).limit(1)[0];
 
     if (!userFamily) {
       return NextResponse.json({ error: "You don't have access to this family" }, { status: 403 });
@@ -191,7 +191,7 @@ export async function PATCH(request: NextRequest) {
     if (teamsEnabled !== undefined) updates.teamsEnabled = teamsEnabled;
     if (name) {
       const newSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-      const existingFamily = await db.select().from(schema.families).where(eq(schema.families.slug, newSlug)).first();
+      const existingFamily = (await db.select().from(schema.families).where(eq(schema.families.slug, newSlug)).limit(1))[0];
       if (existingFamily && existingFamily.id !== familyId) {
         return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
       }

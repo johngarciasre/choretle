@@ -69,7 +69,7 @@ export async function createJobHistory(jobId: string, action: string, details?: 
 export async function transitionJob(jobId: string, newStatus: string, userId?: string): Promise<Job | null> {
   if (!db) return null;
 
-  const job = await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).first();
+  const job = (await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
   if (!job) return null;
 
   const currentStatus = (job as any).status;
@@ -101,7 +101,7 @@ export async function transitionJob(jobId: string, newStatus: string, userId?: s
 export async function completeJob(jobId: string, userId?: string): Promise<Job | null> {
   if (!db) return null;
 
-  const job = await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).first();
+  const job = (await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
   if (!job) return null;
 
   const currentStatus = (job as any).status;
@@ -125,7 +125,7 @@ export async function completeJob(jobId: string, userId?: string): Promise<Job |
 
   // Award points to user if userId provided
   if (userId && totalPoints > 0) {
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
     if (user) {
       const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
       await db.update(schema.users).set({ pointsTotal: newTotal }).where(eq(schema.users.id, userId));

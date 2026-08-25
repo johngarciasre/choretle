@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       const { initDb } = await import("@/db/drizzle");
       const db = await initDb();
       if (db) {
-        const dbUser = await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).first();
+        const dbUser = (await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).limit(1))[0];
         if (dbUser) {
           familyId = dbUser.familyId || null;
           role = dbUser.role || "child";

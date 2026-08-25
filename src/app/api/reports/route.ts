@@ -29,7 +29,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
       return { error: "Database not initialized" };
     }
 
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
     if (!user) {
       return { error: "User not found" };
     }

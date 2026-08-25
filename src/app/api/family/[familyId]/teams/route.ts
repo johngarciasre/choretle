@@ -29,7 +29,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
       return { error: "Database not initialized" };
     }
 
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
     if (!user) {
       return { error: "User not found" };
     }
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     // Verify user belongs to this family
     const userFamily = await db.select().from(schema.users).where(
       and(eq(schema.users.id, authResult.userId), eq(schema.users.familyId, authResult.familyId))
-    ).first();
+    ).limit(1)[0];
 
     if (!userFamily) {
       return NextResponse.json({ error: "You don't have access to this family" }, { status: 403 });

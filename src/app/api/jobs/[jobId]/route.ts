@@ -30,7 +30,7 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
       return { error: "Database not initialized" };
     }
 
-    const user = await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).first();
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
     if (!user) {
       return { error: "User not found" };
     }
@@ -60,21 +60,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Fetch job
-    const job = await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).first();
+    const job = (await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
     // Check family access (jobs are accessed via slate/tasks which belong to families)
     if ((job as any).listId) {
-      const list = await db.select().from(schema.lists).where(eq(schema.lists.id, job.listId)).first();
+      const list = (await db.select().from(schema.lists).where(eq(schema.lists.id, job.listId)).limit(1))[0];
       if (list && list.familyId && list.familyId !== authResult.familyId) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
     }
 
     // Fetch associated task info (truncated for job view)
-    const task = await db.select().from(schema.tasks).where(eq(schema.tasks.id, job.slateTaskId)).first();
+    const task = (await db.select().from(schema.tasks).where(eq(schema.tasks.id, job.slateTaskId)).limit(1))[0];
 
     // Fetch comments
     const comments = await db.select({
@@ -177,7 +177,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Fetch current job
-    const job = await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).first();
+    const job = (await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -228,7 +228,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Update job
     const updatedJobResult = await db.update(schema.jobs).set(updateData).where(eq(schema.jobs.id, jobId)).returning("*");
-    const result = updatedJobResult ? (updatedJobResult as any[])[0] || null : null;
+    const result = updatedJobResult[0] || null;
 
     if (result) {
       // Create history entry
@@ -251,7 +251,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
           // Award points to user if userId provided
           if (authResult.userId && totalPoints > 0) {
-            const user = await db.select().from(schema.users).where(eq(schema.users.id, authResult.userId)).first();
+            const user = (await db.select().from(schema.users).where(eq(schema.users.id, authResult.userId)).limit(1))[0];
             if (user) {
               const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
               await db.update(schema.users).set({ pointsTotal: newTotal }).where(eq(schema.users.id, authResult.userId));
