@@ -31,9 +31,10 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
 
-      // Clear dev session and set signout flag to prevent middleware auto-login
-      response.cookies.set(DEV_COOKIE_NAME, "", { path: "/", secure: false });
-      response.cookies.set("dev-signout", "true", { path: "/", secure: false });
+      // Use raw Set-Cookie headers to reliably clear dev session and set signout flag
+      // response.cookies.delete() doesn't work in Node runtime API routes -> middleware
+      response.headers.append("Set-Cookie", `${DEV_COOKIE_NAME}=; path=/; secure=false; httponly=true`);
+      response.headers.append("Set-Cookie", `dev-signout=true; path=/; secure=false; httponly=true`);
       return response;
     }
 

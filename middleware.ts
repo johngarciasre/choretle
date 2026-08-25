@@ -128,9 +128,11 @@ export async function middleware(request: NextRequest) {
   // ─── Dev Mode: Skip real auth, use mock users ──────────────────────
   if (isDevMode()) {
     const devUser = getDevUserFromRequest(request);
+    const cookieHeader = request.headers.get("cookie") || "";
+    const isSignedOut = cookieHeader.includes("dev-signout=true");
 
-    // Unauthed dev users -> redirect to homepage
-    if (!devUser) {
+    // Unauthed or explicitly signed-out dev users -> redirect to homepage
+    if (!devUser || isSignedOut) {
       return NextResponse.redirect(new URL("/", request.url));
     }
 

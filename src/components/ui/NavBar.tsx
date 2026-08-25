@@ -53,10 +53,11 @@ export function NavBar() {
   }, [menuOpen]);
 
   useEffect(() => {
-    // Clear cached user when navigating to auth pages
+    // Clear cached user and signout flag when navigating to auth pages
     if (pathname === "/auth/signin") {
       setUser(null);
       setLoading(false);
+      document.cookie = "dev-signout; path=/; secure=false";
     }
   }, [pathname]);
 
