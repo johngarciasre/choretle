@@ -4,7 +4,9 @@ import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { PageShell, PageLoader } from "@/components/ui";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface RotationAssignment {
   date: string;
@@ -41,6 +43,7 @@ interface SwapMeetEntry {
 }
 
 export default function SwapMeetPage() {
+  const authChecked = useAuthRedirect();
   const pathname = usePathname();
   const [schedule, setSchedule] = useState<SlateSchedule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -231,6 +234,8 @@ export default function SwapMeetPage() {
     setRequestingFamilyId("");
     setSelectedSlateIdsForSharing([]);
   };
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   if (!familyId) {
     return (

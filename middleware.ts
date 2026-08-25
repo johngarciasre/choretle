@@ -3,7 +3,6 @@ import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { getDevUserFromRequest } from "@/lib/dev-auth";
 
 const PUBLIC_ROUTES = [
-  "/auth/signin",
   "/_next/static",
   "/_next/image",
   "/favicon.ico",
@@ -21,7 +20,7 @@ const PUBLIC_API_ROUTES = [
   "/api/schedules/generate",
 ];
 
-const SIGNIN_URL = "/auth/signin";
+const REDIRECT_URL = "/";
 
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -106,36 +105,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ─── Redirect authenticated users away from marketing page ──────────
-  if (pathname === "/") {
-    let isAuthenticated = false;
-
-    if (!isDevMode()) {
-      const result = await getSessionFromSupabase(request);
-      isAuthenticated = !!(result?.session);
-    } else {
-      const cookieHeader = request.headers.get("cookie") || "";
-      isAuthenticated = cookieHeader.includes("dev-session=") && !cookieHeader.includes("dev-signout=true");
-    }
-
-    if (isAuthenticated) {
-      const response = NextResponse.redirect(new URL("/dashboard", request.url));
-      setNoCacheHeaders(response);
-      return response;
-    }
+  // ─── Allow all requests through (auth checks handled per-route or by API) ──
+  const result = await getSessionFromSupabase(request);
+  
+  if (!isDevMode() && result?.session) {
+    const response = NextResponse.next();
+    setNoCacheHeaders(response);
+    return response;
   }
 
-  // ─── Production Mode: Check Supabase session ─────────────────────────
+  // Check for elevated websudo session as fallback
   if (!isDevMode()) {
-    const result = await getSessionFromSupabase(request);
-    
-    if (result?.session) {
-      const response = NextResponse.next();
-      setNoCacheHeaders(response);
-      return response;
-    }
-
-    // Check for elevated websudo session as fallback
     const websudoValid = await checkWebsudoAuth(request);
     if (websudoValid) {
       const cookieHeader = request.headers.get("cookie") || "";
@@ -159,7 +139,7 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    const response = NextResponse.redirect(new URL(SIGNIN_URL, request.url));
+    const response = NextResponse.redirect(new URL(REDIRECT_URL, request.url));
     setNoCacheHeaders(response);
     return response;
   }
@@ -170,7 +150,7 @@ export async function middleware(request: NextRequest) {
   const isSignedOut = cookieHeader.includes("dev-signout=true");
 
   if (!devUser || isSignedOut) {
-    const response = NextResponse.redirect(new URL(SIGNIN_URL, request.url));
+    const response = NextResponse.redirect(new URL(REDIRECT_URL, request.url));
     setNoCacheHeaders(response);
     return response;
   }

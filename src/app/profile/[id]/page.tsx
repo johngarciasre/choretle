@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { PageShell, StatCard, Loading, Badge, Button, Card, PageHeader } from "@/components/ui";
 import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface JobCompletion {
   id: string;
@@ -38,6 +39,7 @@ interface UserStats {
 }
 
 export default function UserProfilePage() {
+  const authChecked = useAuthRedirect();
   const params = useParams();
   const userId = typeof params.id === "string" ? params.id : "";
 
@@ -129,6 +131,8 @@ export default function UserProfilePage() {
   }, [completions]);
 
   const maxDayPoints = useMemo(() => Math.max(...last7Days.map((d) => d.points), 1), [last7Days]);
+
+  if (!authChecked) return <PageShell><Loading label="Checking authentication..." /></PageShell>;
 
   if (loading) return <Loading label="Loading profile..." />;
 

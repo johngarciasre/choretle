@@ -1,27 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Star, ListChecks, Sparkles, Trophy, Heart, Smile, Gift } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageShell } from "@/components/ui/PageShell";
-import { getSupabaseClient } from "@/lib/supabase";
 
 export default function LandingPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    async function checkAuth() {
-      const supabase = getSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        router.replace("/dashboard");
-      }
-    }
-    checkAuth();
-  }, [router]);
-
   return (
     <PageShell>
       <main className="flex items-center justify-center min-h-[70vh]">

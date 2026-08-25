@@ -5,6 +5,7 @@ import { PageShell, PageHeader, PageLoader } from "@/components/ui";
 import RotationBoard from "@/components/RotationBoard";
 import type { UserRotation, SlateWithRotations, RotationAssignment } from "@/components/AssignmentCard";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Family {
   id: string;
@@ -12,6 +13,7 @@ interface Family {
 }
 
 export default function RotationsPage() {
+  const authChecked = useAuthRedirect();
   const [family, setFamily] = useState<Family | null>(null);
   const [users, setUsers] = useState<UserRotation[]>([]);
   const [slates, setSlates] = useState<SlateWithRotations[]>([]);
@@ -159,6 +161,7 @@ export default function RotationsPage() {
     }
   };
 
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageShell><PageLoader label="Loading rotations..." /></PageShell>;
 
   return (

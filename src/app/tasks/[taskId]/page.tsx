@@ -7,6 +7,7 @@ import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui"
 import { TagPill, Button } from "@/components/ui";
 import PhotoUploadModal from "@/components/PhotoUploadModal";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Task {
   id: string;
@@ -66,6 +67,7 @@ const fetchSubtasks = async (taskId: string) => {
 };
 
 export default function TaskPage() {
+  const authChecked = useAuthRedirect();
   const router = useRouter();
   const taskId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
   
@@ -173,6 +175,8 @@ export default function TaskPage() {
       prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
     );
   }
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   if (loading) return <PageLoader label="Loading task..." />;
   if (!task) return <EmptyState icon={<span className="text-2xl">📋</span>} title="Task not found" message="The task you're looking for doesn't exist." />;

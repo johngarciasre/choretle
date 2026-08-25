@@ -22,12 +22,12 @@ async function checkAuthInternal() {
       const data = await res.json();
       return data.user;
     } else {
-      window.location.href = "/auth/signin";
+      window.location.href = "/";
       return null;
     }
   } catch (e) {
     error({ err: e }, "Auth check failed");
-    window.location.href = "/auth/signin";
+    window.location.href = "/";
     return null;
   }
 }
@@ -50,7 +50,7 @@ export default function DashboardPage() {
   }
 
   if (!user) {
-    return null; // Will redirect to signin
+    return null; // Will redirect to /
   }
 
   return (

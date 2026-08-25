@@ -6,6 +6,7 @@ import { PageShell, PageHeader, EmptyState, Badge, PageLoader, Card } from "@/co
 import { TagPill, Button } from "@/components/ui";
 import { Trash2, Plus, Edit, X } from "lucide-react";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Task {
   id: string;
@@ -51,6 +52,7 @@ const fetchTags = async () => {
 };
 
 export default function TasksPage() {
+  const authChecked = useAuthRedirect();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,6 +153,7 @@ export default function TasksPage() {
     }
   }
 
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageShell><PageLoader label="Loading tasks..." /></PageShell>;
 
   return (

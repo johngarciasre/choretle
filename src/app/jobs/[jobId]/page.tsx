@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 import PhotoCarousel from "@/components/PhotoCarousel";
 import PhotoUploadModal from "@/components/PhotoUploadModal";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Job {
   id: string;
@@ -87,6 +88,7 @@ const fetchPhotos = async (objectType: string, objectId: string) => {
 };
 
 export default function JobPage() {
+  const authChecked = useAuthRedirect();
   const [job, setJob] = useState<Job | null>(null);
   const [validNextStatuses, setValidNextStatuses] = useState<string[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -186,6 +188,7 @@ export default function JobPage() {
   const totalSubtasks = subtaskInstances.length;
   const allCompleted = totalSubtasks > 0 && completedSubtasks === totalSubtasks;
 
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageLoader label="Loading job..." />;
   if (!job) return <EmptyState icon={<span className="text-2xl">📝</span>} title="Job not found" message="The job you're looking for doesn't exist." />;
 

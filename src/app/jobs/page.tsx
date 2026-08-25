@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, Badge, PageLoader } from "@/components/ui";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Job {
   id: string;
@@ -33,6 +34,7 @@ async function fetchJobs() {
 }
 
 export default function JobsPage() {
+  const authChecked = useAuthRedirect();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,6 +48,7 @@ export default function JobsPage() {
     });
   }, []);
 
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageLoader label="Loading jobs..." />;
 
   return (

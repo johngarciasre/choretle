@@ -3,10 +3,11 @@ import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from "@/components/ui";
+import { PageShell, PageHeader, EmptyState, Loading, PageLoader, Badge, Button, Card } from "@/components/ui";
 import { Star, Users, Plus, X, Pencil, Trash2, Tag as TagIcon } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Family {
   id: string;
@@ -55,6 +56,7 @@ interface User {
 }
 
 export default function FamilyPage() {
+  const authChecked = useAuthRedirect();
   const pathname = usePathname();
   const router = useRouter();
   
@@ -438,6 +440,8 @@ export default function FamilyPage() {
       alert("Failed to update theme.");
     }
   };
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   if (!isAuthenticated && pathname.startsWith("/family/")) {
     return (

@@ -6,6 +6,7 @@ import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/co
 import { TagPill, Button } from "@/components/ui";
 import { Trash2, Plus, X } from "lucide-react";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Task {
   id: string;
@@ -69,6 +70,7 @@ const fetchTags = async () => {
 };
 
 export default function SlatesPage() {
+  const authChecked = useAuthRedirect();
   const [slates, setSlates] = useState<Slate[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -176,6 +178,7 @@ export default function SlatesPage() {
     }
   }
 
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageShell><PageLoader label="Loading slates..." /></PageShell>;
 
   if (buildingSlateId) {

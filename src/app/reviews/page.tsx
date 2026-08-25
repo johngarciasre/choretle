@@ -5,6 +5,7 @@ import Link from "next/link";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { Button } from "@/components/ui";
 import { error } from "@/lib/logger";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface ReviewItem {
   review: {
@@ -28,6 +29,7 @@ interface ReviewItem {
 }
 
 export default function ReviewQueuePage() {
+  const authChecked = useAuthRedirect();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
@@ -79,6 +81,8 @@ export default function ReviewQueuePage() {
       alert("Failed to update review");
     }
   }
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   if (loading) return <PageLoader label="Loading review queue..." />;
 

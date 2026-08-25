@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, Card, Badge, StatCard, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface ReportData {
   type: string;
@@ -15,6 +16,7 @@ interface ReportData {
 type ReportType = "daily" | "done" | "task" | "member";
 
 export default function ReportsPage() {
+  const authChecked = useAuthRedirect();
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [activeTab, setActiveTab] = useState<ReportType>("daily");
   const [showWallboard, setShowWallboard] = useState(false);
@@ -64,6 +66,8 @@ export default function ReportsPage() {
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - Reports");
   }, []);
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   if (!reportData) {
     return <PageLoader label="Loading reports..." />;

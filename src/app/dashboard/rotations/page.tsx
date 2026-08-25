@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { PageShell } from "@/components/ui/PageShell";
+import { PageShell, PageLoader } from "@/components/ui";
 import { Card } from "@/components/ui/Card";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 export default function RotationsPage() {
+  const authChecked = useAuthRedirect();
   useEffect(() => {
     typeof window !== 'undefined' && (document.title = "Choretle - Rotations");
   }, []);
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   return (
     <PageShell>

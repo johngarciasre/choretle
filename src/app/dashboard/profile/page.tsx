@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
-import { PageShell } from "@/components/ui/PageShell";
+import { PageShell, PageLoader } from "@/components/ui";
 import { Card } from "@/components/ui/Card";
 import Link from "next/link";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 export default function ProfilePage() {
+  const authChecked = useAuthRedirect();
   useEffect(() => {
     typeof window !== 'undefined' && (document.title = "Choretle - Profile");
   }, []);
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   return (
     <PageShell>
