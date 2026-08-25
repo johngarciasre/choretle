@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // No special config needed - better-sqlite3 is now properly externalized
+  webpack: (config) => {
+    config.externals = [...(config.externals || []), "pino-pretty"];
+    return config;
+  },
 };
 
 export default nextConfig;

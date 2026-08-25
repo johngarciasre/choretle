@@ -1,5 +1,4 @@
 import pino from "pino";
-import pinoPretty from "pino-pretty";
 
 const isDev = process.env.NODE_ENV === "development";
 const isBrowser = typeof window !== "undefined";
@@ -10,7 +9,8 @@ if (isBrowser) {
   // Client-side: use silent logger to avoid bundling issues with pino/browser.js
   logger = pino({ level: "silent" });
 } else if (isDev) {
-  // Server-side dev: use pino-pretty for colored output
+  // Server-side dev: dynamically import pino-pretty to prevent client bundling
+  const { default: pinoPretty } = await import("pino-pretty");
   const transport = pinoPretty({ colorize: true }) as any;
   logger = pino({ level: "debug", transport });
 } else {
