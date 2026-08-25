@@ -52,6 +52,13 @@ export default function AuthPage() {
     }
   }, [mode, rememberEmail, email]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Clear signout flag on mount
+      document.cookie = "dev-signout; path=/; secure=false";
+    }
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     info("[AUTH PAGE] Starting auth flow", { mode });

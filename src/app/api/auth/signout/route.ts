@@ -5,7 +5,6 @@ import { error } from "@/lib/logger.server";
 
 /**
  * Check if Supabase credentials are properly configured.
- * Requires both URL and anon key to be set.
  */
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -33,8 +32,9 @@ export async function POST(request: NextRequest) {
 
       // Use raw Set-Cookie headers to reliably clear dev session and set signout flag
       // response.cookies.delete() doesn't work in Node runtime API routes -> middleware
-      response.headers.append("Set-Cookie", `${DEV_COOKIE_NAME}=; path=/; secure=false; httponly=true`);
-      response.headers.append("Set-Cookie", `dev-signout=true; path=/; secure=false; httponly=true`);
+      response.headers.append("Set-Cookie", `${DEV_COOKIE_NAME}=; path=/; secure=false; httpOnly=true`);
+      response.headers.append("Set-Cookie", "dev-signout=true; path=/; secure=false; httpOnly=true");
+      response.headers.append("Set-Cookie", "choretle_mode=; path=/; secure=false; httpOnly=true");
       return response;
     }
 
@@ -58,13 +58,23 @@ export async function POST(request: NextRequest) {
       await supabase.auth.signOut();
     }
 
-    return NextResponse.json(
+    // Also clear any Supabase-related cookies that might persist after signOut()
+    const response = NextResponse.json(
       { 
         ok: true, 
         message: isGlobal ? "Successfully logged out from all sessions" : "Successfully logged out" 
       },
       { status: 200 }
     );
+
+    // Clear all sb-* cookies (standard Supabase + custom ones set by signin)
+    for (const cookie of request.cookies.getAll()) {
+      if (cookie.name.startsWith("sb-")) {
+        response.cookies.delete(cookie.name);
+      }
+    }
+
+    return response;
   } catch (e) {
     error("Sign out failed", { err: e });
     
