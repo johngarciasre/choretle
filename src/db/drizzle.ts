@@ -144,19 +144,24 @@ function createTables(db: Database.Database): void {
 }
 
 let _db: any = null;
+let _rawDb: Database.Database | null = null;
 export const db: any = null;
 
 export async function initDb(): Promise<any> {
   if (_db) return _db;
   try {
     const Database = require("better-sqlite3");
-    const dbRaw = new Database(DB_PATH);
-    createTables(dbRaw);
-    _db = construct(dbRaw, { schema });
+    _rawDb = new Database(DB_PATH);
+    createTables(_rawDb);
+    _db = construct(_rawDb, { schema });
     console.log("[DB] Initialized SQLite database at", DB_PATH === ":memory:" ? "in-memory" : DB_PATH);
   } catch (error) {
     console.error("[DB] Failed to initialize SQLite:", error);
     throw error;
   }
   return _db;
+}
+
+export function getRawDb(): Database.Database | null {
+  return _rawDb;
 }

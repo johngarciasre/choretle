@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, getRawDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
-    const familyId = request.headers.get("x-family-id");
+    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
 
     if (!familyId) {
       return NextResponse.json([]);
@@ -48,23 +48,38 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, description, roomLocation, frequency, interval, defaultDueDateOffset, isActive } = body;
 
-    const familyId = request.headers.get("x-family-id");
+    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
     if (!name || !familyId) {
       return NextResponse.json({ error: "name and familyId are required" }, { status: 400 });
     }
 
-    const slate = await db.insert(schema.slates).values({
+    const slateId = crypto.randomUUID();
+    const rawDb = getRawDb();
+    
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
+    // Use raw SQL to avoid Drizzle ORM issues with boolean/int conversion
+    const stmt = rawDb.prepare(
+      `INSERT INTO slates (id, name, family_id, description, room_location, frequency, interval, default_due_date_offset, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    
+    stmt.run(
+      slateId,
       name,
       familyId,
-      description,
-      roomLocation,
-      frequency: frequency || "weekly",
-      interval: interval || 1,
-      defaultDueDateOffset: defaultDueDateOffset || 0,
-      isActive: isActive !== false,
-    }).returning("*");
+      description || null,
+      roomLocation || null,
+      frequency || "weekly",
+      interval || 1,
+      defaultDueDateOffset || 0,
+      (isActive !== false) ? 1 : 0,
+    );
 
-    return NextResponse.json(slate[0], { status: 201 });
+    const slate = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(slateId);
+
+    return NextResponse.json(slate, { status: 201 });
   } catch (error) {
     console.error("Slates POST failed:", error);
     return NextResponse.json({ error: "Failed to create slate" }, { status: 500 });

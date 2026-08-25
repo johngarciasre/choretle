@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
-    const familyId = request.headers.get("x-family-id");
+    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
 
     if (!familyId) {
       return NextResponse.json([]);
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, color } = body;
 
-    const familyId = request.headers.get("x-family-id");
+    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
     if (!name || !familyId) {
       return NextResponse.json({ error: "name and familyId are required" }, { status: 400 });
     }

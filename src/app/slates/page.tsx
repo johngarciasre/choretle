@@ -33,7 +33,8 @@ interface Slate {
 
 const fetchSlates = async () => {
   try {
-    const res = await fetch("/api/slates");
+    const fid = localStorage.getItem("familyId") || "";
+    const res = await fetch(`/api/slates?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch slates");
     return await res.json();
   } catch (error) {
@@ -44,7 +45,8 @@ const fetchSlates = async () => {
 
 const fetchTasks = async () => {
   try {
-    const res = await fetch("/api/tasks");
+    const fid = localStorage.getItem("familyId") || "";
+    const res = await fetch(`/api/tasks?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
   } catch (error) {
@@ -55,7 +57,8 @@ const fetchTasks = async () => {
 
 const fetchTags = async () => {
   try {
-    const res = await fetch("/api/tags");
+    const fid = localStorage.getItem("familyId") || "";
+    const res = await fetch(`/api/tags?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (error) {
@@ -89,11 +92,13 @@ export default function SlatesPage() {
     });
   }, []);
 
+  const familyId = typeof window !== "undefined" ? (localStorage.getItem("familyId") || "") : "";
+
   async function handleCreateSlate() {
     if (!newSlateName.trim()) return;
     
     try {
-      const res = await fetch("/api/slates", {
+      const res = await fetch(`/api/slates?familyId=${familyId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newSlateName }),

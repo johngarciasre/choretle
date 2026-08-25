@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
-    const familyId = request.headers.get("x-family-id");
+    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
     if (!familyId) return NextResponse.json([]);
 
     const searchParams = request.nextUrl.searchParams;
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { title, name, description, points, icon, archtype, tagIds, verifyRequired } = body;
 
-    const familyId = request.headers.get("x-family-id");
+    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
     if (!familyId || !title && !name) {
       return NextResponse.json({ error: "familyId and title are required" }, { status: 400 });
     }
