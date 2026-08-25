@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, getDevUserFromRequest } from "@/lib/dev-auth";
-import nodeCrypto from "crypto";
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -70,7 +69,7 @@ export async function middleware(request: NextRequest) {
             
             // Check expiration
             if (Date.now() < payload.exp) {
-              // Verify signature
+              // Verify signature using subtle-crypto for edge runtime compatibility
               const secret = process.env.WEBSUDO_SECRET || "dev-websudo-secret-change-me";
               const encoder = new TextEncoder();
               const key = await crypto.subtle.importKey(
@@ -89,11 +88,19 @@ export async function middleware(request: NextRequest) {
                 .map((b) => b.toString(16).padStart(2, "0"))
                 .join("");
               
-              // Timing-safe comparison of the signature hash
-              if (nodeCrypto.timingSafeEqual(
-                Buffer.from(hash, "hex"),
-                Buffer.from(expectedHash, "hex"),
-              )) {
+              // Timing-safe comparison of the signature hash (simple for now since subtle doesn't expose timingSafeEqual)
+              let different = false;
+              if (hash.length !== expectedHash.length) {
+                different = true;
+              } else {
+                for (let i = 0; i < hash.length; i++) {
+                  if (hash.charCodeAt(i) !== expectedHash.charCodeAt(i)) {
+                    different = true;
+                  }
+                }
+              }
+
+              if (!different) {
                 const response = NextResponse.next();
                 response.headers.set("x-user-id", payload.userId);
                 response.headers.set("x-email", payload.email);
