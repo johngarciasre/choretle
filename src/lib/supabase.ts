@@ -7,7 +7,7 @@
  * All clients are Edge-compatible and work in Next.js App Router.
  */
 
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, createBrowserClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 /**
@@ -30,6 +30,16 @@ export async function getSupabaseMiddlewareClient(request: NextRequest) {
         },
       },
     }
+  );
+}
+
+/**
+ * Gets a Supabase client instance for use in client components and hooks.
+ */
+export function getSupabaseClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 }
 
