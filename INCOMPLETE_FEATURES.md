@@ -4,17 +4,15 @@ A living inventory of stubbed-out features, missing APIs, mock data, and known g
 
 ---
 
+## ✅ COMPLETED (Resolved)
+
+### 1. Reports API queries ~~(was HIGH)~~
+**File:** `src/app/api/reports/route.ts` — **FIXED**
+All four stubbed generators (`getDoneReport`, `getTaskReport`, `getMemberReport`, `getWallboardReport`) now query the database with real joins across `jobs`, `slate_tasks`, `tasks`, and `users`. Frontend wired up to fetch from `/api/reports?type=<tab>` on mount and tab switches.
+
+---
+
 ## HIGH SEVERITY — Broken or non-functional in production
-
-### 1. Reports API — only `getDailyReport` has partial queries
-**File:** `src/app/api/reports/route.ts`
-Four of five report generators return empty structures:
-- `getDoneReport()` → `{ jobsCompleted: [], totalPointsEarned: 0 }`
-- `getTaskReport()` → `{ tasks: [], completionHistory: [] }`
-- `getMemberReport()` → `{ members: [], totalMembers: 0 }`
-- `getWallboardReport()` → `{ slates: [], totalOpenJobs: 0 }`
-
-**Frontend impact:** `src/app/reports/page.tsx` never calls the real API — it uses entirely hardcoded mock data and never fetches from `/api/reports`. The page renders mock tables instead of DB-backed reports.
 
 ### 2. Dashboard API — returns empty arrays
 **File:** `src/app/api/dashboard/route.ts`
@@ -103,11 +101,10 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Reports API queries** (#1) | Single file, well-defined schema, immediate visible impact |
-| 2 | **Jobs DELETE fix** (#4) | Small but critical — currently a lie to callers |
-| 3 | **Comments route** (#9) | Wired up by job detail page, straightforward CRUD |
-| 4 | **Dashboard API** (#2) | Next step after reports; touches scoring + leaderboard queries |
-| 5 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
-| 6 | **Server actions fix** (#3) | Family creation/joining is core workflow |
-| 7 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
-| 8 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 1 | **Jobs DELETE fix** (#4) | Small but critical — currently a lie to callers |
+| 2 | **Comments route** (#9) | Wired up by job detail page, straightforward CRUD |
+| 3 | **Dashboard API** (#2) | Touches scoring + leaderboard queries; good next step after reports |
+| 4 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
+| 5 | **Server actions fix** (#3) | Family creation/joining is core workflow |
+| 6 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
+| 7 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
