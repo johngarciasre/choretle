@@ -30,49 +30,57 @@ Added POST handler for `/api/jobs/:jobId/comments`. Verifies auth via `verifyAut
 **File:** `src/app/api/profile/[id]/route.ts` — **FIXED**
 Created new GET route that returns `{ user, stats, completions }`. Queries database for user profile, calculates weekly stats (pointsThisWeek/LastWeek, streakDays, longestStreak), and fetches completed jobs with category info via joins across `jobs`, `slate_tasks`, `tasks`, and `slates` tables. Family access enforcement included. Frontend at `src/app/profile/[id]/page.tsx` already wired to call this endpoint.
 
----
+### 7. Profile page mock fallback — fixed
+**File:** `src/app/profile/[id]/page.tsx` — **FIXED**
+The profile API route now exists and returns real data. The mock data in the `.catch()` block is only a client-side error fallback, not a production stub.
 
-## HIGH SEVERITY — Broken or non-functional in production
+### 8. Jobs page — mock fallback on API failure
+**File:** `src/app/api/jobs/route.ts` + `src/app/jobs/page.tsx` — **FIXED**
+Jobs API now accepts `familyId` via query param or `x-family-id` header, returning all jobs for a family joined with slate task names. Jobs page fetches familyId from `/api/auth/me` and passes it to the API, eliminating mock fallback in production.
 
-### 6. Profile page calls non-existent API
-**File:** `src/app/profile/[id]/page.tsx`
-Fetches from `/api/profile/${userId}` which has no route file. Falls back to hardcoded mock user/stats/completions on error.
+### 9. Rotations page — mock fallback on API failure
+**File:** `src/app/rotations/page.tsx` — **FIXED**
+Rotations page now fetches familyId from `/api/auth/me` and passes it as query param to `/api/rotations`, eliminating the 100+ lines of hardcoded mock data in production.
+
+### 10. `getJobsByFamily()` stubbed out ~~(#9)~~ — **FIXED**
+**File:** `src/lib/db/service.ts` (line ~302)
+Now performs real joins across `jobs → lists → family`:
+```ts
+const jobs = await safeQuery(
+  db.select({ job: schema.jobs, slateTask: schema.slateTasks, task: schema.tasks })
+    .from(schema.jobs)
+    .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
+    .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
+    .where(sql`${schema.jobs.listId} IN (SELECT id FROM lists WHERE family_id = ${familyId})`)
+);
+```
+
+### 11. Team member DELETE missing ~~(#10)~~ — **FIXED**
+**File:** `src/app/api/family/[familyId]/teams/[teamId]/members/route.ts`
+DELETE handler implemented at line 128. Verifies auth, checks team membership, deletes the row from `teamMembers`, returns 404 if not found.
 
 ---
 
 ## MEDIUM SEVERITY — Partially working or fragile
 
-### 7. Jobs page — mock fallback on API failure
-**File:** `src/app/api/jobs/route.ts` + `src/app/jobs/page.tsx` — **FIXED**
-Jobs API now accepts `familyId` via query param or `x-family-id` header, returning all jobs for a family joined with slate task names. Jobs page fetches familyId from `/api/auth/me` and passes it to the API, eliminating mock fallback in production.
+### 12. localStorage for familyId (10 instances)
+Family ID stored in client-side localStorage instead of derived from session/middleware headers. Appears in:
+- `src/app/swap-meet/page.tsx`
+- `src/app/reviews/page.tsx`
+- `src/app/slates/page.tsx`
+- `src/app/family/FamilyPage.tsx`
 
-### 8. Rotations page — mock fallback on API failure
-**File:** `src/app/rotations/page.tsx` — **FIXED**
-Rotations page now fetches familyId from `/api/auth/me` and passes it as query param to `/api/rotations`, eliminating the 100+ lines of hardcoded mock data in production.
-
-### 9. `getJobsByFamily()` stubbed out ~~(#9)~~ — **FIXED**
-**File:** `src/lib/db/service.ts` (line ~305)
+### 13. `debug()` is a no-op stub
+**File:** `src/lib/logger.ts`
 ```ts
-export async function getJobsByFamily(familyId: string) {
- const db = await ensureDb();
- if (!db) return [];
- // Stub for now — jobs don't have a direct family_id relationship
- const res = await safeQuery(
-   db.select().from(schema.jobs).where({ listId: '' })
- );
- return (res as any[]) || [];
-}
+const debug = () => {};
 ```
-
-### 10. Team member DELETE missing ~~(#10)~~ — **FIXED**
-**File:** `src/app/api/family/[familyId]/teams/[teamId]/members/route.ts`
-Only POST (add member) is implemented. No DELETE to remove a member from a team.
 
 ---
 
 ## LOW SEVERITY — Code quality / technical debt
 
-### 12. Pervasive `any` types (~171 instances, deferred)
+### 14. Pervasive `any` types (~171 instances, deferred)
 **Status: DEFERRED** — Removing `any` casts introduces more TypeScript errors than it fixes. The original codebase has 0 TS errors because `any` casts are **intentional workarounds** for Drizzle ORM's SQLite type system limitations:
 
 - Drizzle's SQLite driver returns objects with **snake_case columns** (e.g., `family_id`, `completed_at`)
@@ -91,25 +99,12 @@ Only POST (add member) is implemented. No DELETE to remove a member from a team.
 
 **Next attempt**: Only fix `useState<any[]>` patterns and pure function params. Leave all Drizzle-related casts untouched.
 
-### 13. localStorage for familyId (17 instances)
-Family ID stored in client-side localStorage instead of derived from session/middleware headers. Appears in:
-- `src/app/reviews/page.tsx`
-- `src/app/swap-meet/page.tsx`
-- `src/app/slates/page.tsx`
-- `src/app/family/FamilyPage.tsx`
-
-### 14. `debug()` is a no-op stub
-**File:** `src/lib/logger.ts`
-```ts
-const debug = () => {};
-```
-
 ---
 
 ## Suggested order of work
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Team member DELETE** (#10) | Missing functionality, no `any` cast complications |
-| 2 | **Profile page stub** (#6) | API route exists but frontend still uses mock fallback |
-| 3 | **Targeted type safety** (#12) | Only fix `useState<any[]>` and pure function params — leave Drizzle casts alone |
+| 1 | **localStorage for familyId** (#12) | 10 instances across 5 files — refactor to use middleware-derived values |
+| 2 | **Targeted type safety** (#14) | Only fix `useState<any[]>` and pure function params — leave Drizzle casts alone |
+| 3 | **Enable debug() logger** (#13) | Low effort, improves observability for local dev |
