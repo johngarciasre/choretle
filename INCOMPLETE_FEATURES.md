@@ -72,11 +72,13 @@ Family ID now fetched from `/api/auth/me` instead of client-side localStorage in
 
 Only `localStorage.setItem` calls remaining are in create/join handlers (harmless side effects for backwards compat). Signin page uses localStorage for non-family settings (mode, remember-email).
 
-### 14. `debug()` is a no-op stub
+### 14. `debug()` is a no-op stub — **FIXED**
 **File:** `src/lib/logger.ts`
-```ts
-const debug = () => {};
-```
+Now conditionally enabled via:
+- **Client-side**: `?debug=1` URL param or `localStorage.setItem("choretle_debug", "true")`
+- **Server-side**: `DEBUG=1` env var (already worked via pino in `logger.server.ts`)
+
+Logs to `console.debug()` when enabled, no-op otherwise.
 
 ---
 
@@ -107,5 +109,4 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Enable debug() logger** (#14) | Low effort, improves observability for local dev |
-| 2 | **Targeted type safety** (#15) | Only fix `useState<any[]>` and pure function params — leave Drizzle casts alone |
+| 1 | **Targeted type safety** (#15) | Only fix `useState<any[]>` and pure function params — leave Drizzle casts alone |
