@@ -17,7 +17,6 @@ type ReportType = "daily" | "done" | "task" | "member";
 
 export default function ReportsPage() {
   const authChecked = useAuthRedirect();
-  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [activeTab, setActiveTab] = useState<ReportType>("daily");
   const [showWallboard, setShowWallboard] = useState(false);
 
@@ -58,6 +57,8 @@ export default function ReportsPage() {
     },
   };
 
+  const [reportData, setReportData] = useState<ReportData | null>(mockData.daily);
+
   function handleTabChange(tab: ReportType) {
     setActiveTab(tab);
     setReportData(mockData[tab]);
@@ -68,10 +69,6 @@ export default function ReportsPage() {
   }, []);
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
-
-  if (!reportData) {
-    return <PageLoader label="Loading reports..." />;
-  }
 
   return (
     <PageShell>
