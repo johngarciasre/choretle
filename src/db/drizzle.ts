@@ -170,22 +170,19 @@ export function resetDb(): void {
 }
 
 /**
- * Ensure DB is initialized. In test mode (detect by presence of SQLITE_PATH env), 
- * always starts with a clean slate to prevent slug collisions across tests.
+ * Ensure DB is initialized. Uses file-based SQLite for dev/prod, in-memory for tests.
  */
 export async function initDb(): Promise<any> {
   if (_db) return _db;
   
-  // Only use file-based DB in non-test environments
-  const isTest = process.env.NODE_ENV === "test" || process.argv.some(a => a.includes("vitest"));
-  const effectivePath = isTest ? ":memory:" : (process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:");
+  const dbPath = process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:";
 
   try {
     const Database = require("better-sqlite3");
-    _rawDb = new Database(effectivePath);
+    _rawDb = new Database(dbPath);
     createTables(_rawDb!);
     _db = construct(_rawDb!, schema as any);
-    info({ path: effectivePath === ":memory:" ? "in-memory" : effectivePath }, "[DB] Initialized SQLite database");
+    info({ path: dbPath === ":memory:" ? "in-memory" : dbPath }, "[DB] Initialized SQLite database");
   } catch (err) {
     error({ err: err }, "[DB] Failed to initialize SQLite");
     throw err;
@@ -229,6 +226,13 @@ export async function rawInsert(tableName: string, data: Record<string, any>): P
   if (!raw) return undefined;
 
   const columns = Object.keys(data);
+  // Auto-add timestamps for tables that support them
+  if (!data.created_at && !data.createdAt) {
+    data.created_at = new Date().toISOString();
+  }
+  if (!data.updated_at && !data.updatedAt) {
+    data.updated_at = new Date().toISOString();
+  }
   // Sanitize column names — only allow alphanumeric + underscore
   for (const col of columns) {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col)) {

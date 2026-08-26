@@ -121,6 +121,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
     }
 
+    const now = new Date().toISOString();
+
     // Create the family
     const newFamily = await rawInsert("families", {
       id: `family-${Date.now()}`,
@@ -128,6 +130,8 @@ export async function POST(request: NextRequest) {
       slug,
       week_start_day: body.weekStartDay ?? 0,
       teams_enabled: false,
+      created_at: now,
+      updated_at: now,
     });
 
     if (!newFamily) {
