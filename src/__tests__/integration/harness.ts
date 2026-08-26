@@ -19,6 +19,7 @@ interface CookieJar {
   set(name: string, value: string): void;
   get(name: string): string | null;
   clear(): void;
+  getAll(): Map<string, string>;
 }
 
 export class TestHarness {
@@ -37,17 +38,8 @@ export class TestHarness {
       clear() {
         this.cookies.clear();
       },
-    };
-    this.jar = {
-      cookies: new Map(),
-      set(this: CookieJar, name: string, value: string) {
-        this.cookies.set(name, value);
-      },
-      get(this: CookieJar, name: string): string | null {
-        return this.cookies.get(name) || null;
-      },
-      clear(this: CookieJar) {
-        this.cookies.clear();
+      getAll() {
+        return new Map(this.cookies);
       },
     };
     this.baseUrl = baseUrl;
@@ -82,6 +74,13 @@ export class TestHarness {
     const headers = new Headers();
     headers.set("cookie", cookiesStr.join("; "));
     
+    // Also add any non-cookie headers from the jar (e.g., x-family-id, x-user-id)
+    for (const [name, value] of this.jar.cookies) {
+      if (name.startsWith("x-")) {
+        headers.set(name, value);
+      }
+    }
+    
     if (body && method !== "GET") {
       headers.set("content-type", "application/json");
     }
@@ -101,16 +100,26 @@ export class TestHarness {
   private async extractCookies(response: Response): Promise<void> {
     const setCookie = response.headers.get("set-cookie") || "";
     if (setCookie) {
-      // Handle multiple Set-Cookie headers
-      const parts = setCookie.split(";");
-      if (parts.length >= 2) {
-        const name = parts[0].split("=")[0].trim();
-        const value = parts.slice(1).join(";").trim();
+      // Parse individual cookies (can be comma-separated for multiple)
+      const cookies = setCookie.split(/,(?=\s*\w+=)/);
+      for (const cookie of cookies) {
+        const trimmed = cookie.trim();
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx === -1) continue;
+        const name = trimmed.substring(0, eqIdx).trim().toLowerCase();
+        const rest = trimmed.substring(eqIdx + 1).trim();
         
-        // For dev-session, we need to store the full encoded value
-        const cookieMatch = setCookie.match(/dev-session=([^;]+)/);
-        if (cookieMatch) {
-          this.jar.set("dev-session", cookieMatch[1]);
+        // Check if this is a dev-session cookie
+        if (name === "dev-session") {
+          // Extract value before any semicolon (value can be empty for clearing)
+          const semiColonIdx = rest.indexOf(";");
+          const value = semiColonIdx !== -1 ? rest.substring(0, semiColonIdx).trim() : rest;
+          
+          if (value === "") {
+            this.jar.cookies.delete("dev-session");
+          } else {
+            this.jar.set("dev-session", value);
+          }
         }
       }
     }
@@ -135,6 +144,13 @@ export class TestHarness {
     const headers = new Headers();
     headers.set("cookie", cookiesStr.join("; "));
     
+    // Also add any non-cookie headers from the jar (e.g., x-family-id, x-user-id)
+    for (const [name, value] of this.jar.cookies) {
+      if (name.startsWith("x-")) {
+        headers.set(name, value);
+      }
+    }
+    
     if (body && method !== "GET") {
       headers.set("content-type", "application/json");
     }
@@ -146,10 +162,11 @@ export class TestHarness {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    // Import and invoke the handler
+    // Import and invoke the handler using @ alias for vitest resolution
     let handlerModule: any;
     try {
-      handlerModule = await import(`./${handlerPath.replace(/^\//, "").replace(/\//g, "/")}/route`);
+      const relativePath = handlerPath.replace(/^\//, "").replace(/\?.*$/, "").replace(/\//g, "/");
+      handlerModule = await import(`@/app/${relativePath}/route`);
     } catch (e) {
       return { status: 404, body: { error: "Handler not found" }, headers: {} };
     }
@@ -186,11 +203,27 @@ export class TestHarness {
     // Extract Set-Cookie headers and update jar
     const setCookieHeaders = response.headers.get("set-cookie");
     if (setCookieHeaders) {
-      const cookies = setCookieHeaders.split(";");
+      // Parse individual cookies from the header (can be semicolon or comma separated)
+      const cookies = setCookieHeaders.split(/,(?=\s*\w+=)/);
       for (const cookie of cookies) {
-        const match = cookie.match(/dev-session=([^;]+)/);
-        if (match) {
-          this.jar.set("dev-session", match[1]);
+        const trimmed = cookie.trim();
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx === -1) continue;
+        const name = trimmed.substring(0, eqIdx).trim().toLowerCase();
+        const rest = trimmed.substring(eqIdx + 1).trim();
+        
+        // Check if this is a dev-session cookie
+        if (name === "dev-session") {
+          // Extract value before any semicolon (value can be empty for clearing)
+          const semiColonIdx = rest.indexOf(";");
+          const value = semiColonIdx !== -1 ? rest.substring(0, semiColonIdx).trim() : rest;
+          
+          if (value === "") {
+            // Cookie is being cleared
+            this.jar.cookies.delete("dev-session");
+          } else {
+            this.jar.set("dev-session", value);
+          }
         }
       }
     }
@@ -216,5 +249,66 @@ export class TestHarness {
     const response = await this.invokeHandler("/api/auth/signout", "POST");
     this.jar.clear();
     return response;
+  }
+
+  /**
+   * Create a mock family via the API and return the family ID.
+   */
+  async createFamily(name: string, slug: string): Promise<string> {
+    const res = await this.invokeHandler("/api/family", "POST", {
+      name,
+      slug,
+    });
+    if (res.status !== 200) return "";
+    return res.body.id || "";
+  }
+
+  /**
+   * Create a mock user via the API.
+   */
+  async createUser(email: string, name: string, role = "child", familyId?: string): Promise<string> {
+    const res = await this.invokeHandler("/api/users", "POST", {
+      email,
+      name,
+      role,
+      ...(familyId && { familyId }),
+    });
+    if (res.status !== 200) return "";
+    return res.body.id || "";
+  }
+
+  /**
+   * Create a mock slate via the API.
+   */
+  async createSlate(name: string, familyId: string, frequency = "weekly", interval = 1): Promise<string> {
+    const res = await this.invokeHandler("/api/slates", "POST", {
+      name,
+      familyId,
+      frequency,
+      interval,
+    });
+    if (res.status !== 200) return "";
+    return res.body.id || "";
+  }
+
+  /**
+   * Set the family ID cookie (simulates middleware x-family-id header).
+   */
+  setFamilyId(familyId: string): void {
+    this.jar.cookies.set("x-family-id", familyId);
+  }
+
+  /**
+   * Clear the family ID cookie.
+   */
+  clearFamilyId(): void {
+    this.jar.cookies.delete("x-family-id");
+  }
+
+  /**
+   * Get the current family ID from cookies, if set.
+   */
+  getFamilyId(): string | null {
+    return this.jar.cookies.get("x-family-id") || null;
   }
 }

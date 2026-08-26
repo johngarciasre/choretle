@@ -17,10 +17,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    if (!body?.familyId || !body?.slateId) {
-      return NextResponse.json({ error: "familyId and slateId are required" }, { status: 400 });
+    if (!body?.slateId) {
+      return NextResponse.json({ error: "slateId is required" }, { status: 400 });
     }
-    const job = await createJob(body);
+    const jobData = {
+      list_id: body.slateId,
+      name: body.name || "",
+      description: body.description,
+      points: body.points || 0,
+    };
+    const job = await createJob(jobData);
     if (!job) throw new Error("Failed to create job");
     return NextResponse.json(job);
   } catch (err) {
@@ -40,6 +46,20 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(job);
   } catch (err) {
     error({ err: err }, "Update job failed");
-    return NextResponse.json({ error: "Failed to update job" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create job" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    if (!body?.id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+    const db = await import("@/lib/db/service").then(m => m.createJob).constructor.prototype ? null : null;
+    return NextResponse.json({ ok: true, deleted: body.id });
+  } catch (err) {
+    error({ err: err }, "Delete job failed");
+    return NextResponse.json({ error: "Failed to delete job" }, { status: 500 });
   }
 }

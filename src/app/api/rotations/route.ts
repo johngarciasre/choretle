@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere, rawUpdate, getRawDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -33,10 +33,13 @@ export async function GET(request: NextRequest) {
     
     if (slateIds.length > 0) {
       const placeholders = slateIds.map(() => '?').join(',');
-      const result = await db.execute(
-        sql`${schema.rotations} WHERE ${schema.rotations.slateId} IN (${sql.raw(placeholders)}) ORDER BY order`
-      );
-      rotations.push(...result);
+      const raw = getRawDb();
+      if (raw) {
+        const result = raw.prepare(
+          `SELECT * FROM rotations WHERE slate_id IN (${placeholders}) ORDER BY "order"`
+        ).all(...slateIds);
+        rotations.push(...result);
+      }
     }
 
     // Enrich rotations with user info
@@ -91,18 +94,15 @@ export async function POST(request: NextRequest) {
 
     if (id) {
       // Update existing rotation
-      const result = await db.update(schema.rotations)
-        .set({
-          slateId,
-          userId,
-          order: order || 0,
-          intervalDays: intervalDays || 7,
-          isActive: isActive !== false,
-        })
-        .where(eq(schema.rotations.id, id))
-        .returning("*");
+      const result = await rawUpdate("rotations", {
+        slate_id: slateId,
+        user_id: userId,
+        order: order || 0,
+        interval_days: intervalDays || 7,
+        is_active: isActive !== false,
+      }, "id", id);
 
-      return NextResponse.json(result[0]);
+      return NextResponse.json(result, { status: 201 });
     } else {
       // Create new rotation
       const result = await rawInsert("rotations", {
@@ -143,4 +143,9 @@ export async function DELETE(request: NextRequest) {
     error({ err: err }, "Rotations DELETE failed");
     return NextResponse.json({ error: "Failed to delete rotation" }, { status: 500 });
   }
+}
+
+// Delegate PUT to POST (POST handles create/update via presence of id)
+export async function PUT(request: NextRequest) {
+  return POST(request);
 }

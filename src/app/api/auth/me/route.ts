@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ authenticated: false });
+    return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
   const cookieHeader = request.headers.get("cookie") || "";

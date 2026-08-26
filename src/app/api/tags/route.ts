@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere, rawUpdate } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -83,16 +83,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const result = await db.update(schema.tags)
-      .set({ name, color })
-      .where(eq(schema.tags.id, id))
-      .returning("*");
+    const result = await rawUpdate("tags", { name, color }, "id", id);
 
-    if (!result || !result[0]) {
+    if (!result) {
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });
     }
 
-    return NextResponse.json(result[0]);
+    return NextResponse.json(result);
   } catch (err) {
     error({ err: err }, "Tags PUT failed");
     return NextResponse.json({ error: "Failed to update tag" }, { status: 500 });

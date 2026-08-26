@@ -1,4 +1,4 @@
-import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere, rawUpdate } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -67,10 +67,7 @@ export async function createFamily(data: Insertable<any>) {
 export async function updateFamily(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.families).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("families", data, "id", id) || null;
 }
 
 // ─── Users ──────────────────────────────────────────────────────────
@@ -96,10 +93,7 @@ export async function getUserByEmail(email: string) {
 export async function updateUserPoints(id: string, points: number) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.users).set({ pointsTotal: points }).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("users", { pointsTotal: points }, "id", id) || null;
 }
 
 // ─── Profile ────────────────────────────────────────────────────────
@@ -193,10 +187,7 @@ export async function createTask(data: Insertable<any>) {
 export async function updateTask(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.tasks).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("tasks", data, "id", id) || null;
 }
 
 export async function deleteTask(id: string) {
@@ -271,10 +262,7 @@ export async function createSlate(data: Insertable<any>) {
 export async function updateSlate(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.slates).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("slates", data, "id", id) || null;
 }
 
 // ─── Slate Tasks CRUD ──────────────────────────────────────────────
@@ -291,10 +279,7 @@ export async function createSlateTask(data: Insertable<any>) {
 export async function updateSlateTask(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.slateTasks).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("slate_tasks", data, "id", id) || null;
 }
 
 export async function deleteSlateTask(id: string) {
@@ -345,10 +330,7 @@ export async function createJob(data: Insertable<any>) {
 export async function updateJob(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.jobs).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("jobs", data, "id", id) || null;
 }
 
 // ─── Lists ──────────────────────────────────────────────────────────
@@ -446,19 +428,13 @@ export async function upsertRotation(data: {
   );
 
   if (existing && data.id) {
-    const res = await safeQuery(
-      db.update(schema.rotations)
-        .set({
-          slateId: data.slateId,
-          userId: data.userId,
-          order: data.order,
-          intervalDays: data.intervalDays,
-          isActive: data.isActive ?? true,
-        })
-        .where({ id: data.id })
-        .returning("*")
-    );
-    return (res as any[])?.[0] || null;
+    return rawUpdate("rotations", {
+      slate_id: data.slateId,
+      user_id: data.userId,
+      order: data.order,
+      interval_days: data.intervalDays,
+      is_active: data.isActive ?? true,
+    }, "id", data.id) || null;
   }
 
   const res = await safeQuery(
@@ -546,14 +522,12 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
   }
 
   const now = new Date();
-  const updateData: Record<string, any> = { status: newStatus, updatedAt: now };
+  const updateData: Record<string, any> = { status: newStatus, updated_at: now };
   if (newStatus === "done") {
-    updateData.completedAt = now;
+    updateData.completed_at = now;
   }
 
-  const updatedJob = await safeQuery(
-    db.update(schema.jobs).set(updateData).where({ id }).returning("*")
-  );
+  const updatedJob = rawUpdate("jobs", updateData, "id", id);
 
   if (updatedJob) {
     try {
@@ -686,10 +660,7 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
 export async function updateSubtask(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.subtasks).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("subtasks", data, "id", id) || null;
 }
 
 export async function deleteSubtask(id: string) {
@@ -731,10 +702,7 @@ export async function createPhoto(data: Insertable<any>) {
 export async function updatePhoto(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.photos).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("photos", data, "id", id) || null;
 }
 
 export async function deletePhoto(id: string) {
@@ -790,10 +758,7 @@ export async function createReview(data: Insertable<any>) {
 export async function updateReview(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.reviews).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("reviews", data, "id", id) || null;
 }
 
 export async function deleteReview(id: string) {
@@ -1037,10 +1002,7 @@ export async function createTag(data: Insertable<any>) {
 export async function updateTag(id: string, data: Partial<any>) {
   const db = await ensureDb();
   if (!db) return null;
-  const res = await safeQuery(
-    db.update(schema.tags).set(data).where({ id }).returning("*")
-  );
-  return (res as any[])?.[0] || null;
+  return rawUpdate("tags", data, "id", id) || null;
 }
 
 export async function deleteTag(id: string) {

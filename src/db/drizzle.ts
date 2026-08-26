@@ -212,7 +212,8 @@ export async function rawInsert(tableName: string, data: Record<string, any>): P
     if (typeof v === "boolean") return v ? 1 : 0;
     return v;
   });
-  const sqlStr = `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES (${placeholders})`;
+  const quotedColumns = columns.map((c) => `"${c}"`).join(", ");
+  const sqlStr = `INSERT INTO ${tableName} (${quotedColumns}) VALUES (${placeholders})`;
 
   try {
     raw.prepare(sqlStr).run(...values);
@@ -261,9 +262,17 @@ export async function rawUpdate(tableName: string, data: Record<string, any>, wh
   if (!raw) return undefined;
 
   const setColumns = Object.keys(data).filter((c) => c !== whereCol);
-  const setClause = setColumns.map((c) => `${c} = ?`).join(", ");
-  const values = [...setColumns.map((c) => data[c]), whereVal];
-  const sqlStr = `UPDATE ${tableName} SET ${setClause} WHERE ${whereCol} = ?`;
+  const quotedSetColumns = setColumns.map((c) => `"${c}"`);
+  const setClause = quotedSetColumns.map((c) => `${c} = ?`).join(", ");
+  const values = [
+    ...setColumns.map((c) => {
+      const v = data[c];
+      if (typeof v === "boolean") return v ? 1 : 0;
+      return v;
+    }),
+    whereVal,
+  ];
+  const sqlStr = `UPDATE ${tableName} SET ${setClause} WHERE "${whereCol}" = ?`;
 
   try {
     raw.prepare(sqlStr).run(...values);
