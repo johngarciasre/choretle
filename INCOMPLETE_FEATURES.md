@@ -50,7 +50,7 @@ Jobs API now accepts `familyId` via query param or `x-family-id` header, returni
 **File:** `src/app/rotations/page.tsx` — **FIXED**
 Rotations page now fetches familyId from `/api/auth/me` and passes it as query param to `/api/rotations`, eliminating the 100+ lines of hardcoded mock data in production.
 
-### 9. `getJobsByFamily()` stubbed out
+### 9. `getJobsByFamily()` stubbed out ~~(#9)~~ — **FIXED**
 **File:** `src/lib/db/service.ts` (line ~305)
 ```ts
 export async function getJobsByFamily(familyId: string) {
@@ -64,7 +64,7 @@ export async function getJobsByFamily(familyId: string) {
 }
 ```
 
-### 10. Team member DELETE missing
+### 10. Team member DELETE missing ~~(#10)~~ — **FIXED**
 **File:** `src/app/api/family/[familyId]/teams/[teamId]/members/route.ts`
 Only POST (add member) is implemented. No DELETE to remove a member from a team.
 
@@ -98,6 +98,4 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **getJobsByFamily() fix** (#9) | Stubbed out query needs real implementation |
-| 2 | **Team member DELETE** (#10) | Missing CRUD operation |
-| 3 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 1 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |

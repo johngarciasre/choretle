@@ -302,11 +302,24 @@ export async function getJobsByList(listId: string) {
 export async function getJobsByFamily(familyId: string) {
   const db = await ensureDb();
   if (!db) return [];
-  // Stub for now — jobs don't have a direct family_id relationship
-  const res = await safeQuery(
-    db.select().from(schema.jobs).where({ listId: '' })
+
+  // Jobs belong to lists, lists belong to families
+  const jobs = await safeQuery(
+    db.select({
+      job: schema.jobs,
+      slateTask: schema.slateTasks,
+      task: schema.tasks,
+    })
+      .from(schema.jobs)
+      .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
+      .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
+      .where(
+        sql`${schema.jobs.listId} IN (SELECT id FROM lists WHERE family_id = ${familyId})`
+      )
+      .orderBy(desc(sql`created_at`))
   );
-  return (res as any[]) || [];
+
+  return (jobs as any[]) || [];
 }
 
 export async function getJobById(id: string) {
