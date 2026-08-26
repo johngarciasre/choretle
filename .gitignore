@@ -43,3 +43,7 @@ src/db/drizzle/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent workspace artifacts
+.plans/
+opencode.json
