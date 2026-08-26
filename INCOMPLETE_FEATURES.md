@@ -18,13 +18,13 @@ Replaced the empty `{ jobs: [], leaderboard: [] }` stub with real DB queries. Re
 **File:** `src/app/api/jobs/route.ts` + `src/lib/db/service.ts` — **FIXED**
 Added `deleteJob()` to the DB service layer. The DELETE handler now calls `deleteJob(body.id)` and returns 404 if the job doesn't exist. Cascade cleanup of `job_subtasks`, `comments`, and `job_history` is handled by the schema's `ON DELETE CASCADE` constraints on all three child tables.
 
+### 4. `createFamily()` / `joinFamily()` stubs — fixed
+**File:** `src/app/api/family/route.ts` + `src/app/api/family/join/route.ts` — **FIXED**
+The API routes were already wired to real DB operations; the dead-code stubs in `actions.ts` have been removed. Added auto-incrementing slug suffix (`my-test-family-1`, `-2`, etc.) when a family name collision occurs, preventing 409 errors on repeated creation.
+
 ---
 
 ## HIGH SEVERITY — Broken or non-functional in production
-
-### 4. `createFamily()` / `joinFamily()` stubs
-**File:** `src/lib/server/actions.ts`
-Both functions return `{ id: crypto.randomUUID(), name }` without touching the database. The server action layer is entirely non-functional for family creation/joining.
 
 ### 5. Profile page calls non-existent API
 **File:** `src/app/profile/[id]/page.tsx`
@@ -96,8 +96,7 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Server actions fix** (#4) | Family creation/joining is core workflow |
-| 2 | **Comments route** (#9) | Wired up by job detail page, straightforward CRUD |
-| 3 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
-| 4 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
-| 5 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 1 | **Comments route** (#9) | Wired up by job detail page, straightforward CRUD |
+| 2 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
+| 3 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
+| 4 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
