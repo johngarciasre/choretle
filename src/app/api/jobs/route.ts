@@ -1,15 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJobsByList, createJob, updateJob, deleteJob } from "@/lib/db/service";
+import { initDb } from "@/db/drizzle";
+import * as schema from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest) {
   try {
     const listId = request.headers.get("x-list-id") || "";
-    if (!listId) return NextResponse.json([]);
-    const jobs = await getJobsByList(listId);
-    return NextResponse.json(jobs);
+    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
+    
+    const db = await initDb();
+    if (!db) {
+      return NextResponse.json([]);
+    }
+
+    // If listId is provided, fetch jobs for that specific list
+    if (listId) {
+      const jobs = await getJobsByList(listId);
+      return NextResponse.json(jobs);
+    }
+
+    // Otherwise, fetch all jobs for the family
+    if (familyId) {
+      const jobs = await db.select({
+        job: schema.jobs,
+        slateTask: schema.slateTasks,
+        task: schema.tasks,
+      })
+        .from(schema.jobs)
+        .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
+        .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
+        .where(
+          sql`${schema.jobs.listId} IN (SELECT id FROM lists WHERE family_id = ${familyId})`
+        )
+        .orderBy(sql`created_at DESC`);
+
+      return NextResponse.json((jobs as any[]) || []);
+    }
+
+    return NextResponse.json([]);
   } catch (err) {
-    error({ err: err }, "Get jobs failed");
+    error({ err }, "Get jobs failed");
     return NextResponse.json({ error: "Failed to fetch jobs" }, { status: 500 });
   }
 }

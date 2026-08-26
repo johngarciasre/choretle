@@ -18,12 +18,22 @@ interface Job {
 
 async function fetchJobs() {
   try {
-    const res = await fetch("/api/jobs");
+    // Get family ID from auth endpoint
+    const authRes = await fetch("/api/auth/me");
+    if (!authRes.ok) throw new Error("Not authenticated");
+    const authData = await authRes.json();
+    const familyId = authData.familyId;
+    
+    if (!familyId) {
+      throw new Error("No family ID");
+    }
+
+    const res = await fetch(`/api/jobs?familyId=${familyId}`);
     if (!res.ok) throw new Error("Failed to fetch jobs");
     const data = await res.json();
     return data;
   } catch (err) {
-    error({ err: err }, "Fetch jobs failed");
+    error({ err }, "Fetch jobs failed");
     // Mock data for now
     return [
       { id: "1", name: "Clean the kitchen", description: "Clean up the kitchen", points: 10, status: "todo" },

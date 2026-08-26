@@ -43,12 +43,12 @@ Fetches from `/api/profile/${userId}` which has no route file. Falls back to har
 ## MEDIUM SEVERITY — Partially working or fragile
 
 ### 7. Jobs page — mock fallback on API failure
-**File:** `src/app/jobs/page.tsx`
-`fetchJobs()` catches errors and returns 3 hardcoded jobs. The real fetch doesn't pass `x-family-id` header, so this fallback triggers in production.
+**File:** `src/app/api/jobs/route.ts` + `src/app/jobs/page.tsx` — **FIXED**
+Jobs API now accepts `familyId` via query param or `x-family-id` header, returning all jobs for a family joined with slate task names. Jobs page fetches familyId from `/api/auth/me` and passes it to the API, eliminating mock fallback in production.
 
 ### 8. Rotations page — mock fallback on API failure
-**File:** `src/app/rotations/page.tsx`
-100+ lines of hardcoded mock users/slates/assignments as fallback when `/api/rotations` fails. Missing `x-family-id` header on the fetch.
+**File:** `src/app/rotations/page.tsx` — **FIXED**
+Rotations page now fetches familyId from `/api/auth/me` and passes it as query param to `/api/rotations`, eliminating the 100+ lines of hardcoded mock data in production.
 
 ### 9. `getJobsByFamily()` stubbed out
 **File:** `src/lib/db/service.ts` (line ~305)
@@ -98,7 +98,6 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Remove mock fallbacks** (#7, #8) | Cleanup after APIs are solid |
-| 2 | **getJobsByFamily() fix** (#9) | Stubbed out query needs real implementation |
-| 3 | **Team member DELETE** (#10) | Missing CRUD operation |
-| 4 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 1 | **getJobsByFamily() fix** (#9) | Stubbed out query needs real implementation |
+| 2 | **Team member DELETE** (#10) | Missing CRUD operation |
+| 3 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |

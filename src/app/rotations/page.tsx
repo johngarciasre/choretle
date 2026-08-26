@@ -26,7 +26,17 @@ export default function RotationsPage() {
 
   async function loadRotationData() {
     try {
-      const response = await fetch("/api/rotations");
+      // Get family ID from auth endpoint
+      const authRes = await fetch("/api/auth/me");
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+      
+      if (!familyId) {
+        throw new Error("No family ID");
+      }
+
+      const response = await fetch(`/api/rotations?familyId=${familyId}`);
       if (response.ok) {
         const data = await response.json();
         setFamily(data.family || null);
