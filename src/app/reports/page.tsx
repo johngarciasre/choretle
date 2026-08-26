@@ -8,67 +8,51 @@ import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface ReportData {
   type: string;
-  jobsCompleted: any[];
-  jobsInProgress: any[];
+  jobsCompleted?: any[];
+  jobsInProgress?: any[];
   totalPointsEarned: number;
+  members?: any[];
+  tasks?: any[];
+  totalMembers?: number;
+  leaderboard?: any[];
 }
 
 type ReportType = "daily" | "done" | "task" | "member";
 
 export default function ReportsPage() {
   const authChecked = useAuthRedirect();
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ReportType>("daily");
   const [showWallboard, setShowWallboard] = useState(false);
 
-  // Mock data
-  const mockData: Record<string, ReportData> = {
-    daily: {
-      type: "daily",
-      jobsCompleted: [
-        { id: "1", name: "Clean the kitchen", points: 10 },
-        { id: "2", name: "Take out the trash", points: 5 },
-      ],
-      jobsInProgress: [{ id: "3", name: "Vacuum the living room", points: 15 }],
-      totalPointsEarned: 30,
-    },
-    done: {
-      type: "done",
-      jobsCompleted: [
-        { id: "4", name: "Do dishes", points: 8 },
-        { id: "5", name: "Make bed", points: 3 },
-      ],
-      jobsInProgress: [],
-      totalPointsEarned: 11,
-    },
-    task: {
-      type: "task",
-      jobsCompleted: [{ id: "6", name: "Clean bathroom", points: 12 }],
-      jobsInProgress: [],
-      totalPointsEarned: 12,
-    },
-    member: {
-      type: "member",
-      jobsCompleted: [
-        { id: "7", name: "Walk dog", points: 5 },
-        { id: "8", name: "Feed cat", points: 3 },
-      ],
-      jobsInProgress: [],
-      totalPointsEarned: 8,
-    },
-  };
-
-  const [reportData, setReportData] = useState<ReportData | null>(mockData.daily);
+  async function fetchReport(type: ReportType) {
+    try {
+      const res = await fetch(`/api/reports?type=${type}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setReportData(data);
+    } catch (err) {
+      console.error("Failed to fetch report:", err);
+    }
+  }
 
   function handleTabChange(tab: ReportType) {
     setActiveTab(tab);
-    setReportData(mockData[tab]);
+    setLoading(true);
+    fetchReport(tab).then(() => setLoading(false));
   }
 
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - Reports");
+    fetchReport("daily").catch(() => setLoading(false));
   }, []);
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+
+  if (loading || !reportData) {
+    return <PageShell><PageLoader label="Loading reports..." /></PageShell>;
+  }
 
   return (
     <PageShell>
@@ -92,40 +76,38 @@ export default function ReportsPage() {
             </Button>
           </div>
 
-          {showWallboard && (
-            <section className="mb-8">
-              <h3 className="font-display text-xl font-bold text-ink mb-4">Wallboard</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {[
-                  { name: "Alice", points: 120, jobsCompleted: 8 },
-                  { name: "Bob", points: 95, jobsCompleted: 6 },
-                  { name: "Charlie", points: 75, jobsCompleted: 5 },
-                ].map((entry) => (
-                  <Card key={entry.name} accent="teal" className="text-center">
-                    <p className="font-display text-xl font-bold text-ink">{entry.name}</p>
-                    <Badge status="points" className="mt-2 mx-auto">{entry.points} pts</Badge>
-                    <p className="text-sm text-ink/60 mt-2">{entry.jobsCompleted} jobs done</p>
+          {/* Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCard icon={<span className="text-xl">⭐</span>} label="Points Earned" value={reportData.totalPointsEarned} accent="coral" />
+            {reportData.jobsCompleted && (
+              <>
+                <StatCard icon={<span className="text-xl">✅</span>} label="Jobs Completed" value={reportData.jobsCompleted.length} accent="teal" />
+                <StatCard icon={<span className="text-xl">🔄</span>} label="In Progress" value={(reportData.jobsInProgress || []).length} accent="sunny" />
+              </>
+            )}
+          </div>
+
+          {/* Daily Report */}
+          {activeTab === "daily" && reportData.jobsInProgress && reportData.jobsInProgress.length > 0 && (
+            <section className="mt-8">
+              <h3 className="font-display text-xl font-bold text-ink mb-4">In Progress</h3>
+              <ul className="space-y-2">
+                {reportData.jobsInProgress.map((job: any) => (
+                  <Card key={job.job?.id || job.id} accent="sunny" className="p-4 flex justify-between items-center bg-cream">
+                    <span className="font-bold text-ink">{job.slateTask?.name || job.task?.name || job.job?.name || "Unknown Task"}</span>
+                    <Badge status="doing">{job.job?.points || 0} pts</Badge>
                   </Card>
                 ))}
-              </div>
+              </ul>
             </section>
           )}
 
-          {/* Summary */}
-          {reportData && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <StatCard icon={<span className="text-xl">⭐</span>} label="Points Earned" value={reportData.totalPointsEarned} accent="coral" />
-              <StatCard icon={<span className="text-xl">✅</span>} label="Jobs Completed" value={reportData.jobsCompleted.length} accent="teal" />
-              <StatCard icon={<span className="text-xl">🔄</span>} label="In Progress" value={reportData.jobsInProgress.length} accent="sunny" />
-            </div>
-          )}
-
-          {/* Completed Jobs */}
-          {reportData && reportData.jobsCompleted.length > 0 && (
-            <section>
+          {/* Done Report */}
+          {activeTab === "done" && reportData.jobsCompleted && reportData.jobsCompleted.length > 0 && (
+            <section className="mt-8">
               <h3 className="font-display text-xl font-bold text-ink mb-4">Completed Jobs</h3>
               <ul className="space-y-2">
-                {reportData.jobsCompleted.map((job) => (
+                {reportData.jobsCompleted.map((job: any) => (
                   <Card key={job.id} accent="teal" className="p-4 flex justify-between items-center bg-cream">
                     <span className="font-bold text-ink">{job.name}</span>
                     <Badge status="done">+{job.points} pts</Badge>
@@ -135,18 +117,52 @@ export default function ReportsPage() {
             </section>
           )}
 
-          {/* In Progress Jobs */}
-          {reportData && reportData.jobsInProgress.length > 0 && (
+          {/* Task Report */}
+          {activeTab === "task" && reportData.tasks && reportData.tasks.length > 0 && (
             <section className="mt-8">
-              <h3 className="font-display text-xl font-bold text-ink mb-4">In Progress</h3>
+              <h3 className="font-display text-xl font-bold text-ink mb-4">Tasks</h3>
               <ul className="space-y-2">
-                {reportData.jobsInProgress.map((job) => (
-                  <Card key={job.id} accent="sunny" className="p-4 flex justify-between items-center bg-cream">
-                    <span className="font-bold text-ink">{job.name}</span>
-                    <Badge status="doing">{job.points} pts</Badge>
+                {reportData.tasks.map((task: any) => (
+                  <Card key={task.id} accent="teal" className="p-4 flex justify-between items-center bg-cream">
+                    <span className="font-bold text-ink">{task.name}</span>
+                    <Badge status="done">{task.completedCount}/{task.totalJobs} done</Badge>
                   </Card>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {/* Member Report */}
+          {activeTab === "member" && reportData.members && reportData.members.length > 0 && (
+            <section className="mt-8">
+              <h3 className="font-display text-xl font-bold text-ink mb-4">Members ({reportData.totalMembers})</h3>
+              <ul className="space-y-2">
+                {reportData.members.map((member: any) => (
+                  <Card key={member.id} accent="teal" className="p-4 flex justify-between items-center bg-cream">
+                    <span className="font-bold text-ink">{member.name}</span>
+                    <Badge status="points">{member.earnedPoints || member.pointsTotal} pts</Badge>
+                  </Card>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Wallboard */}
+          {showWallboard && (
+            <section className="mt-8">
+              <h3 className="font-display text-xl font-bold text-ink mb-4">Wallboard</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {reportData.leaderboard && reportData.leaderboard.length > 0 ? (
+                  reportData.leaderboard.map((entry: any) => (
+                    <Card key={entry.id} accent="teal" className="text-center">
+                      <p className="font-display text-xl font-bold text-ink">{entry.name}</p>
+                      <Badge status="points" className="mt-2 mx-auto">{entry.pointsTotal || 0} pts</Badge>
+                    </Card>
+                  ))
+                ) : (
+                  <EmptyState icon={<span className="text-2xl">📊</span>} title="No leaderboard data" message="Complete some jobs to see the wallboard populate." />
+                )}
+              </div>
             </section>
           )}
         </section>
