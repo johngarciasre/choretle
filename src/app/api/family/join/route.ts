@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
       id: invite.familyId, 
       name: "Family" 
     });
-  } catch (error) {
-    error({ err: error }, "Join family failed");
+  } catch (err) {
+    error({ err: err }, "Join family failed");
     return NextResponse.json({ error: "Failed to join family" }, { status: 500 });
   }
 }

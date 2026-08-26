@@ -47,8 +47,8 @@ export async function GET(request: NextRequest) {
 
     const reviews = await query;
     return NextResponse.json(reviews);
-  } catch (error) {
-    error({ err: error }, "Get reviews failed");
+  } catch (err) {
+    error({ err: err }, "Get reviews failed");
     return NextResponse.json({ error: "Failed to fetch reviews" }, { status: 500 });
   }
 }
@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(review);
-  } catch (error) {
-    error({ err: error }, "Create review failed");
+  } catch (err) {
+    error({ err: err }, "Create review failed");
     return NextResponse.json({ error: "Failed to create review" }, { status: 500 });
   }
 }

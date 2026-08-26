@@ -16,8 +16,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await rawDeleteWhere("rotations", [{ col: "id", val: rotationId }]);
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Rotation DELETE failed");
+  } catch (err) {
+    error({ err: err }, "Rotation DELETE failed");
     return NextResponse.json({ error: "Failed to delete rotation" }, { status: 500 });
   }
 }

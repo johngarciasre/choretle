@@ -59,8 +59,8 @@ const fetchJob = async () => {
     const res = await fetch(`/api/jobs/${jobId}`);
     if (!res.ok) throw new Error("Failed to fetch job");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch job failed");
+  } catch (err) {
+    error({ err: err }, "Fetch job failed");
     return null;
   }
 };
@@ -70,8 +70,8 @@ const fetchSubtasks = async (jobId: string) => {
     const res = await fetch(`/api/tasks/subtasks?jobId=${jobId}`);
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch subtasks failed");
+  } catch (err) {
+    error({ err: err }, "Fetch subtasks failed");
     return [];
   }
 };
@@ -81,8 +81,8 @@ const fetchPhotos = async (objectType: string, objectId: string) => {
     const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}`);
     if (!res.ok) throw new Error("Failed to fetch photos");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch photos failed");
+  } catch (err) {
+    error({ err: err }, "Fetch photos failed");
     return [];
   }
 };
@@ -136,9 +136,9 @@ export default function JobPage() {
       if (newStatus === "done") {
         window.location.reload();
       }
-    } catch (error) {
-      error({ err: error });
-      alert(error instanceof Error ? error.message : "Failed to update job status");
+    } catch (err) {
+      error({ err }, "Failed to update job status");
+      alert(err instanceof Error ? err.message : "Failed to update job status");
     }
   };
 
@@ -155,8 +155,8 @@ export default function JobPage() {
 
       setCommentText("");
       window.location.reload();
-    } catch (error) {
-      error({ err: error }, "Add comment failed");
+    } catch (err) {
+      error({ err: err }, "Add comment failed");
       alert("Failed to add comment");
     }
   };
@@ -178,8 +178,8 @@ export default function JobPage() {
             : s
         )
       );
-    } catch (error) {
-      error({ err: error }, "Complete subtask failed");
+    } catch (err) {
+      error({ err: err }, "Complete subtask failed");
       alert("Failed to complete subtask");
     }
   };

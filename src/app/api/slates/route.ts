@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json(slates);
-  } catch (error) {
-    error({ err: error }, "Slates GET failed");
+  } catch (err) {
+    error({ err: err }, "Slates GET failed");
     return NextResponse.json({ error: "Failed to fetch slates" }, { status: 500 });
   }
 }
@@ -81,8 +81,8 @@ export async function POST(request: NextRequest) {
     const slate = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(slateId);
 
     return NextResponse.json(slate, { status: 201 });
-  } catch (error) {
-    error({ err: error }, "Slates POST failed");
+  } catch (err) {
+    error({ err: err }, "Slates POST failed");
     return NextResponse.json({ error: "Failed to create slate" }, { status: 500 });
   }
 }

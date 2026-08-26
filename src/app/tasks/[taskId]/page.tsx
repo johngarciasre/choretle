@@ -38,8 +38,8 @@ const fetchTask = async (id: string) => {
     const res = await fetch(`/api/tasks/${id}`);
     if (!res.ok) throw new Error("Failed to fetch task");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch task failed");
+  } catch (err) {
+    error({ err: err }, "Fetch task failed");
     return null;
   }
 };
@@ -49,8 +49,8 @@ const fetchTags = async () => {
     const res = await fetch("/api/tags?familyId=test-family");
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch tags failed");
+  } catch (err) {
+    error({ err: err }, "Fetch tags failed");
     return [];
   }
 };
@@ -60,8 +60,8 @@ const fetchSubtasks = async (taskId: string) => {
     const res = await fetch(`/api/tasks/subtasks?taskId=${taskId}`);
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch subtasks failed");
+  } catch (err) {
+    error({ err: err }, "Fetch subtasks failed");
     return [];
   }
 };
@@ -124,8 +124,8 @@ export default function TaskPage() {
       setTask(updated);
       setNameValue(updated.name);
       setSelectedTagIds(updated.tagIds || []);
-    } catch (error) {
-      error({ err: error }, "Update task failed");
+    } catch (err) {
+      error({ err: err }, "Update task failed");
       alert("Failed to save changes");
     }
   }
@@ -150,8 +150,8 @@ export default function TaskPage() {
       setSubtasks([...subtasks, added]);
       setNewSubtaskName("");
       setNewSubtaskPoints(0);
-    } catch (error) {
-      error({ err: error }, "Add subtask failed");
+    } catch (err) {
+      error({ err: err }, "Add subtask failed");
       alert("Failed to add subtask");
     }
   }
@@ -164,8 +164,8 @@ export default function TaskPage() {
 
       if (!res.ok) throw new Error("Failed to delete subtask");
       setSubtasks(subtasks.filter((s) => s.id !== subtaskId));
-    } catch (error) {
-      error({ err: error }, "Delete subtask failed");
+    } catch (err) {
+      error({ err: err }, "Delete subtask failed");
       alert("Failed to delete subtask");
     }
   }

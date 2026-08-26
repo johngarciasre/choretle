@@ -34,8 +34,8 @@ const fetchTasks = async () => {
     const res = await fetch("/api/tasks");
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch tasks failed");
+  } catch (err) {
+    error({ err: err }, "Fetch tasks failed");
     return [];
   }
 };
@@ -45,8 +45,8 @@ const fetchTags = async () => {
     const res = await fetch("/api/tags");
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch tags failed");
+  } catch (err) {
+    error({ err: err }, "Fetch tags failed");
     return [];
   }
 };
@@ -128,8 +128,8 @@ export default function TasksPage() {
         setTasks(prev => [...prev, data]);
       }
       closeModal();
-    } catch (error) {
-      error({ err: error }, "Save task failed");
+    } catch (err) {
+      error({ err: err }, "Save task failed");
       alert("Failed to save task");
     }
   }
@@ -147,8 +147,8 @@ export default function TasksPage() {
       if (!res.ok) throw new Error("Failed to delete task");
       
       setTasks(prev => prev.filter(t => t.id !== taskId));
-    } catch (error) {
-      error({ err: error }, "Delete task failed");
+    } catch (err) {
+      error({ err: err }, "Delete task failed");
       alert("Failed to delete task");
     }
   }

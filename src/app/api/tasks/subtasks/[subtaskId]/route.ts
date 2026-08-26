@@ -32,8 +32,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json(result[0]);
-  } catch (error) {
-    error({ err: error }, "Update subtask failed");
+  } catch (err) {
+    error({ err: err }, "Update subtask failed");
     return NextResponse.json({ error: "Failed to update subtask" }, { status: 500 });
   }
 }
@@ -59,8 +59,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Delete subtask failed");
+  } catch (err) {
+    error({ err: err }, "Delete subtask failed");
     return NextResponse.json({ error: "Failed to delete subtask" }, { status: 500 });
   }
 }

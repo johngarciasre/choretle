@@ -54,8 +54,8 @@ export default function ReviewQueuePage() {
         const data = await res.json();
         setReviews(data);
       }
-    } catch (error) {
-      error({ err: error }, "Fetch reviews failed");
+    } catch (err) {
+      error({ err: err }, "Fetch reviews failed");
     } finally {
       setLoading(false);
     }
@@ -76,8 +76,8 @@ export default function ReviewQueuePage() {
       setReviewingId(null);
       setNotes("");
       fetchReviews();
-    } catch (error) {
-      error({ err: error }, "Review action failed");
+    } catch (err) {
+      error({ err: err }, "Review action failed");
       alert("Failed to update review");
     }
   }

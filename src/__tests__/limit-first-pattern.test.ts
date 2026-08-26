@@ -282,7 +282,7 @@ describe(".limit(1))[0] pattern (replacing .first())", () => {
     });
 
     it("should handle completeJob not finding job", async () => {
-      const findJob = async () => {
+      const findJob = async (id: string) => {
         const jobs: any[] = [];
         return jobs[0];
       };
@@ -303,7 +303,7 @@ describe(".limit(1))[0] pattern (replacing .first())", () => {
     });
 
     it("should handle subtask completion not finding subtask", async () => {
-      const findSubtask = async () => {
+      const findSubtask = async (id: string, jobId: string) => {
         const results: any[] = [];
         return results[0];
       };
@@ -324,7 +324,7 @@ describe(".limit(1))[0] pattern (replacing .first())", () => {
     });
 
     it("should handle user lookup returning undefined for unassigned user", async () => {
-      const findUser = async () => {
+      const findUser = async (id: string) => {
         const users: any[] = [];
         return users[0];
       };

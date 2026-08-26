@@ -22,8 +22,8 @@ async function fetchJobs() {
     if (!res.ok) throw new Error("Failed to fetch jobs");
     const data = await res.json();
     return data;
-  } catch (error) {
-    error({ err: error }, "Fetch jobs failed");
+  } catch (err) {
+    error({ err: err }, "Fetch jobs failed");
     // Mock data for now
     return [
       { id: "1", name: "Clean the kitchen", description: "Clean up the kitchen", points: 10, status: "todo" },

@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
     const jobs = await autoGenerateJobs(familyId, targetDate);
 
     return NextResponse.json({ jobs, count: jobs.length });
-  } catch (error) {
-    error({ err: error }, "Auto-generation failed");
+  } catch (err) {
+    error({ err: err }, "Auto-generation failed");
     return NextResponse.json(
       { error: "Failed to generate jobs" },
       { status: 500 },

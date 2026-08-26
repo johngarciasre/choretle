@@ -6,7 +6,7 @@ import { PageShell } from "@/components/ui/PageShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertCircle } from "lucide-react";
-import { info, error } from "@/lib/logger";
+import { info, error as logError } from "@/lib/logger";
 
 type Mode = "signin" | "signup";
 
@@ -86,7 +86,7 @@ export default function AuthPage() {
         setError(data.error || `${mode === "signin" ? "Sign in" : "Sign up"} failed`);
       }
     } catch (err) {
-      error({ err }, "[AUTH PAGE] Error");
+      logError({ err }, "[AUTH PAGE] Error");
       setError("An error occurred");
     } finally {
       setLoading(false);

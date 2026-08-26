@@ -36,8 +36,8 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
     }
 
     return { userId: payload.userId, familyId: payload.familyId || undefined };
-  } catch (error) {
-    error({ err: error }, "Token verification failed");
+  } catch (err) {
+    error({ err: err }, "Token verification failed");
     return { error: "Invalid token" };
   }
 }
@@ -71,8 +71,8 @@ export async function GET(request: NextRequest) {
     const assignments = await getUpcomingAssignments(db, familyId, daysAhead);
 
     return NextResponse.json({ assignments });
-  } catch (error) {
-    error({ err: error }, "Failed to fetch rotation schedule");
+  } catch (err) {
+    error({ err: err }, "Failed to fetch rotation schedule");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
@@ -193,8 +193,8 @@ export async function POST(request: NextRequest) {
       message: "Swap meet entry created successfully",
       entries: createdEntries,
     });
-  } catch (error) {
-    error({ err: error }, "Swap meet POST failed");
+  } catch (err) {
+    error({ err: err }, "Swap meet POST failed");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }

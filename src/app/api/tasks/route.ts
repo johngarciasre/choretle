@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(tasks);
-  } catch (error) {
-    error({ err: error }, "Get tasks failed");
+  } catch (err) {
+    error({ err: err }, "Get tasks failed");
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
 }
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(task);
-  } catch (error) {
-    error({ err: error }, "Create task failed");
+  } catch (err) {
+    error({ err: err }, "Create task failed");
     return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
   }
 }
@@ -121,8 +121,8 @@ export async function PUT(request: NextRequest) {
     const updatedTask = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1);
     
     return NextResponse.json(updatedTask[0]);
-  } catch (error) {
-    error({ err: error }, "Update task failed");
+  } catch (err) {
+    error({ err: err }, "Update task failed");
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }
@@ -144,8 +144,8 @@ export async function DELETE(request: NextRequest) {
     await rawDeleteWhere("tasks", [{ col: "id", val: id }]);
     
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Delete task failed");
+  } catch (err) {
+    error({ err: err }, "Delete task failed");
     return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }

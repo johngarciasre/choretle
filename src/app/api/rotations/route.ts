@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, rawInsert } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -69,8 +69,8 @@ export async function GET(request: NextRequest) {
       users: unassignedUsers,
       slates: slatesWithRotations,
     });
-  } catch (error) {
-    error({ err: error }, "Rotations GET failed");
+  } catch (err) {
+    error({ err: err }, "Rotations GET failed");
     return NextResponse.json({ error: "Failed to fetch rotations" }, { status: 500 });
   }
 }
@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(result, { status: 201 });
     }
-  } catch (error) {
-    error({ err: error }, "Rotations POST failed");
+  } catch (err) {
+    error({ err: err }, "Rotations POST failed");
     return NextResponse.json({ error: "Failed to save rotation" }, { status: 500 });
   }
 }
@@ -139,8 +139,8 @@ export async function DELETE(request: NextRequest) {
     await rawDeleteWhere("rotations", [{ col: "id", val: id }]);
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Rotations DELETE failed");
+  } catch (err) {
+    error({ err: err }, "Rotations DELETE failed");
     return NextResponse.json({ error: "Failed to delete rotation" }, { status: 500 });
   }
 }

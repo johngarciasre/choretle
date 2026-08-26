@@ -34,8 +34,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json({ success: true, count: taskIds.length });
-  } catch (error) {
-    error({ err: error }, "Slate tasks PUT failed");
+  } catch (err) {
+    error({ err: err }, "Slate tasks PUT failed");
     return NextResponse.json({ error: "Failed to update slate tasks" }, { status: 500 });
   }
 }
@@ -58,8 +58,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .where(eq(schema.slateTasks.slateId, slateId));
 
     return NextResponse.json(tasks);
-  } catch (error) {
-    error({ err: error }, "Slate tasks GET failed");
+  } catch (err) {
+    error({ err: err }, "Slate tasks GET failed");
     return NextResponse.json({ error: "Failed to fetch slate tasks" }, { status: 500 });
   }
 }

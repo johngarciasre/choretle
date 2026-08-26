@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json(result);
-  } catch (error) {
-    error({ err: error }, "Tags GET failed");
+  } catch (err) {
+    error({ err: err }, "Tags GET failed");
     return NextResponse.json({ error: "Failed to fetch tags" }, { status: 500 });
   }
 }
@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(tag, { status: 201 });
-  } catch (error) {
-    error({ err: error }, "Tags POST failed");
+  } catch (err) {
+    error({ err: err }, "Tags POST failed");
     return NextResponse.json({ error: "Failed to create tag" }, { status: 500 });
   }
 }
@@ -93,8 +93,8 @@ export async function PUT(request: NextRequest) {
     }
 
     return NextResponse.json(result[0]);
-  } catch (error) {
-    error({ err: error }, "Tags PUT failed");
+  } catch (err) {
+    error({ err: err }, "Tags PUT failed");
     return NextResponse.json({ error: "Failed to update tag" }, { status: 500 });
   }
 }
@@ -119,8 +119,8 @@ export async function DELETE(request: NextRequest) {
     await rawDeleteWhere("tags", [{ col: "id", val: id }]);
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Tags DELETE failed");
+  } catch (err) {
+    error({ err: err }, "Tags DELETE failed");
     return NextResponse.json({ error: "Failed to delete tag" }, { status: 500 });
   }
 }

@@ -35,8 +35,8 @@ async function verifyAuth(request: NextRequest): Promise<{ userId: string; famil
     }
 
     return { userId: payload.userId, familyId: payload.familyId || user.familyId };
-  } catch (error) {
-    error({ err: error }, "Token verification failed");
+  } catch (err) {
+    error({ err: err }, "Token verification failed");
     return { error: "Invalid token" };
   }
 }
@@ -146,8 +146,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(report);
-  } catch (error) {
-    error({ err: error }, "Reports GET failed");
+  } catch (err) {
+    error({ err: err }, "Reports GET failed");
     if (error instanceof Error && error.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }

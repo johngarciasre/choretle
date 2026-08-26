@@ -91,8 +91,8 @@ export default function SwapMeetPage() {
         const slateId = data.assignments[0].slateId;
         await fetchRotations(fid, slateId);
       }
-    } catch (error) {
-      error({ err: error }, "Failed to fetch rotation schedule");
+    } catch (err) {
+      error({ err: err }, "Failed to fetch rotation schedule");
     } finally {
       setLoading(false);
     }
@@ -104,8 +104,8 @@ export default function SwapMeetPage() {
       if (!response.ok) return;
       const data = await response.json();
       setRotations(data.rotations || []);
-    } catch (error) {
-      error({ err: error }, "Failed to fetch rotations");
+    } catch (err) {
+      error({ err: err }, "Failed to fetch rotations");
     }
   };
 
@@ -115,8 +115,8 @@ export default function SwapMeetPage() {
       if (!response.ok) return;
       const data = await response.json();
       setSwaps(data.swaps || []);
-    } catch (error) {
-      error({ err: error }, "Failed to fetch swaps");
+    } catch (err) {
+      error({ err: err }, "Failed to fetch swaps");
     }
   };
 
@@ -164,8 +164,8 @@ export default function SwapMeetPage() {
       } else {
         alert(data.error || "Failed to swap rotations.");
       }
-    } catch (error) {
-      error({ err: error }, "Swap failed");
+    } catch (err) {
+      error({ err: err }, "Swap failed");
       alert("An error occurred while swapping rotations.");
     }
   };
@@ -208,8 +208,8 @@ export default function SwapMeetPage() {
       } else {
         alert(data.error || "Failed to share slate.");
       }
-    } catch (error) {
-      error({ err: error }, "Share failed");
+    } catch (err) {
+      error({ err: err }, "Share failed");
       alert("An error occurred while sharing slates.");
     }
   };
@@ -224,8 +224,8 @@ export default function SwapMeetPage() {
       setSelectedSlateIdsForSharing([]);
       
       await fetchSwaps(familyId);
-    } catch (error) {
-      error({ err: error }, "Failed to open share modal");
+    } catch (err) {
+      error({ err: err }, "Failed to open share modal");
     }
   };
 

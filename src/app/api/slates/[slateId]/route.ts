@@ -20,8 +20,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json(slate[0]);
-  } catch (error) {
-    error({ err: error }, "Slate GET failed");
+  } catch (err) {
+    error({ err: err }, "Slate GET failed");
     return NextResponse.json({ error: "Failed to fetch slate" }, { status: 500 });
   }
 }
@@ -47,8 +47,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json(result[0]);
-  } catch (error) {
-    error({ err: error }, "Slate PUT failed");
+  } catch (err) {
+    error({ err: err }, "Slate PUT failed");
     return NextResponse.json({ error: "Failed to update slate" }, { status: 500 });
   }
 }
@@ -69,8 +69,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await rawDeleteWhere("slates", [{ col: "id", val: slateId }]);
     
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Slate DELETE failed");
+  } catch (err) {
+    error({ err: err }, "Slate DELETE failed");
     return NextResponse.json({ error: "Failed to delete slate" }, { status: 500 });
   }
 }

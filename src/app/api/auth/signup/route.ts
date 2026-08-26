@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
+import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME, DEV_USERS } from "@/lib/dev-auth";
 import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -227,8 +227,8 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 }
     );
-  } catch (error) {
-    error({ err: error }, "[SIGNUP] Unhandled error");
+  } catch (err) {
+    error({ err: err }, "[SIGNUP] Unhandled error");
     
     if (error instanceof Error) {
       return NextResponse.json(
@@ -305,7 +305,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ authenticated: false });
-  } catch (error) {
+  } catch (err) {
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }

@@ -29,8 +29,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json(result[0]);
-  } catch (error) {
-    error({ err: error }, "Get review failed");
+  } catch (err) {
+    error({ err: err }, "Get review failed");
     return NextResponse.json({ error: "Failed to fetch review" }, { status: 500 });
   }
 }
@@ -62,8 +62,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json(result[0]);
-  } catch (error) {
-    error({ err: error }, "Update review failed");
+  } catch (err) {
+    error({ err: err }, "Update review failed");
     return NextResponse.json({ error: "Failed to update review" }, { status: 500 });
   }
 }
@@ -79,8 +79,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     
     await rawDeleteWhere("reviews", [{ col: "id", val: reviewId }]);
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Delete review failed");
+  } catch (err) {
+    error({ err: err }, "Delete review failed");
     return NextResponse.json({ error: "Failed to delete review" }, { status: 500 });
   }
 }

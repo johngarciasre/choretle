@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
 
     const photos = await (query as any);
     return NextResponse.json(photos);
-  } catch (error) {
-    error({ err: error }, "Get photos failed");
+  } catch (err) {
+    error({ err: err }, "Get photos failed");
     return NextResponse.json({ error: "Failed to fetch photos" }, { status: 500 });
   }
 }
@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(photo);
-  } catch (error) {
-    error({ err: error }, "Create photo failed");
+  } catch (err) {
+    error({ err: err }, "Create photo failed");
     return NextResponse.json({ error: "Failed to create photo" }, { status: 500 });
   }
 }

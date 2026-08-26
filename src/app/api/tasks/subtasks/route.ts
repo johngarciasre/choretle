@@ -41,8 +41,8 @@ export async function GET(request: NextRequest) {
 
     const subtasks = await query;
     return NextResponse.json(subtasks);
-  } catch (error) {
-    error({ err: error }, "Get subtasks failed");
+  } catch (err) {
+    error({ err: err }, "Get subtasks failed");
     return NextResponse.json({ error: "Failed to fetch subtasks" }, { status: 500 });
   }
 }
@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: "taskId + name OR jobId + subtaskId required" }, { status: 400 });
-  } catch (error) {
-    error({ err: error }, "Create subtask failed");
+  } catch (err) {
+    error({ err: err }, "Create subtask failed");
     return NextResponse.json({ error: "Failed to create subtask" }, { status: 500 });
   }
 }

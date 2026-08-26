@@ -148,8 +148,8 @@ export default function FamilyPage() {
       setSelectedTheme(familyData.family.theme || "coral");
       setUsers(usersData.users);
       setTeams(teamsData.teams);
-    } catch (error) {
-      error({ err: error }, "Failed to load family data");
+    } catch (err) {
+      error({ err: err }, "Failed to load family data");
     } finally {
       setLoading(false);
     }
@@ -205,8 +205,8 @@ export default function FamilyPage() {
       
       // Redirect to the new family view
       router.push(`/family/${data.family.id}`);
-    } catch (error) {
-      error({ err: error }, "Failed to create family");
+    } catch (err) {
+      error({ err: err }, "Failed to create family");
       alert("Failed to create family. Please try again.");
     }
   };
@@ -230,8 +230,8 @@ export default function FamilyPage() {
       localStorage.setItem("familyId", data.family.id);
       
       router.push(`/family/${data.family.id}`);
-    } catch (error) {
-      error({ err: error }, "Failed to join family");
+    } catch (err) {
+      error({ err: err }, "Failed to join family");
       alert("Failed to join family. Please try again.");
     }
   };
@@ -254,8 +254,8 @@ export default function FamilyPage() {
       setShowTeamForm(false);
       setNewTeamName("");
       setNewTeamLogoUrl("");
-    } catch (error) {
-      error({ err: error }, "Failed to create team");
+    } catch (err) {
+      error({ err: err }, "Failed to create team");
       alert("Failed to create team.");
     }
   };
@@ -280,8 +280,8 @@ export default function FamilyPage() {
 
       setSelectedUser(null);
       alert(`Successfully assigned ${selectedUser.name} to team!`);
-    } catch (error) {
-      error({ err: error }, "Failed to assign user");
+    } catch (err) {
+      error({ err: err }, "Failed to assign user");
       alert("Failed to assign user to team.");
     }
   };
@@ -302,8 +302,8 @@ export default function FamilyPage() {
       const data = await response.json();
       setFamily(data.family);
       setShowToggleModal(false);
-    } catch (error) {
-      error({ err: error }, "Failed to toggle teams");
+    } catch (err) {
+      error({ err: err }, "Failed to toggle teams");
       alert("Failed to update teams setting.");
     }
   };
@@ -318,8 +318,8 @@ export default function FamilyPage() {
         const data = await response.json();
         setTags(data);
       }
-    } catch (error) {
-      error({ err: error }, "Failed to load tags");
+    } catch (err) {
+      error({ err: err }, "Failed to load tags");
     } finally {
       setLoadingTags(false);
     }
@@ -343,8 +343,8 @@ export default function FamilyPage() {
       setShowTagForm(false);
       setTagName("");
       setTagColor("#6366ee");
-    } catch (error) {
-      error({ err: error }, "Failed to create tag");
+    } catch (err) {
+      error({ err: err }, "Failed to create tag");
       alert("Failed to create tag.");
     }
   };
@@ -368,8 +368,8 @@ export default function FamilyPage() {
       setShowTagForm(false);
       setTagName("");
       setTagColor("#6366ee");
-    } catch (error) {
-      error({ err: error }, "Failed to update tag");
+    } catch (err) {
+      error({ err: err }, "Failed to update tag");
       alert("Failed to update tag.");
     }
   };
@@ -388,8 +388,8 @@ export default function FamilyPage() {
       if (!response.ok) throw new Error("Failed to delete tag");
 
       setTags(tags.filter(t => t.id !== tagId));
-    } catch (error) {
-      error({ err: error }, "Failed to delete tag");
+    } catch (err) {
+      error({ err: err }, "Failed to delete tag");
       alert("Failed to delete tag.");
     }
   };
@@ -410,8 +410,8 @@ export default function FamilyPage() {
       const data = await response.json();
       setFamily(data.family);
       setEditingName(false);
-    } catch (error) {
-      error({ err: error }, "Failed to update family name");
+    } catch (err) {
+      error({ err: err }, "Failed to update family name");
       alert("Failed to update family name.");
     }
   };
@@ -432,8 +432,8 @@ export default function FamilyPage() {
       const data = await response.json();
       setFamily(data.family);
       setSelectedTheme(data.family.theme || selectedTheme);
-    } catch (error) {
-      error({ err: error }, "Failed to update theme");
+    } catch (err) {
+      error({ err: err }, "Failed to update theme");
       alert("Failed to update theme.");
     }
   };
@@ -557,8 +557,8 @@ export default function FamilyPage() {
   return (
     <PageShell>
       <PageHeader 
-        title={viewingFamily ? family.name : "Family Settings"}
-        subtitle={viewingFamily ? `Welcome to ${family.name}!` : "Manage your family settings, teams, and members."}
+        title={viewingFamily ? family?.name ?? "Family Settings" : "Family Settings"}
+        subtitle={viewingFamily ? `Welcome to ${family?.name}!` : "Manage your family settings, teams, and members."}
         actions={
           viewingFamily && (
             <Button variant="grape" href="/dashboard">
@@ -580,7 +580,7 @@ export default function FamilyPage() {
                 <label className="block text-sm font-bold text-ink mb-1 flex items-center gap-2">
                   Family Name
                   {viewingFamily && !editingName && (
-                    <button onClick={() => { setTempName(family.name); setEditingName(true); }} className="text-xs text-ink/40 hover:text-ink/70">
+                    <button onClick={() => { setTempName(family?.name || ""); setEditingName(true); }} className="text-xs text-ink/40 hover:text-ink/70">
                       <Pencil size={12} />
                     </button>
                   )}
@@ -598,28 +598,28 @@ export default function FamilyPage() {
                     <Button onClick={handleUpdateFamilyName} size="sm" variant="primary">Save</Button>
                   </div>
                 ) : (
-                  <p className="text-ink/60">{family.name}</p>
+                  <p className="text-ink/60">{family?.name}</p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm font-bold text-ink mb-1">Timezone</label>
-                <p className="text-ink/60">{family.timezone}</p>
+                <p className="text-ink/60">{family?.timezone}</p>
               </div>
 
               <div>
                 <label className="block text-sm font-bold text-ink mb-1">Week Starts On</label>
                 <p className="text-ink/60">
-                  {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][family.weekStartDay]}
+                  {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][family?.weekStartDay ?? 0]}
                 </p>
               </div>
 
               <div>
                 <label className="block text-sm font-bold text-ink mb-1">Teams Enabled</label>
                 <Badge 
-                  status={family.teamsEnabled ? "done" : "todo"}
+                  status={family?.teamsEnabled ? "done" : "todo"}
                 >
-                  {family.teamsEnabled ? "Yes ✓" : "No"}
+                  {family?.teamsEnabled ? "Yes ✓" : "No"}
                 </Badge>
               </div>
 
@@ -709,7 +709,7 @@ export default function FamilyPage() {
         </section>
 
         {/* Teams Section */}
-        {family.teamsEnabled && (
+        {family?.teamsEnabled && (
           <section className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-display text-xl font-bold text-ink">Teams</h2>
@@ -1056,7 +1056,7 @@ export default function FamilyPage() {
                     </div>
                   </div>
 
-                  {family.teamsEnabled && teams?.length > 0 && (
+                  {family?.teamsEnabled && teams?.length > 0 && (
                     <div className="pt-3 border-t border-ink/10">
                       <p className="text-sm font-bold text-ink/60 mb-2">Teams:</p>
                       <div className="flex flex-wrap gap-1.5">

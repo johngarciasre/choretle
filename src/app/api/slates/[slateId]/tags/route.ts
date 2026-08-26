@@ -32,8 +32,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json({ success: true, count: tagIds.length });
-  } catch (error) {
-    error({ err: error }, "Slate tags PUT failed");
+  } catch (err) {
+    error({ err: err }, "Slate tags PUT failed");
     return NextResponse.json({ error: "Failed to update slate tags" }, { status: 500 });
   }
 }
@@ -56,8 +56,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .where(eq(schema.slateTags.slateId, slateId));
 
     return NextResponse.json(tags);
-  } catch (error) {
-    error({ err: error }, "Slate tags GET failed");
+  } catch (err) {
+    error({ err: err }, "Slate tags GET failed");
     return NextResponse.json({ error: "Failed to fetch slate tags" }, { status: 500 });
   }
 }

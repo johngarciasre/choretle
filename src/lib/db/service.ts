@@ -29,8 +29,8 @@ export { canTransition, getValidNextStatuses, calculateJobPoints };
 async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | null> {
   try {
     return await query;
-  } catch (error) {
-    error({ err: error }, "safeQuery failed");
+  } catch (err) {
+    error({ err: err }, "safeQuery failed");
     return null;
   }
 }
@@ -609,8 +609,8 @@ export async function completeJob(id: string, userId?: string) {
         );
       }
     }
-  } catch (error) {
-    error({ err: error }, "completeJob failed");
+  } catch (err) {
+    error({ err: err }, "completeJob failed");
     throw error;
   }
 
@@ -675,8 +675,8 @@ export async function completeSubtask(id: string, jobId: string, userId?: string
     }
 
     return pointsAwarded;
-  } catch (error) {
-    error({ err: error }, "completeSubtask failed");
+  } catch (err) {
+    error({ err: err }, "completeSubtask failed");
     throw error;
   }
 }
@@ -958,8 +958,8 @@ export async function swapRotationEntries(
     }
 
     return { success: true };
-  } catch (error) {
-    error({ err: error }, "swapRotationEntries failed");
+  } catch (err) {
+    error({ err: err }, "swapRotationEntries failed");
     throw error;
   }
 }

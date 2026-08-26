@@ -33,8 +33,8 @@ export default function PhotoUploadModal({ isOpen, onClose, objectType, objectId
       setTitle("");
       setIsProbative(true);
       window.location.reload();
-    } catch (error) {
-      error({ err: error }, "Upload failed");
+    } catch (err) {
+      error({ err: err }, "Upload failed");
       alert("Failed to upload photo");
     } finally {
       setUploading(false);

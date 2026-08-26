@@ -34,8 +34,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       tagIds: result,
       verifyRequired: taskWithTags[0].task.verifyRequired ?? false,
     });
-  } catch (error) {
-    error({ err: error }, "Task GET failed");
+  } catch (err) {
+    error({ err: err }, "Task GET failed");
     return NextResponse.json({ error: "Failed to fetch task" }, { status: 500 });
   }
 }
@@ -91,8 +91,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       ...updatedTaskWithTags[0].task,
       tagIds: result,
     });
-  } catch (error) {
-    error({ err: error }, "Task PUT failed");
+  } catch (err) {
+    error({ err: err }, "Task PUT failed");
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }
@@ -110,8 +110,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     
     // Cascade delete of tags handled by FK constraint
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Task DELETE failed");
+  } catch (err) {
+    error({ err: err }, "Task DELETE failed");
     return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }

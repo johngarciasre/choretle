@@ -17,8 +17,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await rawDeleteWhere("photos", [{ col: "id", val: photoId }]);
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    error({ err: error }, "Delete photo failed");
+  } catch (err) {
+    error({ err: err }, "Delete photo failed");
     return NextResponse.json({ error: "Failed to delete photo" }, { status: 500 });
   }
 }

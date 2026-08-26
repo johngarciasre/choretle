@@ -39,8 +39,8 @@ const fetchSlates = async () => {
     const res = await fetch(`/api/slates?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch slates");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch slates failed");
+  } catch (err) {
+    error({ err: err }, "Fetch slates failed");
     return [];
   }
 };
@@ -51,8 +51,8 @@ const fetchTasks = async () => {
     const res = await fetch(`/api/tasks?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch tasks failed");
+  } catch (err) {
+    error({ err: err }, "Fetch tasks failed");
     return [];
   }
 };
@@ -63,8 +63,8 @@ const fetchTags = async () => {
     const res = await fetch(`/api/tags?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
-  } catch (error) {
-    error({ err: error }, "Fetch tags failed");
+  } catch (err) {
+    error({ err: err }, "Fetch tags failed");
     return [];
   }
 };
@@ -112,8 +112,8 @@ export default function SlatesPage() {
       const data = await res.json();
       setSlates(prev => [...prev, data]);
       setNewSlateName("");
-    } catch (error) {
-      error({ err: error }, "Create slate failed");
+    } catch (err) {
+      error({ err: err }, "Create slate failed");
       alert("Failed to create slate");
     }
   }
@@ -131,8 +131,8 @@ export default function SlatesPage() {
       if (!res.ok) throw new Error("Failed to delete slate");
       
       setSlates(prev => prev.filter(s => s.id !== slateId));
-    } catch (error) {
-      error({ err: error }, "Delete slate failed");
+    } catch (err) {
+      error({ err: err }, "Delete slate failed");
       alert("Failed to delete slate");
     }
   }
@@ -147,8 +147,8 @@ export default function SlatesPage() {
       setBuildingSlateTasks(data.tasks || []);
       setBuildingSlateExplicitTaskIds(data.explicitTaskIds || []);
       setBuildingSlateAutoIncludeTagIds(data.autoIncludeTagIds || []);
-    } catch (error) {
-      error({ err: error }, "Start building failed");
+    } catch (err) {
+      error({ err: err }, "Start building failed");
       alert("Failed to load slate for editing");
     }
   }
@@ -172,8 +172,8 @@ export default function SlatesPage() {
       
       setBuildingSlateId(null);
       fetchTasks();
-    } catch (error) {
-      error({ err: error }, "Save slate failed");
+    } catch (err) {
+      error({ err: err }, "Save slate failed");
       alert("Failed to save slate configuration");
     }
   }

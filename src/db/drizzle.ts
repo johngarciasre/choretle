@@ -153,12 +153,12 @@ export async function initDb(): Promise<any> {
   try {
     const Database = require("better-sqlite3");
     _rawDb = new Database(DB_PATH);
-    createTables(_rawDb);
-    _db = construct(_rawDb, schema);
+    createTables(_rawDb!);
+    _db = construct(_rawDb!, schema as any);
     info({ path: DB_PATH === ":memory:" ? "in-memory" : DB_PATH }, "[DB] Initialized SQLite database");
-  } catch (error) {
-    error({ err: error }, "[DB] Failed to initialize SQLite");
-    throw error;
+  } catch (err) {
+    error({ err: err }, "[DB] Failed to initialize SQLite");
+    throw err;
   }
   return _db;
 }
@@ -176,11 +176,12 @@ export async function drizzleInsert(db: any, table: any, data: Record<string, an
     await db.insert(table).values(data).run();
     const id = data.id;
     if (!id) return data;
-    const selectSql = `SELECT * FROM ${table[Symbol.for]} WHERE id = ?`;
+    const tableName = (table as any)._?.name || String(table);
+    const selectSql = `SELECT * FROM ${tableName} WHERE id = ?`;
     // Use raw SQL to fetch the inserted row
     const raw = getRawDb();
     if (raw) {
-      return raw.prepare(`SELECT * FROM ${table[Symbol.for]} WHERE id = ?`).get(id);
+      return raw.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).get(id);
     }
     return data;
   } catch (e) {
