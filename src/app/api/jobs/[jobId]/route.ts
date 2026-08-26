@@ -280,3 +280,77 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Failed to update job status" }, { status: 500 });
   }
 }
+
+// ─── POST: Add a comment to the job ──────────────────────────────────
+export async function POST(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+  try {
+    const parsedParams = await params;
+    const jobId = parsedParams.jobId;
+
+    // Verify auth
+    const authResult = await verifyAuth(request);
+    if ("error" in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { content } = body;
+
+    if (!content || typeof content !== "string" || !content.trim()) {
+      return NextResponse.json({ error: "Comment content is required" }, { status: 400 });
+    }
+
+    const db = await initDb();
+    if (!db) {
+      throw new Error("Database not initialized");
+    }
+
+    // Verify job exists and belongs to the user's family
+    const job = (await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    // Check family access
+    if ((job as any).listId) {
+      const list = (await db.select().from(schema.lists).where(eq(schema.lists.id, job.listId)).limit(1))[0];
+      if (list && list.familyId && list.familyId !== authResult.familyId) {
+        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      }
+    }
+
+    // Insert the comment
+    const now = new Date();
+    const newComment = await rawInsert("comments", {
+      id: `cmt-${Date.now()}`,
+      job_id: jobId,
+      user_id: authResult.userId,
+      content: content.trim(),
+      created_at: now.toISOString(),
+    });
+
+    if (!newComment) {
+      return NextResponse.json({ error: "Failed to create comment" }, { status: 500 });
+    }
+
+    // Fetch the associated user name
+    const user = (await db.select().from(schema.users).where(eq(schema.users.id, authResult.userId)).limit(1))[0];
+
+    return NextResponse.json({
+      success: true,
+      comment: {
+        id: newComment.id,
+        content: newComment.content,
+        userId: user?.id || null,
+        userName: user?.name || "Anonymous",
+        createdAt: newComment.createdAt ? new Date(newComment.createdAt).toISOString() : now.toISOString(),
+      },
+    });
+  } catch (err) {
+    error({ err: err }, "Job POST comment failed");
+    if (error instanceof Error && error.message.includes("Database not initialized")) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+    return NextResponse.json({ error: "Failed to create comment" }, { status: 500 });
+  }
+}

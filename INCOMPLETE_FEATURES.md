@@ -22,11 +22,15 @@ Added `deleteJob()` to the DB service layer. The DELETE handler now calls `delet
 **File:** `src/app/api/family/route.ts` + `src/app/api/family/join/route.ts` — **FIXED**
 The API routes were already wired to real DB operations; the dead-code stubs in `actions.ts` have been removed. Added auto-incrementing slug suffix (`my-test-family-1`, `-2`, etc.) when a family name collision occurs, preventing 409 errors on repeated creation.
 
+### 5. Comments route — fixed
+**File:** `src/app/api/jobs/[jobId]/route.ts` — **FIXED**
+Added POST handler for `/api/jobs/:jobId/comments`. Verifies auth via `verifyAuth()`, validates content, checks job existence and family access, inserts into `comments` table with `rawInsert()`, returns the created comment with user name. Frontend at `src/app/jobs/[jobId]/page.tsx` already wired to call this endpoint.
+
 ---
 
 ## HIGH SEVERITY — Broken or non-functional in production
 
-### 5. Profile page calls non-existent API
+### 6. Profile page calls non-existent API
 **File:** `src/app/profile/[id]/page.tsx`
 Fetches from `/api/profile/${userId}` which has no route file. Falls back to hardcoded mock user/stats/completions on error.
 
@@ -34,19 +38,16 @@ Fetches from `/api/profile/${userId}` which has no route file. Falls back to har
 
 ## MEDIUM SEVERITY — Partially working or fragile
 
-### 6. Jobs page — mock fallback on API failure
+### 7. Jobs page — mock fallback on API failure
 **File:** `src/app/jobs/page.tsx`
 `fetchJobs()` catches errors and returns 3 hardcoded jobs. The real fetch doesn't pass `x-family-id` header, so this fallback triggers in production.
 
-### 7. Rotations page — mock fallback on API failure
+### 8. Rotations page — mock fallback on API failure
 **File:** `src/app/rotations/page.tsx`
 100+ lines of hardcoded mock users/slates/assignments as fallback when `/api/rotations` fails. Missing `x-family-id` header on the fetch.
 
-### 8. Missing: `/api/profile/:id` route
+### 9. Missing: `/api/profile/:id` route
 Referenced by `src/app/profile/[id]/page.tsx` but no route file exists under `src/app/api/profile/`.
-
-### 9. Missing: `/api/jobs/:jobId/comments` route
-Referenced by `src/app/jobs/[jobId]/page.tsx` (POST to add comments) but no route file exists.
 
 ### 10. `getJobsByFamily()` stubbed out
 **File:** `src/lib/db/service.ts` (line ~305)
@@ -96,7 +97,8 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Comments route** (#9) | Wired up by job detail page, straightforward CRUD |
-| 2 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
-| 3 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
-| 4 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 1 | **Profile API + page wiring** (#6, #9) | Two missing pieces that belong together |
+| 2 | **Remove mock fallbacks** (#7, #8) | Cleanup after APIs are solid |
+| 3 | **getJobsByFamily() fix** (#10) | Stubbed out query needs real implementation |
+| 4 | **Team member DELETE** (#11) | Missing CRUD operation |
+| 5 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
