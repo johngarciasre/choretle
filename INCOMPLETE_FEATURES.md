@@ -10,18 +10,13 @@ A living inventory of stubbed-out features, missing APIs, mock data, and known g
 **File:** `src/app/api/reports/route.ts` — **FIXED**
 All four stubbed generators (`getDoneReport`, `getTaskReport`, `getMemberReport`, `getWallboardReport`) now query the database with real joins across `jobs`, `slate_tasks`, `tasks`, and `users`. Frontend wired up to fetch from `/api/reports?type=<tab>` on mount and tab switches.
 
+### 2. Dashboard API ~~(was HIGH)~~
+**File:** `src/app/api/dashboard/route.ts` — **FIXED**
+Replaced the empty `{ jobs: [], leaderboard: [] }` stub with real DB queries. Returns today's outstanding jobs (todo/doing status, filtered by user) joined with slate task names and assigned user names, plus a leaderboard of all family members sorted by total points. Reads `x-user-id` / `x-family-id` headers set by middleware, with dev session cookie fallback.
+
 ---
 
 ## HIGH SEVERITY — Broken or non-functional in production
-
-### 2. Dashboard API — returns empty arrays
-**File:** `src/app/api/dashboard/route.ts`
-```ts
-export async function GET(request: NextRequest) {
- return NextResponse.json({ jobs: [], leaderboard: [] });
-}
-```
-Explicit comment says "Mock jobs — replace with real DB query". No database access at all.
 
 ### 3. `createFamily()` / `joinFamily()` stubs
 **File:** `src/lib/server/actions.ts`
@@ -103,8 +98,7 @@ const debug = () => {};
 |----------|------|-----|
 | 1 | **Jobs DELETE fix** (#4) | Small but critical — currently a lie to callers |
 | 2 | **Comments route** (#9) | Wired up by job detail page, straightforward CRUD |
-| 3 | **Dashboard API** (#2) | Touches scoring + leaderboard queries; good next step after reports |
-| 4 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
-| 5 | **Server actions fix** (#3) | Family creation/joining is core workflow |
-| 6 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
-| 7 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 3 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
+| 4 | **Server actions fix** (#3) | Family creation/joining is core workflow |
+| 5 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
+| 6 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
