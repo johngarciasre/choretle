@@ -80,14 +80,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      ok: true,
-      family,
-      users,
-    });
+    return NextResponse.json({ ok: true, family, users });
   } catch (e) {
     error({ err: e }, "Family GET failed");
-    return NextResponse.json({ error: "Failed to fetch family" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Failed to fetch family" }, { status: 500 });
   }
 }
 

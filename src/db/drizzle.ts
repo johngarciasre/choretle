@@ -3,7 +3,7 @@ import Database from "better-sqlite3";
 import * as schema from "@/db/schema-sqlite";
 import { info, error } from "@/lib/logger.server";
 
-const DB_PATH = process.env.SQLITE_DB || ":memory:";
+const DB_PATH = process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:";
 
 function createTables(db: Database.Database): void {
   db.exec(`
