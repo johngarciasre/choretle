@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getJobsByList, createJob, updateJob } from "@/lib/db/service";
+import { getJobsByList, createJob, updateJob, deleteJob } from "@/lib/db/service";
 import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest) {
@@ -56,7 +56,10 @@ export async function DELETE(request: NextRequest) {
     if (!body?.id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
-    const db = await import("@/lib/db/service").then(m => m.createJob).constructor.prototype ? null : null;
+    const deleted = await deleteJob(body.id);
+    if (!deleted) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
     return NextResponse.json({ ok: true, deleted: body.id });
   } catch (err) {
     error({ err: err }, "Delete job failed");

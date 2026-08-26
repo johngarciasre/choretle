@@ -14,17 +14,17 @@ All four stubbed generators (`getDoneReport`, `getTaskReport`, `getMemberReport`
 **File:** `src/app/api/dashboard/route.ts` — **FIXED**
 Replaced the empty `{ jobs: [], leaderboard: [] }` stub with real DB queries. Returns today's outstanding jobs (todo/doing status, filtered by user) joined with slate task names and assigned user names, plus a leaderboard of all family members sorted by total points. Reads `x-user-id` / `x-family-id` headers set by middleware, with dev session cookie fallback.
 
+### 3. Jobs DELETE — was no-op (now uses real DB delete)
+**File:** `src/app/api/jobs/route.ts` + `src/lib/db/service.ts` — **FIXED**
+Added `deleteJob()` to the DB service layer. The DELETE handler now calls `deleteJob(body.id)` and returns 404 if the job doesn't exist. Cascade cleanup of `job_subtasks`, `comments`, and `job_history` is handled by the schema's `ON DELETE CASCADE` constraints on all three child tables.
+
 ---
 
 ## HIGH SEVERITY — Broken or non-functional in production
 
-### 3. `createFamily()` / `joinFamily()` stubs
+### 4. `createFamily()` / `joinFamily()` stubs
 **File:** `src/lib/server/actions.ts`
 Both functions return `{ id: crypto.randomUUID(), name }` without touching the database. The server action layer is entirely non-functional for family creation/joining.
-
-### 4. Jobs DELETE — no-op (returns success without deleting)
-**File:** `src/app/api/jobs/route.ts`
-The DELETE handler does a nonsensical dynamic import, gets `null`, then returns `{ ok: true, deleted: body.id }`. No database deletion or cascade cleanup of `job_subtasks`, `comments`, or `job_history`.
 
 ### 5. Profile page calls non-existent API
 **File:** `src/app/profile/[id]/page.tsx`
@@ -96,9 +96,8 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Jobs DELETE fix** (#4) | Small but critical — currently a lie to callers |
+| 1 | **Server actions fix** (#4) | Family creation/joining is core workflow |
 | 2 | **Comments route** (#9) | Wired up by job detail page, straightforward CRUD |
 | 3 | **Profile API + page wiring** (#5, #8) | Two missing pieces that belong together |
-| 4 | **Server actions fix** (#3) | Family creation/joining is core workflow |
-| 5 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
-| 6 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 4 | **Remove mock fallbacks** (#6, #7) | Cleanup after APIs are solid |
+| 5 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |

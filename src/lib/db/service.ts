@@ -333,6 +333,13 @@ export async function updateJob(id: string, data: Partial<any>) {
   return rawUpdate("jobs", data, "id", id) || null;
 }
 
+export async function deleteJob(id: string) {
+  const db = await ensureDb();
+  if (!db) return false;
+  await safeQuery(rawDeleteWhere("jobs", [{ col: "id", val: id }]));
+  return true;
+}
+
 // ─── Lists ──────────────────────────────────────────────────────────
 
 export async function getListsByFamily(familyId: string) {
