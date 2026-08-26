@@ -87,6 +87,14 @@ const fetchPhotos = async (objectType: string, objectId: string) => {
   }
 };
 
+interface JobPhoto {
+  id: string;
+  url: string;
+  objectType: string;
+  objectId: string;
+  createdAt: string;
+}
+
 export default function JobPage() {
   const authChecked = useAuthRedirect();
   const [job, setJob] = useState<Job | null>(null);
@@ -94,7 +102,7 @@ export default function JobPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [subtaskInstances, setSubtaskInstances] = useState<SubtaskInstance[]>([]);
-  const [photos, setPhotos] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<JobPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const [showUpload, setShowUpload] = useState(false);
@@ -277,7 +285,10 @@ export default function JobPage() {
         )}
 
         {/* Photo Carousel */}
-        <PhotoCarousel photos={photos} objectType="job" objectId={job.id} />
+        <PhotoCarousel
+          photos={(photos || []).map((p) => ({ id: p.id, url: p.url, isProbative: false }))}
+          objectId={job.id}
+        />
 
         {/* Status Change */}
         <Card accent="teal" className="pt-6 space-y-4">

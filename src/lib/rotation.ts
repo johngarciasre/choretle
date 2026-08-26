@@ -1,11 +1,26 @@
 // ─── Pure Functions: Rotation Assignment ──────────────────────────────
 
+interface Rotation {
+  id: string;
+  slateId: string;
+  userId?: string;
+  order: number;
+  intervalDays?: number;
+  isActive: boolean;
+  createdAt?: string | Date;
+}
+
+interface SlateTask {
+  id: string;
+  slateId: string;
+}
+
 /**
  * Get the user assigned to a slate on a specific date.
  * Each slate has its own rotation schedule based on active rotations.
  */
 export function getRotationForDate(
-  rotations: any[],
+  rotations: Rotation[],
   slateId: string,
   date: Date,
 ): string | null {
@@ -51,12 +66,12 @@ export function getRotationForDate(
  * Returns a map of userId -> [taskIds] where each user gets their rotation-based tasks.
  */
 export function calculateRotationAssignment(
-  slateTasks: any[],
-  rotations: any[],
+  slateTasks: SlateTask[],
+  rotations: Rotation[],
   targetDate: Date,
 ): Map<string, string[]> {
   // Build slateId -> task lookup
-  const slateTaskMap = new Map<string, any[]>();
+  const slateTaskMap = new Map<string, SlateTask[]>();
   for (const st of slateTasks) {
     if (!slateTaskMap.has(st.slateId)) {
       slateTaskMap.set(st.slateId, []);
@@ -94,7 +109,7 @@ export function calculateRotationAssignment(
  * Returns an array of { date, userId } entries showing who's assigned on each day.
  */
 export function getRotationSchedule(
-  rotations: any[],
+  rotations: Rotation[],
   slateId: string,
   startDate: Date,
   endDate: Date,
@@ -126,7 +141,7 @@ export function getRotationSchedule(
  * Returns true if the swap was valid, false otherwise.
  */
 export function canSwapRotations(
-  rotations: any[],
+  rotations: Rotation[],
   slateId: string,
   rotationId1: string,
   rotationId2: string,
@@ -145,11 +160,11 @@ export function canSwapRotations(
  * Swap two rotation entries and return the updated rotations array.
  */
 export function swapRotations(
-  rotations: any[],
+  rotations: Rotation[],
   slateId: string,
   rotationId1: string,
   rotationId2: string,
-): any[] {
+): Rotation[] {
   const active = rotations.filter((r) => r.slateId === slateId && r.isActive);
   const swap1Index = active.findIndex((r) => r.id === rotationId1);
   const swap2Index = active.findIndex((r) => r.id === rotationId2);
@@ -175,7 +190,7 @@ export function swapRotations(
  * Useful for displaying upcoming assignments.
  */
 export function getUpcomingAssignments(
-  rotations: any[],
+  rotations: Rotation[],
   slateId: string,
   startDate: Date,
   daysAhead: number = 30,
