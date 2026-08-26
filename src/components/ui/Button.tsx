@@ -31,6 +31,9 @@ function filterSpreadableProps(props: Record<string, unknown>): Record<string, u
   return filtered;
 }
 
+export const BUTTON_BASE_STYLES =
+  "rounded-full font-bold transition active:translate-y-0 inline-flex items-center justify-center";
+
 export function Button({
   variant = "primary",
   size = "md",
@@ -40,7 +43,7 @@ export function Button({
   children,
   ...props
 }: ButtonProps) {
-  const baseStyles = "rounded-full font-bold transition active:translate-y-0";
+  const baseStyles = BUTTON_BASE_STYLES;
 
   const variantStyles: Record<Variant, string> = {
     primary: "bg-coral text-white shadow-md shadow-coral/30 hover:-translate-y-0.5 hover:brightness-105",
