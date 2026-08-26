@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -16,15 +16,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { tagIds } = body;
 
     // Delete existing slate tags for this slate
-    await db.delete(schema.slateTags).where(eq(schema.slateTags.slateId, slateId));
+    await rawDeleteWhere("slate_tags", [{ col: "slate_id", val: slateId }]);
 
     if (!tagIds || tagIds.length === 0) {
       return NextResponse.json({ success: true });
     }
 
     // Insert new slate tags
-    const insertValues = tagIds.map((tagId: string) => ({ slateId, tagId }));
-    await db.insert(schema.slateTags).values(insertValues);
+    for (const tagId of tagIds) {
+      await rawInsert("slate_tags", {
+        id: `stag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        slate_id: slateId,
+        tag_id: tagId,
+      });
+    }
 
     return NextResponse.json({ success: true, count: tagIds.length });
   } catch (error) {

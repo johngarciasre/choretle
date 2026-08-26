@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -105,15 +105,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result[0]);
     } else {
       // Create new rotation
-      const result = await db.insert(schema.rotations).values({
-        slateId,
-        userId,
-        order: order || 0,
-        intervalDays: intervalDays || 7,
-        isActive: isActive !== false,
-      }).returning("*");
+      const result = await rawInsert("rotations", {
+        id: `rot-${Date.now()}`,
+        slate_id: slateId,
+        user_id: userId,
+        "order": order || 0,
+        interval_days: intervalDays || 7,
+        is_active: isActive !== false,
+      });
 
-      return NextResponse.json(result[0], { status: 201 });
+      return NextResponse.json(result, { status: 201 });
     }
   } catch (error) {
     error({ err: error }, "Rotations POST failed");
@@ -135,7 +136,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    await db.delete(schema.rotations).where(eq(schema.rotations.id, id));
+    await rawDeleteWhere("rotations", [{ col: "id", val: id }]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

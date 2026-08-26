@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTasksByFamily, createTask, updateTask, deleteTask } from "@/lib/db/service";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -44,24 +44,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Create task
-    const task = await db.insert(schema.tasks).values({
-      familyId,
+    const taskId = `task-${Date.now()}`;
+    const task = await rawInsert("tasks", {
+      id: taskId,
+      family_id: familyId,
       name: title || name || "",
       description: description || null,
       points: points || 0,
       icon: icon || null,
       archtype: archtype || "job",
-      isActive: true,
-      verifyRequired: verifyRequired ?? false,
-    }).returning("*");
+      is_active: true,
+      verify_required: verifyRequired ?? false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
 
     // Handle tags if provided
     if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
-      const insertValues = tagIds.map((tagId: string) => ({ taskId: task[0].id, tagId }));
-      await db.insert(schema.taskTags).values(insertValues);
+      for (const tagId of tagIds) {
+        await rawInsert("task_tags", {
+          id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          task_id: taskId,
+          tag_id: tagId,
+        });
+      }
     }
 
-    return NextResponse.json(task[0]);
+    return NextResponse.json(task);
   } catch (error) {
     error({ err: error }, "Create task failed");
     return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
@@ -95,11 +104,16 @@ export async function PUT(request: NextRequest) {
 
     // Handle tags if provided
     if (tagIds !== undefined) {
-      await db.delete(schema.taskTags).where({ taskId: id });
+      await rawDeleteWhere("task_tags", [{ col: "task_id", val: id }]);
       
       if (Array.isArray(tagIds) && tagIds.length > 0) {
-        const insertValues = tagIds.map((tagId: string) => ({ taskId: id, tagId }));
-        await db.insert(schema.taskTags).values(insertValues);
+        for (const tagId of tagIds) {
+          await rawInsert("task_tags", {
+            id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            task_id: id,
+            tag_id: tagId,
+          });
+        }
       }
     }
 
@@ -126,8 +140,8 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
     // Delete task tags first (cascade via FK constraints in PostgreSQL)
-    await db.delete(schema.taskTags).where({ taskId: id });
-    await db.delete(schema.tasks).where(eq(schema.tasks.id, id));
+    await rawDeleteWhere("task_tags", [{ col: "task_id", val: id }]);
+    await rawDeleteWhere("tasks", [{ col: "id", val: id }]);
     
     return NextResponse.json({ success: true });
   } catch (error) {

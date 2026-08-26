@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -69,26 +69,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Subtask not found in this family" }, { status: 404 });
       }
 
-      const jobSubtask = await db.insert(schema.jobSubtasks).values({
-        jobId,
-        subtaskId,
-        pointsAwarded: (subtask as any).points || points || 0,
-      }).returning("*");
+      const jobSubtask = await rawInsert("job_subtasks", {
+        id: `js-${Date.now()}`,
+        job_id: jobId,
+        subtask_id: subtaskId,
+        points_awarded: (subtask as any).points || points || 0,
+      });
 
-      return NextResponse.json(jobSubtask ? jobSubtask[0] : null);
+      return NextResponse.json(jobSubtask ? jobSubtask : null);
     }
 
     if (taskId && name) {
       // Create a task subtask
-      const subtask = await db.insert(schema.subtasks).values({
-        familyId,
-        taskId,
+      const subtask = await rawInsert("subtasks", {
+        id: `st-${Date.now()}`,
+        family_id: familyId,
+        task_id: taskId,
         name,
         points: points || 0,
-        order: order ?? 0,
-      }).returning("*");
+        "order": order ?? 0,
+        created_at: new Date().toISOString(),
+      });
 
-      return NextResponse.json(subtask ? subtask[0] : null);
+      return NextResponse.json(subtask ? subtask : null);
     }
 
     return NextResponse.json({ error: "taskId + name OR jobId + subtaskId required" }, { status: 400 });

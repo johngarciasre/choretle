@@ -154,7 +154,7 @@ export async function initDb(): Promise<any> {
     const Database = require("better-sqlite3");
     _rawDb = new Database(DB_PATH);
     createTables(_rawDb);
-    _db = construct(_rawDb, { schema });
+    _db = construct(_rawDb, schema);
     info({ path: DB_PATH === ":memory:" ? "in-memory" : DB_PATH }, "[DB] Initialized SQLite database");
   } catch (error) {
     error({ err: error }, "[DB] Failed to initialize SQLite");
@@ -165,4 +165,167 @@ export async function initDb(): Promise<any> {
 
 export function getRawDb(): Database.Database | null {
   return _rawDb;
+}
+
+/**
+ * Drizzle insert helper — uses Drizzle's `.run()` (no returning) to avoid stack overflow,
+ * then returns the inserted row via raw SQL.
+ */
+export async function drizzleInsert(db: any, table: any, data: Record<string, any>): Promise<any | undefined> {
+  try {
+    await db.insert(table).values(data).run();
+    const id = data.id;
+    if (!id) return data;
+    const selectSql = `SELECT * FROM ${table[Symbol.for]} WHERE id = ?`;
+    // Use raw SQL to fetch the inserted row
+    const raw = getRawDb();
+    if (raw) {
+      return raw.prepare(`SELECT * FROM ${table[Symbol.for]} WHERE id = ?`).get(id);
+    }
+    return data;
+  } catch (e) {
+    error({ err: e }, "[DB] drizzleInsert failed");
+    return undefined;
+  }
+}
+
+/**
+ * Raw SQL insert helper — avoids Drizzle ORM stack overflow bug in `orderSelectedFields`.
+ * Returns the inserted row or undefined if it failed.
+ */
+export async function rawInsert(tableName: string, data: Record<string, any>): Promise<any | undefined> {
+  const raw = getRawDb();
+  if (!raw) return undefined;
+
+  const columns = Object.keys(data);
+  // Sanitize column names — only allow alphanumeric + underscore
+  for (const col of columns) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col)) {
+      throw new Error(`Invalid column name: ${col}`);
+    }
+  }
+
+  const placeholders = columns.map(() => "?").join(", ");
+  const values = columns.map((c) => {
+    const v = data[c];
+    if (typeof v === "boolean") return v ? 1 : 0;
+    return v;
+  });
+  const sqlStr = `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES (${placeholders})`;
+
+  try {
+    raw.prepare(sqlStr).run(...values);
+    const id = data.id;
+    if (!id) return undefined;
+    const selectSql = `SELECT * FROM ${tableName} WHERE id = ?`;
+    return raw.prepare(selectSql).get(id);
+  } catch (e) {
+    error({ err: e }, `[DB] rawInsert failed for ${tableName}`);
+    return undefined;
+  }
+}
+
+/**
+ * Raw SQL batch insert helper — inserts multiple rows in one statement.
+ */
+export async function rawInsertMany(tableName: string, columns: string[], rows: any[][]): Promise<boolean> {
+  const raw = getRawDb();
+  if (!raw) return false;
+
+  // Sanitize column names
+  for (const col of columns) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col)) {
+      throw new Error(`Invalid column name: ${col}`);
+    }
+  }
+
+  const placeholders = rows.map((row) => `(${row.map(() => "?").join(", ")})`).join(", ");
+  const sqlStr = `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES ${placeholders}`;
+  const flatValues = rows.flat();
+
+  try {
+    raw.prepare(sqlStr).run(...flatValues);
+    return true;
+  } catch (e) {
+    error({ err: e }, `[DB] rawInsertMany failed for ${tableName}`);
+    return false;
+  }
+}
+
+/**
+ * Raw SQL update helper — returns the updated row.
+ */
+export async function rawUpdate(tableName: string, data: Record<string, any>, whereCol: string, whereVal: any): Promise<any | undefined> {
+  const raw = getRawDb();
+  if (!raw) return undefined;
+
+  const setColumns = Object.keys(data).filter((c) => c !== whereCol);
+  const setClause = setColumns.map((c) => `${c} = ?`).join(", ");
+  const values = [...setColumns.map((c) => data[c]), whereVal];
+  const sqlStr = `UPDATE ${tableName} SET ${setClause} WHERE ${whereCol} = ?`;
+
+  try {
+    raw.prepare(sqlStr).run(...values);
+    const selectSql = `SELECT * FROM ${tableName} WHERE ${whereCol} = ?`;
+    return raw.prepare(selectSql).get(whereVal);
+  } catch (e) {
+    error({ err: e }, `[DB] rawUpdate failed for ${tableName}`);
+    return undefined;
+  }
+}
+
+/**
+ * Raw SQL delete helper.
+ */
+export async function rawDelete(tableName: string, whereCol: string, whereVal: any): Promise<boolean> {
+  const raw = getRawDb();
+  if (!raw) return false;
+
+  const sqlStr = `DELETE FROM ${tableName} WHERE ${whereCol} = ?`;
+  try {
+    raw.prepare(sqlStr).run(whereVal);
+    return true;
+  } catch (e) {
+    error({ err: e }, `[DB] rawDelete failed for ${tableName}`);
+    return false;
+  }
+}
+
+/**
+ * Raw SQL batch delete helper — deletes multiple rows by column values.
+ */
+export async function rawDeleteMany(tableName: string, whereCol: string, whereValues: any[]): Promise<boolean> {
+  if (whereValues.length === 0) return true;
+  const raw = getRawDb();
+  if (!raw) return false;
+
+  const placeholders = whereValues.map(() => "?").join(", ");
+  const sqlStr = `DELETE FROM ${tableName} WHERE ${whereCol} IN (${placeholders})`;
+  try {
+    raw.prepare(sqlStr).run(...whereValues);
+    return true;
+  } catch (e) {
+    error({ err: e }, `[DB] rawDeleteMany failed for ${tableName}`);
+    return false;
+  }
+}
+
+/**
+ * Raw SQL bulk delete helper — deletes all rows matching multiple column-value pairs (AND condition).
+ */
+export async function rawDeleteWhere(tableName: string, conditions: { col: string; val: any }[]): Promise<boolean> {
+  if (conditions.length === 0) return true;
+  const raw = getRawDb();
+  if (!raw) return false;
+
+  const clauses = conditions.map((c) => `${c.col} = ?`);
+  const values = conditions.map((c) => c.val);
+  const sqlStr = `DELETE FROM ${tableName} WHERE ${clauses.join(" AND ")}`;
+  try {
+    raw.prepare(sqlStr).run(...values);
+    return true;
+  } catch (e) {
+    error({ err: e }, `[DB] rawDeleteWhere failed for ${tableName}`);
+    return false;
+  }
 }

@@ -1,51 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { parseDevSession } from "@/lib/dev-auth";
 
-// ─── Middleware: Verify Auth Token ──────────────────────────────────
-async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId: string } | { error: string }> {
-  const cookie = request.cookies.get("auth-token")?.value;
-  if (!cookie) {
-    return { error: "No token provided" };
+/**
+ * Get current user from middleware headers (prod) or dev session cookie (dev mode).
+ */
+async function getCurrentUser(request: NextRequest): Promise<{ userId: string; familyId: string } | { error: string }> {
+  const userId = request.headers.get("x-user-id");
+  if (userId) {
+    return { userId, familyId: request.headers.get("x-family-id") || "" };
   }
 
-  try {
-    const parts = cookie.split(".");
-    if (parts.length !== 3) {
-      return { error: "Invalid token format" };
+  if (process.env.AUTH_MODE === "dev") {
+    const cookieHeader = request.headers.get("cookie") || "";
+    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+    if (setCookie) {
+      const value = setCookie.replace("dev-session=", "").trim();
+      const user = parseDevSession(value);
+      if (user) {
+        return { userId: user.id, familyId: user.familyId || "" };
+      }
     }
-
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    const now = Math.floor(Date.now() / 1000);
-    
-    if (payload.exp && payload.exp < now) {
-      return { error: "Token expired" };
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return { error: "Database not initialized" };
-    }
-
-    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
-    if (!user) {
-      return { error: "User not found" };
-    }
-
-    return { userId: payload.userId, familyId: payload.familyId || user.familyId || "" };
-  } catch (error) {
-    error({ err: error }, "Token verification failed");
-    return { error: "Invalid token" };
   }
+
+  return { error: "Authentication required" };
+}
+
+/**
+ * Extracts the familyId from the URL path for [familyId] dynamic routes.
+ */
+function getFamilyIdFromPath(request: NextRequest): string | undefined {
+  const url = new URL(request.url);
+  const segments = url.pathname.split("/");
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (segments[i] === "family" && i + 1 < segments.length) {
+      return segments[i + 1];
+    }
+  }
+  return undefined;
 }
 
 // ─── GET: Fetch teams for a family ──────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
-    const url = new URL(request.url);
-    const familyId = url.searchParams.get("familyId");
+    // Extract familyId from the URL path
+    const familyId = getFamilyIdFromPath(request);
 
     if (!familyId) {
       return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
@@ -75,19 +77,19 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, teams: teamsWithMembers });
-  } catch (error) {
-    error({ err: error }, "Teams GET failed");
-    if (error instanceof Error && error.message.includes("Database not initialized")) {
+  } catch (err) {
+    error({ err }, "Teams GET failed");
+    if (err instanceof Error && err.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
-    return NextResponse.json({ error: "Failed to fetch teams", details: String(error) }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch teams", details: String(err) }, { status: 500 });
   }
 }
 
 // ─── POST: Create a new team ────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await verifyAuth(request);
+    const authResult = await getCurrentUser(request);
     if ("error" in authResult) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
@@ -99,36 +101,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Team name is required" }, { status: 400 });
     }
 
+    // Extract familyId from the URL path
+    const familyId = getFamilyIdFromPath(request);
+
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
+    }
+
     const db = await initDb();
     if (!db) {
       throw new Error("Database not initialized");
     }
 
     // Verify user belongs to this family
-    const userFamily = await db.select().from(schema.users).where(
-      and(eq(schema.users.id, authResult.userId), eq(schema.users.familyId, authResult.familyId))
-    ).limit(1)[0];
+    const userFamilyRows = await db.select().from(schema.users).where(
+      and(eq(schema.users.id, authResult.userId), eq(schema.users.familyId, familyId))
+    ).limit(1);
+    const userFamily = userFamilyRows[0];
 
     if (!userFamily) {
       return NextResponse.json({ error: "You don't have access to this family" }, { status: 403 });
     }
 
     // Create team
-    const team = await db.insert(schema.teams).values({
-      familyId: authResult.familyId,
+    const team = await rawInsert("teams", {
+      id: `team-${Date.now()}`,
+      family_id: familyId,
       name,
-      logoUrl: logoUrl || null,
-    }).returning("*");
+      logo_url: logoUrl || null,
+      created_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       ok: true,
       team: team[0],
     });
-  } catch (error) {
-    error({ err: error }, "Teams POST failed");
-    if (error instanceof Error && error.message.includes("Database not initialized")) {
+  } catch (err) {
+    error({ err }, "Teams POST failed");
+    if (err instanceof Error && err.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
-    return NextResponse.json({ error: "Failed to create team", details: String(error) }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create team", details: String(err) }, { status: 500 });
   }
 }

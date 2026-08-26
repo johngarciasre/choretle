@@ -1,66 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { parseDevSession } from "@/lib/dev-auth";
 
-// ─── Middleware: Verify Auth Token ──────────────────────────────────
-async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId: string } | { error: string }> {
-  const cookie = request.cookies.get("auth-token")?.value;
-  if (!cookie) {
-    return { error: "No token provided" };
+/**
+ * Get current user from middleware headers (prod) or dev session cookie (dev mode).
+ */
+async function getCurrentUser(request: NextRequest): Promise<{ userId: string; familyId: string } | { error: string }> {
+  const userId = request.headers.get("x-user-id");
+  if (userId) {
+    return { userId, familyId: request.headers.get("x-family-id") || "" };
   }
 
-  try {
-    const parts = cookie.split(".");
-    if (parts.length !== 3) {
-      return { error: "Invalid token format" };
+  if (process.env.AUTH_MODE === "dev") {
+    const cookieHeader = request.headers.get("cookie") || "";
+    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+    if (setCookie) {
+      const value = setCookie.replace("dev-session=", "").trim();
+      const user = parseDevSession(value);
+      if (user) {
+        return { userId: user.id, familyId: user.familyId || "" };
+      }
     }
-
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    const now = Math.floor(Date.now() / 1000);
-    
-    if (payload.exp && payload.exp < now) {
-      return { error: "Token expired" };
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return { error: "Database not initialized" };
-    }
-
-    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
-    if (!user) {
-      return { error: "User not found" };
-    }
-
-    return { userId: payload.userId, familyId: payload.familyId || user.familyId || "" };
-  } catch (error) {
-    error({ err: error }, "Token verification failed");
-    return { error: "Invalid token" };
   }
+
+  return { error: "Authentication required" };
+}
+
+/**
+ * Extracts familyId and teamId from the URL path for nested dynamic routes.
+ */
+function getRouteIdsFromPath(request: NextRequest): { familyId: string | undefined; teamId: string | undefined } {
+  const url = new URL(request.url);
+  const segments = url.pathname.split("/");
+  let familyId: string | undefined;
+  let teamId: string | undefined;
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i] === "family" && i + 1 < segments.length) {
+      familyId = segments[i + 1];
+    } else if (segments[i] === "teams" && i + 1 < segments.length) {
+      teamId = segments[i + 1];
+    }
+  }
+  return { familyId, teamId };
 }
 
 // ─── POST: Add a member to a team ───────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await verifyAuth(request);
+    const authResult = await getCurrentUser(request);
     if ("error" in authResult) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
 
-    const url = new URL(request.url);
-    const familyId = url.searchParams.get("familyId");
-    const teamId = url.pathname.split("/").pop(); // Get last segment as teamId
+    // Extract familyId and teamId from URL path
+    const { familyId, teamId } = getRouteIdsFromPath(request);
 
     if (!familyId || !teamId) {
       return NextResponse.json({ error: "Family ID and Team ID are required" }, { status: 400 });
     }
 
     const body = await request.json();
-    const { userId } = body;
+    const { userId: newUserId } = body;
 
-    if (!userId) {
+    if (!newUserId) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
     }
 
@@ -70,48 +75,51 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user belongs to this family
-    const memberFamily = await db.select().from(schema.users).where(
-      and(eq(schema.users.id, userId), eq(schema.users.familyId, authResult.familyId))
-    ).limit(1)[0];
+    const memberFamilyRows = await db.select().from(schema.users).where(
+      and(eq(schema.users.id, newUserId), eq(schema.users.familyId, familyId))
+    ).limit(1);
+    const memberFamily = memberFamilyRows[0];
 
     if (!memberFamily) {
       return NextResponse.json({ error: "User not found in this family" }, { status: 404 });
     }
 
     // Verify the team belongs to this family and user has access
-    const team = await db.select().from(schema.teams).where(
-      and(eq(schema.teams.id, teamId), eq(schema.teams.familyId, authResult.familyId))
-    ).limit(1)[0];
+    const teamRows = await db.select().from(schema.teams).where(
+      and(eq(schema.teams.id, teamId), eq(schema.teams.familyId, familyId))
+    ).limit(1);
+    const team = teamRows[0];
 
     if (!team) {
       return NextResponse.json({ error: "Team not found or access denied" }, { status: 403 });
     }
 
     // Check if user is already a member of this team
-    const existingMember = await db.select().from(schema.teamMembers).where(
-      and(eq(schema.teamMembers.teamId, teamId), eq(schema.teamMembers.userId, userId))
-    ).limit(1)[0];
+    const existingMemberRows = await db.select().from(schema.teamMembers).where(
+      and(eq(schema.teamMembers.teamId, teamId), eq(schema.teamMembers.userId, newUserId))
+    ).limit(1);
 
-    if (existingMember) {
+    if (existingMemberRows[0]) {
       return NextResponse.json({ error: "User is already a member of this team" }, { status: 409 });
     }
 
     // Add user to team
-    const membership = await db.insert(schema.teamMembers).values({
-      teamId,
-      userId,
-      joinedAt: new Date(),
-    }).returning("*");
+    const membership = await rawInsert("team_members", {
+      id: `tm-${Date.now()}`,
+      team_id: teamId,
+      user_id: newUserId,
+      joined_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       ok: true,
       membership: membership[0],
     });
-  } catch (error) {
-    error({ err: error }, "Team members POST failed");
-    if (error instanceof Error && error.message.includes("Database not initialized")) {
+  } catch (err) {
+    error({ err }, "Team members POST failed");
+    if (err instanceof Error && err.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
-    return NextResponse.json({ error: "Failed to add member to team", details: String(error) }, { status: 500 });
+    return NextResponse.json({ error: "Failed to add member to team", details: String(err) }, { status: 500 });
   }
 }

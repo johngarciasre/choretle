@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -14,7 +14,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const photoId = (await params).photoId;
     const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
 
-    await db.delete(schema.photos).where(eq(schema.photos.id, photoId));
+    await rawDeleteWhere("photos", [{ col: "id", val: photoId }]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

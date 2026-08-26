@@ -1,4 +1,4 @@
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -12,6 +12,8 @@ async function ensureDb(): Promise<any> {
   db = await initDb();
   return db;
 }
+
+function nowISO(): string { return new Date().toISOString(); }
 
 type Insertable<T> = T extends { id: string } ? Omit<T, "id"> : never;
 type Selectable<T> = any;
@@ -57,9 +59,9 @@ export async function createFamily(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.families).values(data).returning("*")
+    rawInsert("families", { ...data, id: `family-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updateFamily(id: string, data: Partial<any>) {
@@ -154,9 +156,9 @@ export async function createTeam(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.teams).values(data).returning("*")
+    rawInsert("teams", { ...data, id: `team-${Date.now()}`, created_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 // ─── Tasks ──────────────────────────────────────────────────────────
@@ -183,9 +185,9 @@ export async function createTask(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.tasks).values(data).returning("*")
+    rawInsert("tasks", { ...data, id: `task-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updateTask(id: string, data: Partial<any>) {
@@ -200,7 +202,7 @@ export async function updateTask(id: string, data: Partial<any>) {
 export async function deleteTask(id: string) {
   const db = await ensureDb();
   if (!db) return false;
-  await safeQuery(db.delete(schema.tasks).where({ id }));
+  await safeQuery(rawDeleteWhere("tasks", [{ col: "id", val: id }]));
   return true;
 }
 
@@ -219,9 +221,9 @@ export async function createSubtask(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.subtasks).values(data).returning("*")
+    rawInsert("subtasks", { ...data, id: `stask-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 // ─── Slates ─────────────────────────────────────────────────────────
@@ -261,9 +263,9 @@ export async function createSlate(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.slates).values(data).returning("*")
+    rawInsert("slates", { ...data, id: `slate-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updateSlate(id: string, data: Partial<any>) {
@@ -281,9 +283,9 @@ export async function createSlateTask(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.slateTasks).values(data).returning("*")
+    rawInsert("slate_tasks", { ...data, id: `stask-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updateSlateTask(id: string, data: Partial<any>) {
@@ -298,7 +300,7 @@ export async function updateSlateTask(id: string, data: Partial<any>) {
 export async function deleteSlateTask(id: string) {
   const db = await ensureDb();
   if (!db) return false;
-  await safeQuery(db.delete(schema.slateTasks).where({ id }));
+  await safeQuery(rawDeleteWhere("slate_tasks", [{ col: "id", val: id }]));
   return true;
 }
 
@@ -335,9 +337,9 @@ export async function createJob(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.jobs).values(data).returning("*")
+    rawInsert("jobs", { ...data, id: `job-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updateJob(id: string, data: Partial<any>) {
@@ -373,9 +375,9 @@ export async function createList(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.lists).values(data).returning("*")
+    rawInsert("lists", { ...data, id: `list-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 // ─── List Tasks ─────────────────────────────────────────────────────
@@ -393,9 +395,9 @@ export async function createListTask(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.listTasks).values(data).returning("*")
+    rawInsert("list_tasks", { ...data, id: `ltask-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 // ─── Rotations ──────────────────────────────────────────────────────
@@ -460,28 +462,29 @@ export async function upsertRotation(data: {
   }
 
   const res = await safeQuery(
-    db.insert(schema.rotations).values({
-      slateId: data.slateId,
-      userId: data.userId,
-      order: data.order,
-      intervalDays: data.intervalDays,
-      isActive: data.isActive ?? true,
-    }).returning("*")
+    rawInsert("rotations", {
+      id: `rot-${Date.now()}`,
+      slate_id: data.slateId,
+      user_id: data.userId,
+      "order": data.order,
+      interval_days: data.intervalDays,
+      is_active: data.isActive ?? true,
+    })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function deleteRotation(id: string) {
   const db = await ensureDb();
   if (!db) return false;
-  await safeQuery(db.delete(schema.rotations).where({ id }));
+  await safeQuery(rawDeleteWhere("rotations", [{ col: "id", val: id }]));
   return true;
 }
 
 export async function deleteRotationsBySlate(slateId: string) {
   const db = await ensureDb();
   if (!db) return false;
-  await safeQuery(db.delete(schema.rotations).where({ slateId }));
+  await safeQuery(rawDeleteWhere("rotations", [{ col: "slate_id", val: slateId }]));
   return true;
 }
 
@@ -500,9 +503,9 @@ export async function addComment(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.comments).values(data).returning("*")
+    rawInsert("comments", { ...data, id: `comment-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 // ─── Reports ────────────────────────────────────────────────────────
@@ -520,9 +523,9 @@ export async function createReport(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.reports).values(data).returning("*")
+    rawInsert("reports", { ...data, id: `report-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 // ─── Job Status Transitions ───────────────────────────────────────────
@@ -692,7 +695,7 @@ export async function updateSubtask(id: string, data: Partial<any>) {
 export async function deleteSubtask(id: string) {
   const db = await ensureDb();
   if (!db) return false;
-  await safeQuery(db.delete(schema.subtasks).where({ id }));
+  await safeQuery(rawDeleteWhere("subtasks", [{ col: "id", val: id }]));
   return true;
 }
 
@@ -720,9 +723,9 @@ export async function createPhoto(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.photos).values(data).returning("*")
+    rawInsert("photos", { ...data, id: `photo-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updatePhoto(id: string, data: Partial<any>) {
@@ -737,7 +740,7 @@ export async function updatePhoto(id: string, data: Partial<any>) {
 export async function deletePhoto(id: string) {
   const db = await ensureDb();
   if (!db) return false;
-  await safeQuery(db.delete(schema.photos).where({ id }));
+  await safeQuery(rawDeleteWhere("photos", [{ col: "id", val: id }]));
   return true;
 }
 
@@ -779,9 +782,9 @@ export async function createReview(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.reviews).values(data).returning("*")
+    rawInsert("reviews", { ...data, id: `review-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updateReview(id: string, data: Partial<any>) {
@@ -796,7 +799,7 @@ export async function updateReview(id: string, data: Partial<any>) {
 export async function deleteReview(id: string) {
   const db = await ensureDb();
   if (!db) return false;
-  await safeQuery(db.delete(schema.reviews).where({ id }));
+  await safeQuery(rawDeleteWhere("reviews", [{ col: "id", val: id }]));
   return true;
 }
 
@@ -815,9 +818,9 @@ export async function createInvite(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.invites).values(data).returning("*")
+    rawInsert("invites", { ...data, id: `invite-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 // ─── Scoring & Leaderboard ──────────────────────────────────────────
@@ -940,11 +943,13 @@ export async function swapRotationEntries(
     if (userId) {
       try {
         await safeQuery(
-          db.insert(schema.jobHistory).values({
-            jobId: "swap",
+          rawInsert("job_history", {
+            id: `jh-swap-${Date.now()}`,
+            job_id: "swap",
             action: "rotation_swap",
             details: `Swapped rotation entries ${rotationId1} and ${rotationId2}`,
-            userId,
+            user_id: userId,
+            created_at: nowISO(),
           })
         );
       } catch (historyErr) {
@@ -1024,9 +1029,9 @@ export async function createTag(data: Insertable<any>) {
   const db = await ensureDb();
   if (!db) return null;
   const res = await safeQuery(
-    db.insert(schema.tags).values(data).returning("*")
+    rawInsert("tags", { ...data, id: `tag-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
   );
-  return (res as any[])?.[0] || null;
+  return res || null;
 }
 
 export async function updateTag(id: string, data: Partial<any>) {
@@ -1044,8 +1049,8 @@ export async function deleteTag(id: string) {
   
   // Use cascade delete via foreign keys
   await Promise.all([
-    safeQuery(db.delete(schema.taskTags).where({ tagId: id })),
-    safeQuery(db.delete(schema.slateTags).where({ tagId: id }))
+    safeQuery(rawDeleteWhere("task_tags", [{ col: "tag_id", val: id }])),
+    safeQuery(rawDeleteWhere("slate_tags", [{ col: "tag_id", val: id }]))
   ]);
   
   return true;
@@ -1067,16 +1072,20 @@ export async function setTaskTags(taskId: string, tagIds: string[]) {
   if (!db) return false;
   
   // Remove existing tags
-  await safeQuery(db.delete(schema.taskTags).where({ taskId }));
+  await safeQuery(rawDeleteWhere("task_tags", [{ col: "task_id", val: taskId }]));
   
   // Add new tags
   if (tagIds.length === 0) return true;
   
-  const insertValues = tagIds.map((tagId) => ({ taskId, tagId }));
-  const res = await safeQuery(
-    db.insert(schema.taskTags).values(insertValues).returning("*")
-  );
-  return (res as any[]) ? (res as any[]).length > 0 : false;
+  for (const tagId of tagIds) {
+    await rawInsert("task_tags", {
+      id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      task_id: taskId,
+      tag_id: tagId,
+    });
+  }
+  
+  return true;
 }
 
 export async function getSlateTags(slateId: string) {
@@ -1095,16 +1104,20 @@ export async function setSlateTags(slateId: string, tagIds: string[]) {
   if (!db) return false;
   
   // Remove existing tags
-  await safeQuery(db.delete(schema.slateTags).where({ slateId }));
+  await safeQuery(rawDeleteWhere("slate_tags", [{ col: "slate_id", val: slateId }]));
   
   // Add new tags
   if (tagIds.length === 0) return true;
   
-  const insertValues = tagIds.map((tagId) => ({ slateId, tagId }));
-  const res = await safeQuery(
-    db.insert(schema.slateTags).values(insertValues).returning("*")
-  );
-  return (res as any[]) ? (res as any[]).length > 0 : false;
+  for (const tagId of tagIds) {
+    await rawInsert("slate_tags", {
+      id: `stag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      slate_id: slateId,
+      tag_id: tagId,
+    });
+  }
+  
+  return true;
 }
 
 // ─── Core Slate Task Resolution with Tag Auto-Inclusion ─────────────

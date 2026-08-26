@@ -1,6 +1,6 @@
 // ─── Job Status Transition Logic ──────────────────────────────────────
 
-import { db } from "@/db/drizzle";
+import { db, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -52,15 +52,15 @@ type JobHistory = any;
 export async function createJobHistory(jobId: string, action: string, details?: string, userId?: string): Promise<JobHistory | null> {
   if (!db) return null;
 
-  const res = await (
-    db.insert(schema.jobHistory).values({
-      jobId,
-      action,
-      details,
-      userId,
-    }).returning("*") as any
-  );
-  return (res as any[] | null)?.[0] || null;
+  const res = await rawInsert("job_history", {
+    id: `jh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    job_id: jobId,
+    action,
+    details,
+    user_id: userId,
+    created_at: new Date().toISOString(),
+  });
+  return res || null;
 }
 
 /**

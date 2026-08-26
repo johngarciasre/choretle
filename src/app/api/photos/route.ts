@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -49,18 +49,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "objectType, objectId, and url are required" }, { status: 400 });
     }
 
-    const photo = await db.insert(schema.photos).values({
-      familyId,
-      objectType,
-      objectId,
+    const photo = await rawInsert("photos", {
+      id: `photo-${Date.now()}`,
+      family_id: familyId,
+      object_type: objectType,
+      object_id: objectId,
       url,
       title: title || null,
       type: type || "probative",
-      isProbative: isProbative ?? false,
-      order: order ?? 0,
-    }).returning("*");
+      is_probative: isProbative ?? false,
+      "order": order ?? 0,
+      created_at: new Date().toISOString(),
+    });
 
-    return NextResponse.json(photo[0]);
+    return NextResponse.json(photo);
   } catch (error) {
     error({ err: error }, "Create photo failed");
     return NextResponse.json({ error: "Failed to create photo" }, { status: 500 });

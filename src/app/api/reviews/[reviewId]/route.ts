@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -77,7 +77,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const reviewId = (await params).reviewId;
     
-    await db.delete(schema.reviews).where(eq(schema.reviews.id, reviewId));
+    await rawDeleteWhere("reviews", [{ col: "id", val: reviewId }]);
     return NextResponse.json({ success: true });
   } catch (error) {
     error({ err: error }, "Delete review failed");

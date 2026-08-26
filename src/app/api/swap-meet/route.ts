@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc, sql, or } from "drizzle-orm";
 import { error, warn } from "@/lib/logger.server";
@@ -162,23 +162,26 @@ export async function POST(request: NextRequest) {
     const status = "pending";
 
     for (const slateId of validSlateIds) {
-      const entry = await db.insert(schema.swapMeet).values({
-        slateId,
-        sharingFamilyId,
-        requestedBy: requestingFamilyId,
+      const entry = await rawInsert("swap_meet", {
+        id: `sm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        slate_id: slateId,
+        sharing_family_id: sharingFamilyId,
+        requested_by: requestingFamilyId,
         status,
-        createdAt: new Date().toISOString(),
-      }).returning("*");
+        created_at: new Date().toISOString(),
+      });
 
-      createdEntries.push(entry[0]);
+      createdEntries.push(entry);
 
       // Create history entry if needed (requires user ID)
       try {
-        await db.insert(schema.jobHistory).values({
-          jobId: "swap",
+        await rawInsert("job_history", {
+          id: `jh-${Date.now()}`,
+          job_id: "swap",
           action: "swap_meet_request",
           details: `Shared slate ${slateId} with family ${requestingFamilyId}`,
-          userId,
+          user_id: userId,
+          created_at: new Date().toISOString(),
         });
       } catch (historyErr) {
         error({ err: historyErr }, "Failed to create swap meet history");

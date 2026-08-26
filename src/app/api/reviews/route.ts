@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -68,15 +68,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "familyId and jobId are required" }, { status: 400 });
     }
 
-    const review = await db.insert(schema.reviews).values({
-      familyId,
-      jobId,
-      reviewerId: reviewerId || null,
+    const review = await rawInsert("reviews", {
+      id: `rev-${Date.now()}`,
+      family_id: familyId,
+      job_id: jobId,
+      reviewer_id: reviewerId || null,
       notes: notes || null,
       status: status || "pending",
-    }).returning("*");
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
 
-    return NextResponse.json(review[0]);
+    return NextResponse.json(review);
   } catch (error) {
     error({ err: error }, "Create review failed");
     return NextResponse.json({ error: "Failed to create review" }, { status: 500 });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -63,10 +63,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const slateId = (await params).slateId;
     
     // Delete associated entries first (cascade via FK constraints in PostgreSQL)
-    await db.delete(schema.slateTasks).where(eq(schema.slateTasks.slateId, slateId));
-    await db.delete(schema.rotations).where(eq(schema.rotations.slateId, slateId));
-    await db.delete(schema.slateTags).where(eq(schema.slateTags.slateId, slateId));
-    await db.delete(schema.slates).where(eq(schema.slates.id, slateId));
+    await rawDeleteWhere("slate_tasks", [{ col: "slate_id", val: slateId }]);
+    await rawDeleteWhere("rotations", [{ col: "slate_id", val: slateId }]);
+    await rawDeleteWhere("slate_tags", [{ col: "slate_id", val: slateId }]);
+    await rawDeleteWhere("slates", [{ col: "id", val: slateId }]);
     
     return NextResponse.json({ success: true });
   } catch (error) {

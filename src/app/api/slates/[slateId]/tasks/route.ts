@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -16,21 +16,22 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { taskIds, pointsOverrides, orders } = body;
 
     // Delete existing slate tasks for this slate
-    await db.delete(schema.slateTasks).where(eq(schema.slateTasks.slateId, slateId));
+    await rawDeleteWhere("slate_tasks", [{ col: "slate_id", val: slateId }]);
 
     if (!taskIds || taskIds.length === 0) {
       return NextResponse.json({ success: true });
     }
 
     // Insert new slate tasks
-    const insertValues = taskIds.map((taskId: string, index: number) => ({
-      slateId,
-      taskId,
-      pointsOverride: pointsOverrides?.[index] ?? null,
-      order: orders?.[index] ?? index,
-    }));
-
-    await db.insert(schema.slateTasks).values(insertValues);
+    for (let i = 0; i < taskIds.length; i++) {
+      await rawInsert("slate_tasks", {
+        id: `stask-${Date.now()}-${i}`,
+        slate_id: slateId,
+        task_id: taskIds[i],
+        points_override: pointsOverrides?.[i] ?? null,
+        "order": orders?.[i] ?? i,
+      });
+    }
 
     return NextResponse.json({ success: true, count: taskIds.length });
   } catch (error) {

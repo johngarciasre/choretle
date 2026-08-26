@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
+import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME, DEV_USERS } from "@/lib/dev-auth";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { slugify } from "@/lib/slugify";
+import { rawInsert } from "@/db/drizzle";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -19,46 +21,55 @@ export async function POST(request: NextRequest) {
   if (process.env.AUTH_MODE === "dev") {
     const email = body?.email?.toLowerCase().trim() || "";
     
-    let userId = "dev-user-parent-001";
+    let userIdKey = "admin";
     let role = "admin";
-    let name = "Parent";
+    let name = "Admin (Parent)";
     
     if (email.includes("child")) {
-      userId = "dev-user-child-001";
+      userIdKey = "child";
       role = "child";
       name = "Child";
-    } else if (email.includes("parent")) {
-      userId = "dev-user-parent-001";
+    } else {
+      // Default to admin for admin@ and parent@ emails
+      userIdKey = "admin";
       role = "admin";
-      name = "Parent";
+      name = "Admin (Parent)";
     }
 
-    const session = createDevSession({ userId });
+    const devUserId = DEV_USERS[userIdKey].id;
 
-    // Ensure DB user record exists in dev mode
+    // Ensure DB user record exists in dev mode and read actual familyId
+    let familyId: string | null = null;
     try {
       const { initDb } = await import("@/db/drizzle");
       const db = await initDb();
       if (db) {
-        const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).limit(1))[0];
+        const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, devUserId)).limit(1))[0];
         
         if (!existingUser) {
-          await db.insert(schema.users).values({
-            id: session.user.id,
+          await rawInsert("users", {
+            id: devUserId,
             email: email || null,
             name: name,
             role: role,
-            avatarUrl: null,
-            familyId: "dev-family-001",
-            pointsTotal: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            avatar_url: null,
+            family_id: null,
+            points_total: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           });
         }
+        
+        const userRecord = (await db.select().from(schema.users).where(eq(schema.users.id, devUserId)).limit(1))[0];
+        familyId = userRecord?.family_id || null;
       }
     } catch (dbError) {
       error({ err: dbError }, "[DEV SIGNIN] Database sync failed");
     }
+
+    // Create session with actual familyId from DB
+    const session = createDevSession({ userId: devUserId });
+    session.user.familyId = familyId;
 
     const response = NextResponse.json({ 
       ok: true, 
@@ -121,17 +132,44 @@ export async function POST(request: NextRequest) {
       const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).limit(1))[0];
       
       if (!existingUser) {
-        // Create DB user record on first sign in
-        await db.insert(schema.users).values({
+        // Generate a default slug for auto-created family
+        const slug = slugify(session.user.email || "family");
+        
+        // Check if a family with this slug already exists
+        const existingFamilyRows = await db.select().from(schema.families)
+          .where(eq(schema.families.slug, slug))
+          .limit(1);
+
+        let familyId: string | null = null;
+        
+        if (existingFamilyRows[0]) {
+          familyId = existingFamilyRows[0].id;
+        } else {
+          // Auto-create a family for the new user
+          const newFamily = await rawInsert("families", {
+            id: `family-${Date.now()}`,
+            name: session.user.email?.split("@")[0] || "My Family",
+            slug,
+            week_start_day: 0,
+            teams_enabled: false,
+          });
+          
+          if (newFamily) {
+            familyId = newFamily.id;
+          }
+        }
+
+        // Create DB user record with family association
+        await rawInsert("users", {
           id: session.user.id,
           email: session.user.email || null,
           name: session.user.user_metadata?.name || body.name || "User",
           role: session.user.user_metadata?.role || "child",
-          avatarUrl: session.user.user_metadata?.avatar_url || null,
-          familyId: null,
-          pointsTotal: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          avatar_url: session.user.user_metadata?.avatar_url || null,
+          family_id: familyId,
+          points_total: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         });
       } else if (existingUser.email !== session.user.email) {
         // Update email if it changed

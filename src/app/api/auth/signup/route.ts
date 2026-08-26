@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { error, info } from "@/lib/logger.server";
@@ -27,19 +27,49 @@ export async function POST(request: NextRequest) {
       const email = body?.email?.toLowerCase().trim() || "";
       const name = body?.name || "Dev User";
       
-      let userId = "dev-user-parent-001";
+      let userId = "parent";
       let role = "admin";
       
       if (email.includes("child")) {
-        userId = "dev-user-child-001";
+        userId = "child";
         role = "child";
-      } else if (!email.includes("parent")) {
-        // Default to parent/admin role
-        userId = "dev-user-parent-001";
+      } else {
+        // Default to parent/admin role for admin@ and parent@ emails
+        userId = "admin";
         role = "admin";
       }
 
-      const session = createDevSession({ userId });
+      // Ensure DB user record exists in dev mode and read actual familyId
+      let familyId: string | null = null;
+      try {
+        const db = await initDb();
+        if (db) {
+          const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, DEV_USERS[userId].id)).limit(1))[0];
+          
+          if (!existingUser) {
+            await rawInsert("users", {
+              id: DEV_USERS[userId].id,
+              email: email || null,
+              name: name,
+              role: role,
+              avatar_url: null,
+              family_id: null,
+              points_total: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+          
+          const userRecord = (await db.select().from(schema.users).where(eq(schema.users.id, DEV_USERS[userId].id)).limit(1))[0];
+          familyId = userRecord?.family_id || null;
+        }
+      } catch (dbError) {
+        // Silently fail — user is created in Supabase Auth anyway
+      }
+
+      const devUserId = DEV_USERS[userId].id;
+      const session = createDevSession({ userId: devUserId });
+      session.user.familyId = familyId;
 
       const response = NextResponse.json(
         { 
@@ -49,13 +79,7 @@ export async function POST(request: NextRequest) {
           message: "Sign up successful (dev mode)",
           requiresEmailConfirmation: false,
         },
-        {
-          status: 200,
-          headers: {
-            "x-user-id": session.user.id,
-            "x-email": session.user.email || "",
-          }
-        }
+        { status: 200 }
       );
 
       setDevSessionCookie(response.headers, session);
@@ -153,14 +177,15 @@ export async function POST(request: NextRequest) {
           const familyName = body.name ? `${body.name}'s Family` : "My Family";
           const familySlug = `family-${Date.now()}`;
           
-          const [newFamily] = await db.insert(schema.families).values({
+          const newFamily = await rawInsert("families", {
+            id: `family-${Date.now()}`,
             name: familyName,
             slug: familySlug,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }).returning("*");
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
           
-          familyId = newFamily.id;
+          familyId = newFamily?.id || null;
         } else {
           familyId = existingUserWithFamily.familyId;
         }
@@ -169,14 +194,14 @@ export async function POST(request: NextRequest) {
         const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
         
         if (!existingUser) {
-          await db.insert(schema.users).values({
+          await rawInsert("users", {
             id: userId,
             email: userEmail,
             name: body.name,
             role: "parent",
-            familyId: familyId || null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            family_id: familyId || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           });
         } else if (existingUser.familyId !== familyId) {
           await db.update(schema.users).set({ 
@@ -200,14 +225,7 @@ export async function POST(request: NextRequest) {
         message: "Sign up successful. Welcome to Choretle!",
         requiresEmailConfirmation: false,
       },
-      {
-        status: 200,
-        headers: {
-          "x-user-id": userId,
-          "x-email": userEmail || "",
-          "x-family-id": familyId || "",
-        }
-      }
+      { status: 200 }
     );
   } catch (error) {
     error({ err: error }, "[SIGNUP] Unhandled error");

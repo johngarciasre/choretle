@@ -1,5 +1,4 @@
 "use client";
-import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -108,24 +107,22 @@ export default function FamilyPage() {
   const [selectedTheme, setSelectedTheme] = useState(family?.theme || "coral");
 
   const checkAuth = async () => {
-    const { data: { session } } = await getSupabaseBrowser().auth.getSession();
-    if (!session) {
-      setIsAuthenticated(false);
-      return;
-    }
-
     try {
-      const response = await fetch("/api/auth/me");
+      const response = await fetch("/api/auth/me", { credentials: "include" });
       if (response.ok) {
         const data = await response.json();
-        setIsAuthenticated(true);
-        setFamilyId(data.familyId || "");
-        loadFamilyData(data.familyId);
-      } else {
-        setIsAuthenticated(false);
+        if (data.authenticated) {
+          setIsAuthenticated(true);
+          setFamilyId(data.familyId || "");
+          if (data.familyId) {
+            loadFamilyData(data.familyId);
+          }
+          return;
+        }
       }
-    } catch (error) {
-      error({ err: error }, "Auth check failed");
+      setIsAuthenticated(false);
+    } catch (err) {
+      error({ err }, "Auth check failed");
       setIsAuthenticated(false);
     }
   };
@@ -190,7 +187,7 @@ export default function FamilyPage() {
 
   const handleCreateFamily = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!familyId || !isAuthenticated) return;
+    if (!isAuthenticated || !name.trim()) return;
 
     try {
       const response = await fetch("/api/family", {
@@ -465,7 +462,77 @@ export default function FamilyPage() {
     );
   }
 
-  if (!family) {
+  if (!family && !viewingFamily) {
+    // User is authenticated but has no family — show create/join forms
+    if (isAuthenticated) {
+      return (
+        <PageShell>
+          <PageHeader 
+            title="Welcome to Choretle!"
+            subtitle="Create a family or join an existing one to get started."
+          />
+
+          <main className="space-y-8">
+            <Card accent="coral" className="p-6 space-y-4">
+              <form onSubmit={handleCreateFamily} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Enter family name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-coral focus:outline-none"
+                />
+                <Button 
+                  type="submit" 
+                  variant="primary" 
+                  size="lg"
+                  className="w-full"
+                  disabled={!name.trim()}
+                >
+                  Create Family
+                </Button>
+              </form>
+
+              <div className="pt-4 border-t border-ink/10">
+                <p className="text-sm text-ink/60 mb-3 text-center">or</p>
+                <button
+                  onClick={() => setShowJoin(true)}
+                  className="w-full py-2 font-bold text-grape hover:text-grape/80"
+                >
+                  Join an existing family
+                </button>
+              </div>
+            </Card>
+
+            {showJoin && (
+              <Card accent="grape" className="p-6 space-y-3">
+                <form onSubmit={handleJoinFamily} className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Enter family join code"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    required
+                    className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+                  />
+                  <Button 
+                    type="submit" 
+                    variant="grape" 
+                    size="lg"
+                    className="w-full"
+                    disabled={!joinCode.trim()}
+                  >
+                    Join Family
+                  </Button>
+                </form>
+              </Card>
+            )}
+          </main>
+        </PageShell>
+      );
+    }
+
     return (
       <PageShell>
         <main className="flex items-center justify-center min-h-[60vh]">

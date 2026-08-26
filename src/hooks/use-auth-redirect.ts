@@ -10,11 +10,11 @@ export function useAuthRedirect() {
       fetch("/api/auth/me")
         .then((res) => {
           if (!res.ok) {
-            window.location.href = "/";
+            window.location.href = "/auth/signin";
           }
         })
         .catch(() => {
-          window.location.href = "/";
+          window.location.href = "/auth/signin";
         })
         .finally(() => setAuthChecked(true));
     }

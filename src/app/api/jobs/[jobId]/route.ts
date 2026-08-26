@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc, sql, gt } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -211,12 +211,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       // Trigger review creation for the family
       const familyId = authResult.familyId;
       if (familyId) {
-        await db.insert(schema.reviews).values({
-          jobId,
-          familyId,
-          reviewerId: null,
+        await rawInsert("reviews", {
+          id: `rev-${Date.now()}`,
+          job_id: jobId,
+          family_id: familyId,
+          reviewer_id: null,
           status: "pending",
           notes: `Job "${job.name}" submitted for review`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         });
       }
     }
@@ -233,11 +236,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (result) {
       // Create history entry
       try {
-        await db.insert(schema.jobHistory).values({
-          jobId,
+        await rawInsert("job_history", {
+          id: `jh-${Date.now()}`,
+          job_id: jobId,
           action: "status_change",
           details: `Status changed from "${currentStatus}" to "${status}"`,
-          userId: authResult.userId,
+          user_id: authResult.userId,
+          created_at: new Date().toISOString(),
         });
 
         // Award points if transitioning to done

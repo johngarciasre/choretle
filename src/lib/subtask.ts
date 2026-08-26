@@ -1,6 +1,6 @@
 // ─── Subtask Management & Point Calculation ──────────────────────────
 
-import { db } from "@/db/drizzle";
+import { db, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -71,12 +71,14 @@ export async function completeSubtask(subtaskId: string, jobId: string, userId?:
 
   // Create history entry
   await (
-    db.insert(schema.jobHistory).values({
-      jobId,
+    rawInsert("job_history", {
+      id: `jh-${Date.now()}`,
+      job_id: jobId,
       action: "subtask_completed",
       details: `Subtask ${subtaskId} completed, ${pointsAwarded} points awarded`,
-      userId,
-    }).returning("*") as any
+      user_id: userId,
+      created_at: new Date().toISOString(),
+    }) as any
   );
 
   // Award points to user if userId provided

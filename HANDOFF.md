@@ -16,7 +16,8 @@
 - **Database**: Hybrid strategy
   - PostgreSQL via `postgres-js` when `POSTGRES_URL` env var is set
   - In-memory SQLite via `better-sqlite3` as fallback (local dev)
-- **Testing**: Vitest (114 tests, all passing)
+- **Auth**: Supabase Auth (`@supabase/ssr`) with `dev-session` cookie for local dev mode
+- **Testing**: Vitest (544 tests, all passing)
 
 ### Architecture Overview
 ```
@@ -37,6 +38,8 @@ src/
 │   │   ├── swap-meet/route.ts            # Swap/rotate assignments
 │   │   ├── tasks/route.ts                # Task CRUD
 │   │   └── tasks/subtasks/route.ts       # Subtask management
+│   ├── teams/route.ts                    # Team CRUD (GET list, POST create)
+│   ├── users/route.ts                    # User management (GET members, PUT/PATCH update)
 │   ├── auth/signin/page.tsx              # Sign in page
 │   ├── auth/signup/page.tsx              # Sign up page
 │   ├── dashboard/page.tsx                # Dashboard view
@@ -62,11 +65,16 @@ src/
     ├── points.ts                         # Points calculation
     ├── jobStatus.ts                      # Job status transition enforcement
     ├── subtask.ts                        # Subtask management
-    └── db/service.ts                     # Server-side DB operations
+    ├── dev-auth.ts                       # Dev mode auth: parseDevSession(), getDevUserFromRequest()
+    ├── db/service.ts                     # Server-side DB operations
 ```
 
+### Middleware & Auth Flow
+- **`middleware.ts`** — Runs before API routes. Extracts user from either Supabase JWT (prod) or `dev-session` cookie (dev). Sets `x-user-id`, `x-family-id`, `x-email` headers for downstream API routes. Redirects unauthenticated requests to `/auth/signin`.
+- **`src/lib/dev-auth.ts`** — Dev mode helpers: `parseDevSession()` decodes base64 session cookie; `getDevUserFromRequest()` extracts user from request headers or cookie fallback.
+
 ### Key Components & Files
-1. **`src/db/drizzle.ts`** — Lazy DB initialization. Exports `initDb()` async function and `db` variable (null until initialized). Handles both PostgreSQL and SQLite fallback.
+1. **`src/db/drizzle.ts`** — Lazy DB initialization. Exports `initDb()` async function and `getRawDb()` for raw SQL operations. Uses `better-sqlite3` with Drizzle ORM for SELECT queries; raw SQL for INSERT/UPDATE (Drizzle insert has stack overflow bug).
 2. **`src/lib/db/service.ts`** — Server-only service layer with lazy `ensureDb()` pattern for all operations. Re-exports `canTransition`, `getValidNextStatuses`, and `calculateJobPoints`.
 3. **`src/lib/rotation.ts`** — Pure functions: `getRotationForDate()`, `calculateRotationAssignment()`, `getRotationSchedule()`, `canSwapRotations()`, `swapRotations()`, `getUpcomingAssignments()`.
 4. **`src/lib/slateAutoGen.ts`** — Auto-generates jobs from slates using rotation assignment logic. Calls `autoGenerateJobs()` which iterates active slates and creates jobs per user based on their rotation position.
@@ -98,15 +106,15 @@ src/
 
 ### Build & Test
 - **Build**: `npm run build` — compiles with Turbopack, all routes registered.
-- **Test**: `npm test` — 114 tests passing across 5 files (utils, rotation, jobStatus, subtask, points).
+- **Test**: `npm test` — 544 tests passing across 17 files.
 - **Dev server**: `npm run dev` — runs on port 3000 by default.
 
 ### Known Issues / Gaps
-1. **Middleware redirect bug** — Fixed: changed relative URL to absolute URL using `new URL("/auth/signin", request.url)`.
-2. **DB service types** — All functions use `any` for query results due to Drizzle's limited type inference with SQLite fallback.
-3. **Swap UI incomplete** — The swap-meet page has placeholder inputs; needs real form integration with rotation IDs.
-4. **No auth middleware enforcement** — Routes currently accept any request without authentication checks.
-5. **SQLite in-memory only** — Data doesn't persist across requests during development (by design).
+1. **Drizzle ORM insert bug** — `db.insert(schema.table).values()` causes infinite recursion (`orderSelectedFields` stack overflow) in `drizzle-orm/better-sqlite3`. Workaround: use raw SQL via `getRawDb().prepare()` for INSERT/UPDATE operations; Drizzle SELECT works fine.
+2. **Middleware redirect bug** — Fixed: changed relative URL to absolute URL using `new URL("/auth/signin", request.url)`.
+3. **DB service types** — All functions use `any` for query results due to Drizzle's limited type inference with SQLite fallback.
+4. **Swap UI incomplete** — The swap-meet page has placeholder inputs; needs real form integration with rotation IDs.
+5. **SQLite file-based** — Uses `process.cwd()/.choretle-dev.sqlite`; data persists across requests during development.
 
 ### Next Steps
 1. **Integration tests** ✅ — Fixed by rewriting to use raw better-sqlite3 queries directly (avoids Drizzle ORM infinite recursion bug). All 127 tests passing.
@@ -126,7 +134,12 @@ src/
 15. **Tags API** ✅ — Added PUT and DELETE methods to tags route; tasks API routes updated to use middleware headers.
 
 ### Next Steps (Active)
-- None at this time — all previous HANDOFF.md next steps are complete.
+- **Auth & Family Management** ✅ — Fixed critical auth/family bugs:
+  - Middleware matcher updated to `/(.*.*)` to ensure headers are set for ALL routes including API routes
+  - Dev session cookie sync: signin/signup now use consistent DEV_USERS keys instead of raw string IDs, fixing userId mismatch between cookie and DB
+  - Dynamic route param extraction: added `getFamilyIdFromPath()` helper to parse `[familyId]` from URL path (Next.js App Router params not accessible via request.params in dev mode)
+  - SQLite column naming: fixed `updatedAt` → `updated_at` in family PATCH handler (Drizzle ORM for SQLite uses raw column names in `.set()`)
+  - Team management API routes completed with proper auth checks
 
 ### Next Steps (Future)
 1. **Integration tests** — Add more integration tests for new API routes (rotations, tags CRUD).
@@ -138,7 +151,7 @@ src/
 ```bash
 npm run build          # Production build
 npm run dev            # Development server (uses SQLite if POSTGRES_URL unset)
-npm test               # Run tests (127 passing)
+npm test               # Run tests (544 passing)
 npm run lint           # Lint check (if configured)
 gh auth status         # Check GitHub CLI auth
 git push origin main   # Push to remote
@@ -153,3 +166,10 @@ git push origin main   # Push to remote
 
 ### Environment Variables
 - `POSTGRES_URL` — PostgreSQL connection string (optional, unset = SQLite fallback)
+- `SQLITE_PATH` — File path for SQLite database (default: `process.cwd()/.choretle-dev.sqlite`)
+- `AUTH_MODE=dev` — Development mode uses in-memory dev users instead of Supabase Auth
+
+### Dev Mode Auth
+- Session cookie: `dev-session=<base64-encoded-json>` containing `{ id, email, name, role, familyId }`
+- Created by signin/signup routes when `AUTH_MODE=dev`
+- Middleware (`middleware.ts`) reads this cookie to set `x-user-id` / `x-family-id` headers for API routes

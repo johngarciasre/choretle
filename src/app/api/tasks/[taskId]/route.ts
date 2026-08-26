@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql, desc } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -58,11 +58,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Handle tags
     if (tagIds !== undefined) {
-      await db.delete(schema.taskTags).where({ taskId });
+      await rawDeleteWhere("task_tags", [{ col: "task_id", val: taskId }]);
       
       if (Array.isArray(tagIds) && tagIds.length > 0) {
-        const insertValues = tagIds.map((tagId: string) => ({ taskId, tagId }));
-        await db.insert(schema.taskTags).values(insertValues);
+        for (const tagId of tagIds) {
+          await rawInsert("task_tags", {
+            id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            task_id: taskId,
+            tag_id: tagId,
+          });
+        }
       }
     }
 
@@ -101,7 +106,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const taskId = (await params).taskId;
     
-    await db.delete(schema.tasks).where(eq(schema.tasks.id, taskId));
+    await rawDeleteWhere("tasks", [{ col: "id", val: taskId }]);
     
     // Cascade delete of tags handled by FK constraint
     return NextResponse.json({ success: true });

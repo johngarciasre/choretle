@@ -20,8 +20,6 @@ const PUBLIC_API_ROUTES = [
   "/api/schedules/generate",
 ];
 
-const REDIRECT_URL = "/";
-
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -30,7 +28,7 @@ function isDevMode(): boolean {
   return process.env.AUTH_MODE === "dev";
 }
 
-async function getSessionFromSupabase(request: NextRequest): Promise<{ session: unknown } | null> {
+async function getSessionFromSupabase(request: NextRequest) {
   if (!hasSupabaseConfig()) return null;
   
   try {
@@ -96,6 +94,7 @@ function setNoCacheHeaders(response: NextResponse): void {
 export async function middleware(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const pathname = requestUrl.pathname;
+  console.log("[MID]", pathname, "devMode=", process.env.AUTH_MODE === "dev");
 
   // ─── Check if route is public ────────────────────────────────────────
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
@@ -105,16 +104,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ─── Allow all requests through (auth checks handled per-route or by API) ──
-  const result = await getSessionFromSupabase(request);
-  
-  if (!isDevMode() && result?.session) {
-    const response = NextResponse.next();
-    setNoCacheHeaders(response);
-    return response;
-  }
-
-  // Check for elevated websudo session as fallback
+  // ─── Production Mode: Verify Supabase session and set auth headers ──
   if (!isDevMode()) {
     const websudoValid = await checkWebsudoAuth(request);
     if (websudoValid) {
@@ -124,11 +114,11 @@ export async function middleware(request: NextRequest) {
         try {
           const value = setCookie.replace("webserversudo-session=", "").trim();
           const [json] = value.split(".");
-          const payload = JSON.parse(json);
+          const payload: Record<string, unknown> = JSON.parse(json);
           
           const response = NextResponse.next();
-          response.headers.set("x-user-id", payload.userId);
-          response.headers.set("x-email", payload.email);
+          response.headers.set("x-user-id", String(payload.userId || ""));
+          response.headers.set("x-email", String(payload.email || ""));
           response.headers.set("x-role", "superadmin");
           response.headers.set("x-family-id", "");
           setNoCacheHeaders(response);
@@ -139,7 +129,27 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    const response = NextResponse.redirect(new URL(REDIRECT_URL, request.url));
+    const result = await getSessionFromSupabase(request);
+
+    if (result?.data?.session) {
+      const response = NextResponse.next();
+      setNoCacheHeaders(response);
+      
+      // Set user info from Supabase session (familyId will be resolved by API routes via /api/auth/me)
+      response.headers.set("x-user-id", result.data.session.user?.id || "");
+      response.headers.set("x-email", result.data.session.user?.email || "");
+      response.headers.set("x-role", "child");
+      
+      // Redirect authenticated users from landing page to family
+      if (pathname === "/") {
+        return NextResponse.redirect(new URL("/family", request.url));
+      }
+      
+      return response;
+    }
+
+    // No valid session — redirect to signin
+    const response = NextResponse.redirect(new URL("/auth/signin", request.url));
     setNoCacheHeaders(response);
     return response;
   }
@@ -150,7 +160,15 @@ export async function middleware(request: NextRequest) {
   const isSignedOut = cookieHeader.includes("dev-signout=true");
 
   if (!devUser || isSignedOut) {
-    const response = NextResponse.redirect(new URL(REDIRECT_URL, request.url));
+    const response = NextResponse.redirect(new URL("/auth/signin", request.url));
+    setNoCacheHeaders(response);
+    return response;
+  }
+
+  // Redirect dev users from landing page to family
+  if (pathname === "/" && devUser) {
+    const redirectUrl = devUser.familyId ? `/family/${devUser.familyId}` : "/family";
+    const response = NextResponse.redirect(new URL(redirectUrl, request.url));
     setNoCacheHeaders(response);
     return response;
   }
@@ -170,7 +188,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!api/|_next/|_vercel|[\\w-]+\\.\\w+).*)",
-  ],
+  matcher: ["/(.*.*)"],
 };

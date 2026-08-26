@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -13,7 +13,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const rotationId = (await params).rotationId;
 
-    await db.delete(schema.rotations).where(eq(schema.rotations.id, rotationId));
+    await rawDeleteWhere("rotations", [{ col: "id", val: rotationId }]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

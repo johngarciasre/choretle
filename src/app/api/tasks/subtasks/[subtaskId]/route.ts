@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -48,11 +48,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const subtaskId = (await params).subtaskId;
     const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
 
-    await db.delete(schema.jobSubtasks).where(eq(schema.jobSubtasks.subtaskId, subtaskId));
+    await rawDeleteWhere("job_subtasks", [{ col: "subtask_id", val: subtaskId }]);
     if (familyId) {
-      await db.delete(schema.subtasks).where(and(eq(schema.subtasks.id, subtaskId), eq(schema.subtasks.familyId, familyId)));
+      await rawDeleteWhere("subtasks", [
+        { col: "id", val: subtaskId },
+        { col: "family_id", val: familyId },
+      ]);
     } else {
-      await db.delete(schema.subtasks).where(eq(schema.subtasks.id, subtaskId));
+      await rawDeleteWhere("subtasks", [{ col: "id", val: subtaskId }]);
     }
 
     return NextResponse.json({ success: true });

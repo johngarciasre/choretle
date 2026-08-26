@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
@@ -54,13 +54,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "name and familyId are required" }, { status: 400 });
     }
 
-    const tag = await db.insert(schema.tags).values({
+    const tag = await rawInsert("tags", {
+      id: `tag-${Date.now()}`,
       name,
-      familyId,
+      family_id: familyId,
       color,
-    }).returning("*");
+      created_at: new Date().toISOString(),
+    });
 
-    return NextResponse.json(tag[0], { status: 201 });
+    return NextResponse.json(tag, { status: 201 });
   } catch (error) {
     error({ err: error }, "Tags POST failed");
     return NextResponse.json({ error: "Failed to create tag" }, { status: 500 });
@@ -112,9 +114,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete tag from junction tables first (cascade via FK constraints in PostgreSQL)
-    await db.delete(schema.taskTags).where(eq(schema.taskTags.tagId, id));
-    await db.delete(schema.slateTags).where(eq(schema.slateTags.tagId, id));
-    await db.delete(schema.tags).where(eq(schema.tags.id, id));
+    await rawDeleteWhere("task_tags", [{ col: "tag_id", val: id }]);
+    await rawDeleteWhere("slate_tags", [{ col: "tag_id", val: id }]);
+    await rawDeleteWhere("tags", [{ col: "id", val: id }]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

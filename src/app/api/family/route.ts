@@ -1,25 +1,171 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createFamily } from "@/lib/db/service";
+import { initDb } from "@/db/drizzle";
+import * as schema from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { slugify } from "@/lib/slugify";
 import { error } from "@/lib/logger.server";
+import { parseDevSession } from "@/lib/dev-auth";
+import { rawInsert } from "@/db/drizzle";
+import { createDevSession, setDevSessionCookie } from "@/lib/dev-auth";
 
+/**
+ * Get user from either middleware headers (prod) or dev session cookie (dev mode).
+ */
+async function getCurrentUser(request: NextRequest): Promise<{ id: string; familyId: string | null } | null> {
+  // Check middleware headers first (production mode)
+  const userId = request.headers.get("x-user-id");
+  if (userId) {
+    return { id: userId, familyId: request.headers.get("x-family-id") || null };
+  }
+
+  // Fall back to dev session cookie (dev mode)
+  if (process.env.AUTH_MODE === "dev") {
+    const cookieHeader = request.headers.get("cookie") || "";
+    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+    if (setCookie) {
+      const value = setCookie.replace("dev-session=", "").trim();
+      const user = parseDevSession(value);
+      if (user) {
+        return { id: user.id, familyId: user.familyId || null };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * GET /api/family?id=<id>
+ * Fetch a family by ID (used by Family page to load family data)
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const url = new URL(request.url);
+    const familyId = url.searchParams.get("id");
+
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
+    }
+
+    // Get user-id from middleware header (set by middleware for both dev and prod)
+    const userId = request.headers.get("x-user-id");
+    
+    const db = await initDb();
+    if (!db) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
+    // Fetch family data
+    const familyRows = await db.select().from(schema.families)
+      .where(eq(schema.families.id, familyId))
+      .limit(1);
+    
+    const family = familyRows[0];
+    if (!family) {
+      return NextResponse.json({ ok: false, error: "Family not found" }, { status: 404 });
+    }
+
+    // Fetch users in this family (only if authenticated and they belong to it)
+    let users: any[] = [];
+    if (userId) {
+      const userRecordRows = await db.select().from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1);
+      const userRecord = userRecordRows[0];
+      
+      // Only return users if the requesting user belongs to this family
+      if (userRecord && (userRecord.familyId === familyId || !userRecord.familyId)) {
+        users = await db.select().from(schema.users)
+          .where(eq(schema.users.familyId, familyId));
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      family,
+      users,
+    });
+  } catch (e) {
+    error({ err: e }, "Family GET failed");
+    return NextResponse.json({ error: "Failed to fetch family" }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/family
+ * Create a new family and associate the current user with it
+ */
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication via middleware headers or dev cookie
+    const currentUser = await getCurrentUser(request);
+    if (!currentUser) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const body = await request.json();
     if (!body?.name) {
       return NextResponse.json({ error: "Family name is required" }, { status: 400 });
     }
 
-    const family = await createFamily({
+    const db = await initDb();
+    if (!db) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
+    // Generate slug from name
+    const slug = slugify(body.name);
+
+    // Check if family with this slug already exists
+    const existingFamilyRows = await db.select().from(schema.families)
+      .where(eq(schema.families.slug, slug))
+      .limit(1);
+    
+    if (existingFamilyRows[0]) {
+      return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
+    }
+
+    // Create the family
+    const newFamily = await rawInsert("families", {
+      id: `family-${Date.now()}`,
       name: body.name,
-      slug: slugify(body.name),
-      weekStartDay: body.weekStartDay ?? 0,
+      slug,
+      week_start_day: body.weekStartDay ?? 0,
+      teams_enabled: false,
     });
 
-    if (!family) throw new Error("Failed to create family");
-    return NextResponse.json(family);
-  } catch (error) {
-    error({ err: error }, "Create family failed");
+    if (!newFamily) {
+      return NextResponse.json({ error: "Failed to create family" }, { status: 500 });
+    }
+
+    // Associate the current user with this family
+    await db.update(schema.users)
+      .set({ familyId: newFamily.id, updated_at: new Date().toISOString() })
+      .where(eq(schema.users.id, currentUser.id));
+
+    const response = NextResponse.json({
+      ok: true,
+      family: newFamily,
+    });
+
+    // Update dev session cookie if in dev mode
+    if (process.env.AUTH_MODE === "dev") {
+      const cookieHeader = request.headers.get("cookie") || "";
+      const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+      if (setCookie) {
+        const value = setCookie.replace("dev-session=", "").trim();
+        const user = parseDevSession(value);
+        if (user) {
+          const session = createDevSession({ userId: user.id });
+          session.user.familyId = newFamily.id;
+          setDevSessionCookie(response.headers, session);
+        }
+      }
+    }
+
+    return response;
+  } catch (e) {
+    error({ err: e }, "Create family failed");
     return NextResponse.json({ error: "Failed to create family" }, { status: 500 });
   }
 }
