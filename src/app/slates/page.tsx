@@ -33,9 +33,17 @@ interface Slate {
   taskCount?: number;
 }
 
+async function getFamilyId(): Promise<string> {
+  const res = await fetch("/api/auth/me");
+  if (!res.ok) throw new Error("Not authenticated");
+  const data = await res.json();
+  if (!data.familyId) throw new Error("No family ID");
+  return data.familyId;
+}
+
 const fetchSlates = async () => {
   try {
-    const fid = localStorage.getItem("familyId") || "";
+    const fid = await getFamilyId();
     const res = await fetch(`/api/slates?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch slates");
     return await res.json();
@@ -47,7 +55,7 @@ const fetchSlates = async () => {
 
 const fetchTasks = async () => {
   try {
-    const fid = localStorage.getItem("familyId") || "";
+    const fid = await getFamilyId();
     const res = await fetch(`/api/tasks?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
@@ -59,7 +67,7 @@ const fetchTasks = async () => {
 
 const fetchTags = async () => {
   try {
-    const fid = localStorage.getItem("familyId") || "";
+    const fid = await getFamilyId();
     const res = await fetch(`/api/tags?familyId=${fid}`);
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
@@ -75,12 +83,12 @@ export default function SlatesPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [newSlateName, setNewSlateName] = useState("");
-  
+
   const [buildingSlateId, setBuildingSlateId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  
+
   const [buildingSlateTasks, setBuildingSlateTasks] = useState<Task[]>([]);
   const [buildingSlateExplicitTaskIds, setBuildingSlateExplicitTaskIds] = useState<string[]>([]);
   const [buildingSlateAutoIncludeTagIds, setBuildingSlateAutoIncludeTagIds] = useState<string[]>([]);
@@ -95,20 +103,19 @@ export default function SlatesPage() {
     });
   }, []);
 
-  const familyId = typeof window !== "undefined" ? (localStorage.getItem("familyId") || "") : "";
-
   async function handleCreateSlate() {
     if (!newSlateName.trim()) return;
-    
+
     try {
-      const res = await fetch(`/api/slates?familyId=${familyId}`, {
+      const fid = await getFamilyId();
+      const res = await fetch(`/api/slates?familyId=${fid}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newSlateName }),
       });
 
       if (!res.ok) throw new Error("Failed to create slate");
-      
+
       const data = await res.json();
       setSlates(prev => [...prev, data]);
       setNewSlateName("");
@@ -129,7 +136,7 @@ export default function SlatesPage() {
       });
 
       if (!res.ok) throw new Error("Failed to delete slate");
-      
+
       setSlates(prev => prev.filter(s => s.id !== slateId));
     } catch (err) {
       error({ err: err }, "Delete slate failed");
@@ -142,7 +149,7 @@ export default function SlatesPage() {
       const res = await fetch(`/api/slates/${slateId}/tasks`);
       if (!res.ok) throw new Error("Failed to fetch slate tasks");
       const data = await res.json();
-      
+
       setBuildingSlateId(slateId);
       setBuildingSlateTasks(data.tasks || []);
       setBuildingSlateExplicitTaskIds(data.explicitTaskIds || []);
@@ -155,13 +162,13 @@ export default function SlatesPage() {
 
   async function handleSaveSlate() {
     if (!buildingSlateId) return;
-    
+
     try {
       const body = {
         explicitTaskIds: buildingSlateExplicitTaskIds,
         autoIncludeTagIds: buildingSlateAutoIncludeTagIds,
       };
-      
+
       const res = await fetch(`/api/slates/${buildingSlateId}/tasks`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -169,7 +176,7 @@ export default function SlatesPage() {
       });
 
       if (!res.ok) throw new Error("Failed to save slate");
-      
+
       setBuildingSlateId(null);
       fetchTasks();
     } catch (err) {
@@ -189,13 +196,13 @@ export default function SlatesPage() {
           tags={tags}
           explicitTaskIds={buildingSlateExplicitTaskIds}
           autoIncludeTagIds={buildingSlateAutoIncludeTagIds}
-          onToggleTask={(taskId) => 
-            setBuildingSlateExplicitTaskIds(prev => 
+          onToggleTask={(taskId) =>
+            setBuildingSlateExplicitTaskIds(prev =>
               prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
             )
           }
-          onToggleTag={(tagId) => 
-            setBuildingSlateAutoIncludeTagIds(prev => 
+          onToggleTag={(tagId) =>
+            setBuildingSlateAutoIncludeTagIds(prev =>
               prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
             )
           }
@@ -238,7 +245,7 @@ export default function SlatesPage() {
                   >
                     <Trash2 size={16} />
                   </button>
-                  
+
                   <h3 className="font-display text-xl font-bold text-ink pr-4">{slate.name}</h3>
                   {slate.description && (
                     <p className="text-sm text-ink/60 mb-2">{slate.description}</p>
@@ -340,7 +347,7 @@ function SlateBuilderPage({
 
   const getTagMatchedTasks = () => {
     if (autoIncludeTagIds.length === 0) return new Set<string>();
-    
+
     const matchedTaskIds = new Set<string>();
     for (const tagId of autoIncludeTagIds) {
       const tag = tags.find(t => t.id === tagId);
@@ -360,12 +367,12 @@ function SlateBuilderPage({
     for (const task of selectedTasks) {
       allIds.add(task.id);
     }
-    
+
     const tagMatched = getTagMatchedTasks();
     for (const taskId of tagMatched) {
       allIds.add(taskId);
     }
-    
+
     return tasks.filter(t => allIds.has(t.id));
   };
 
@@ -412,7 +419,7 @@ function SlateBuilderPage({
         <Card accent="sunny" className="pt-6 space-y-4">
           <h2 className="font-display text-xl font-bold text-ink">Auto-Include Tasks by Tag</h2>
           <p className="text-sm text-ink/60 mb-4">
-            Select tags to automatically include all tasks with those tags. 
+            Select tags to automatically include all tasks with those tags.
             Tasks can be in both explicit and auto-included lists (explicit wins).
           </p>
 
@@ -433,7 +440,7 @@ function SlateBuilderPage({
           )}
 
           <p className="mt-4 text-sm text-ink/60">
-            {autoIncludeTagIds.length === 0 
+            {autoIncludeTagIds.length === 0
               ? "No tags selected for auto-inclusion."
               : `Tasks with these ${autoIncludeTagIds.length} tag(s) will be automatically included.`}
           </p>

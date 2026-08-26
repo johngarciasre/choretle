@@ -1,9 +1,7 @@
 "use client";
 
-import { getSupabaseBrowser } from "@/supabase/client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { PageShell, PageLoader } from "@/components/ui";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
@@ -42,9 +40,16 @@ interface SwapMeetEntry {
   createdAt: string;
 }
 
+async function getFamilyId(): Promise<string> {
+  const res = await fetch("/api/auth/me");
+  if (!res.ok) throw new Error("Not authenticated");
+  const data = await res.json();
+  if (!data.familyId) throw new Error("No family ID");
+  return data.familyId;
+}
+
 export default function SwapMeetPage() {
   const authChecked = useAuthRedirect();
-  const pathname = usePathname();
   const [schedule, setSchedule] = useState<SlateSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [familyId, setFamilyId] = useState("");
@@ -64,14 +69,13 @@ export default function SwapMeetPage() {
 
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - Swap Meet");
-    const storedFamilyId = typeof window !== "undefined" && localStorage.getItem("familyId");
-    if (storedFamilyId) {
-      setFamilyId(storedFamilyId);
-      fetchSchedule(storedFamilyId, daysAhead);
-      fetchSwaps(storedFamilyId);
-    } else {
+    getFamilyId().then((fid) => {
+      setFamilyId(fid);
+      fetchSchedule(fid, daysAhead);
+      fetchSwaps(fid);
+    }).catch(() => {
       setLoading(false);
-    }
+    });
   }, [daysAhead]);
 
   const fetchSchedule = async (fid: string, days: number) => {
@@ -79,11 +83,11 @@ export default function SwapMeetPage() {
       setLoading(true);
       const response = await fetch(`/api/swap-meet?familyId=${fid}&daysAhead=${days}`);
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || "Failed to fetch schedule");
       }
-      
+
       setSchedule(data.assignments || []);
 
       // Fetch rotations for swap UI from first slate
@@ -122,7 +126,7 @@ export default function SwapMeetPage() {
 
   const handleSlateSelect = async (slateId: string) => {
     setSelectedSlateId(slateId);
-    
+
     // Fetch rotations for this slate if not already loaded
     if (rotations.length === 0 && familyId) {
       await fetchRotations(familyId, slateId);
@@ -142,7 +146,7 @@ export default function SwapMeetPage() {
 
       const response = await fetch("/api/swap-meet", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { "Cookie": `auth-token=${token}` } : {})
         },
@@ -155,7 +159,7 @@ export default function SwapMeetPage() {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         alert("Rotations swapped successfully!");
         fetchSchedule(familyId, daysAhead);
@@ -182,7 +186,7 @@ export default function SwapMeetPage() {
 
       const response = await fetch("/api/swap-meet", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { "Cookie": `auth-token=${token}` } : {})
         },
@@ -194,13 +198,13 @@ export default function SwapMeetPage() {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         alert("Slate(s) shared successfully!");
         setShowShareModal(false);
         setRequestingFamilyId("");
         setSelectedSlateIdsForSharing([]);
-        
+
         // Refresh swaps list
         if (familyId) {
           await fetchSwaps(familyId);
@@ -216,13 +220,13 @@ export default function SwapMeetPage() {
 
   const openShareModal = async () => {
     if (!familyId) return;
-    
+
     // Fetch family ID from another family
     try {
       setShowShareModal(true);
       setRequestingFamilyId("");
       setSelectedSlateIdsForSharing([]);
-      
+
       await fetchSwaps(familyId);
     } catch (err) {
       error({ err: err }, "Failed to open share modal");
@@ -239,52 +243,20 @@ export default function SwapMeetPage() {
 
   if (!familyId) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-cream to-bubblegum/20">
-        <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
-          <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <span className="text-sm text-ink/60">Back to Dashboard</span>
-          </Link>
-          <h1 className="text-2xl font-bold text-grape">Choretle</h1>
-          <div className="flex gap-4">
-            <Link href="/dashboard" className="hover:underline">Dashboard</Link>
-            <Link href="/swap-meet" className="hover:underline text-indigo-600 font-semibold">Swap Meet</Link>
-          </div>
-        </nav>
-
+      <PageShell>
         <main className="max-w-xl mx-auto p-8 space-y-4">
-          <h2 className="text-xl font-semibold mb-4">Set Your Family ID</h2>
-          <p className="text-ink/60 mb-4">Enter your family ID to view your rotation schedule.</p>
-          <input
-            type="text"
-            value={familyId}
-            onChange={(e) => setFamilyId(e.target.value)}
-            placeholder="Enter family ID"
-            className="border p-2 rounded w-full mb-4"
-          />
-          <button
-            onClick={() => familyId && fetchSchedule(familyId, daysAhead)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-          >
-            Load Schedule
-          </button>
+          <h2 className="text-xl font-semibold mb-4">Join a Family</h2>
+          <p className="text-ink/60 mb-4">You need to join a family before you can use Swap Meet. Go to the Family page to set one up.</p>
+          <Link href="/family" className="bg-grape text-white px-4 py-2 rounded inline-block">
+            Go to Family Settings
+          </Link>
         </main>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cream to-bubblegum/20">
-      <nav className="bg-white/10 backdrop-blur-lg p-4 flex justify-between items-center sticky top-0 z-10">
-        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <span className="text-sm text-ink/60">Back to Dashboard</span>
-        </Link>
-        <h1 className="text-2xl font-bold text-grape">Choretle</h1>
-        <div className="flex gap-4">
-          <Link href="/dashboard" className="hover:underline">Dashboard</Link>
-          <Link href="/swap-meet" className="hover:underline text-indigo-600 font-semibold">Swap Meet</Link>
-        </div>
-      </nav>
-
+    <PageShell>
       <main className="max-w-7xl mx-auto p-8 space-y-8">
         {/* Schedule Section */}
         <section>
@@ -296,8 +268,8 @@ export default function SwapMeetPage() {
                   key={days}
                   onClick={() => fetchSchedule(familyId, days)}
                   className={`px-3 py-1 rounded text-sm ${
-                    days === daysAhead 
-                      ? "bg-indigo-600 text-white" 
+                    days === daysAhead
+                      ? "bg-indigo-600 text-white"
                       : "bg-ink/10 hover:bg-ink/20"
                   }`}
                 >
@@ -306,7 +278,7 @@ export default function SwapMeetPage() {
               ))}
             </div>
           </div>
-          
+
           <p className="text-ink/60 mb-4">View your upcoming chore assignments.</p>
 
           {loading ? (
@@ -326,7 +298,7 @@ export default function SwapMeetPage() {
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-7 lg:grid-cols-10 gap-1">
                   {slate.assignments.map((assignment, index) => (
                     <div
@@ -474,7 +446,7 @@ export default function SwapMeetPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
               <h3 className="text-xl font-semibold mb-4">Share Slates</h3>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Enter other family's ID</label>
@@ -530,6 +502,6 @@ export default function SwapMeetPage() {
           </div>
         )}
       </main>
-    </div>
+    </PageShell>
   );
 }

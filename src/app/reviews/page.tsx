@@ -28,6 +28,14 @@ interface ReviewItem {
   } | null;
 }
 
+async function getFamilyId(): Promise<string> {
+  const res = await fetch("/api/auth/me");
+  if (!res.ok) throw new Error("Not authenticated");
+  const data = await res.json();
+  if (!data.familyId) throw new Error("No family ID");
+  return data.familyId;
+}
+
 export default function ReviewQueuePage() {
   const authChecked = useAuthRedirect();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
@@ -43,10 +51,10 @@ export default function ReviewQueuePage() {
 
   async function fetchReviews() {
     try {
-      const familyId = localStorage.getItem("familyId") || "";
+      const familyId = await getFamilyId();
       const headers: Record<string, string> = {};
       if (familyId) headers["x-family-id"] = familyId;
-      
+
       const res = await fetch(`/api/reviews?status=${filter}`, {
         headers,
       });
@@ -63,7 +71,7 @@ export default function ReviewQueuePage() {
 
   async function handleReviewAction(reviewId: string, newStatus: string) {
     try {
-      const familyId = localStorage.getItem("familyId") || "";
+      const familyId = await getFamilyId();
       await fetch(`/api/reviews/${reviewId}`, {
         method: "PUT",
         headers: {

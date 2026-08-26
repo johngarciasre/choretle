@@ -63,14 +63,16 @@ DELETE handler implemented at line 128. Verifies auth, checks team membership, d
 
 ## MEDIUM SEVERITY — Partially working or fragile
 
-### 12. localStorage for familyId (10 instances)
-Family ID stored in client-side localStorage instead of derived from session/middleware headers. Appears in:
-- `src/app/swap-meet/page.tsx`
-- `src/app/reviews/page.tsx`
-- `src/app/slates/page.tsx`
-- `src/app/family/FamilyPage.tsx`
+### 13. localStorage for familyId (10 instances) — **FIXED**
+Family ID now fetched from `/api/auth/me` instead of client-side localStorage in all affected pages:
+- `src/app/slates/page.tsx` — replaced 4 reads with `getFamilyId()` helper
+- `src/app/reviews/page.tsx` — replaced 2 reads with `getFamilyId()` helper
+- `src/app/swap-meet/page.tsx` — replaced localStorage read with `getFamilyId()` helper; fallback shows "Join a Family" CTA
+- `src/app/family/FamilyPage.tsx` — removed redundant localStorage useEffect (already gets familyId from `/api/auth/me`)
 
-### 13. `debug()` is a no-op stub
+Only `localStorage.setItem` calls remaining are in create/join handlers (harmless side effects for backwards compat). Signin page uses localStorage for non-family settings (mode, remember-email).
+
+### 14. `debug()` is a no-op stub
 **File:** `src/lib/logger.ts`
 ```ts
 const debug = () => {};
@@ -80,7 +82,7 @@ const debug = () => {};
 
 ## LOW SEVERITY — Code quality / technical debt
 
-### 14. Pervasive `any` types (~171 instances, deferred)
+### 15. Pervasive `any` types (~171 instances, deferred)
 **Status: DEFERRED** — Removing `any` casts introduces more TypeScript errors than it fixes. The original codebase has 0 TS errors because `any` casts are **intentional workarounds** for Drizzle ORM's SQLite type system limitations:
 
 - Drizzle's SQLite driver returns objects with **snake_case columns** (e.g., `family_id`, `completed_at`)
@@ -105,6 +107,5 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **localStorage for familyId** (#12) | 10 instances across 5 files — refactor to use middleware-derived values |
-| 2 | **Targeted type safety** (#14) | Only fix `useState<any[]>` and pure function params — leave Drizzle casts alone |
-| 3 | **Enable debug() logger** (#13) | Low effort, improves observability for local dev |
+| 1 | **Enable debug() logger** (#14) | Low effort, improves observability for local dev |
+| 2 | **Targeted type safety** (#15) | Only fix `useState<any[]>` and pure function params — leave Drizzle casts alone |

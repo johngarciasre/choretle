@@ -172,14 +172,6 @@ export default function FamilyPage() {
   }, [pathname]);
 
   useEffect(() => {
-    const storedFamilyId = typeof window !== "undefined" && localStorage.getItem("familyId");
-    if (storedFamilyId) {
-      setFamilyId(storedFamilyId);
-      loadFamilyData(storedFamilyId);
-    }
-  }, []);
-
-  useEffect(() => {
     if (viewingFamily) {
       loadTags(viewingFamily);
     }
