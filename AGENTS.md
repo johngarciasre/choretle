@@ -1,4 +1,4 @@
-# Choretle - Project Status (Updated Aug 23, 2026)
+# Choretle - Project Status (Updated Aug 26, 2026)
 
 ## CRITICAL RULES
 - **NEVER** push to `production` branch without explicit user permission
@@ -18,7 +18,7 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 ## Work State
 
 ### Completed ✅
-- **Unit Testing Suite**: 456 passing tests across 17 files covering API routes (rotations, tasks, tags, reports, swap-meet), database service layer, dev auth module, middleware, scoring logic, and job completion workflows.
+- **Unit Testing Suite**: 628 passing tests across 31 files covering API routes (rotations, tasks, tags, reports, swap-meet, teams, family), database service layer, dev auth module, middleware, scoring logic, and job completion workflows.
 - **Slate-to-List Auto-Generation**: `slateAutoGen.ts`, `rotation.ts`, `points.ts` with interval-based list generation.
 - **Task Workflow Enforcement**: `jobStatus.ts` and `subtask.ts` enforce state transitions (`todo → doing → done`), history tracking, and point awarding.
 - **Rotation UI**: Drag-and-drop assignment board (`RotationBoard.tsx`, `AssignmentCard.tsx`) with HTML5 drag API, responsive layout, and removal support (X button + drop zone).
@@ -40,6 +40,7 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 - **CRUD for Tasks**: Task page has create/edit/delete modal UI with tag selection; POST/PUT/DELETE operations wired through API routes.
 - **CRUD for Rotations**: New `/api/rotations` endpoint (GET/list, POST/upsert, DELETE); RotationBoard supports drag-and-drop between slates and removal via X button + drop zone.
 - **Tags API**: Added PUT and DELETE methods to tags route; tasks API routes updated to use middleware headers.
+- **Type Safety Pass**: Replaced `any` in pure utility functions (`points.ts`: `Subtask`, `JobLike`, `Slate`; `rotation.ts`: `Rotation`, `SlateTask`) and React state (`jobs/[jobId]/page.tsx`: `JobPhoto`). Drizzle-related casts intentionally left untouched (SQLite snake_case vs camelCase mismatch would introduce 184+ TS errors).
 
 ### Active 🚧
 - None at this time — all HANDOFF.md next steps are complete.
@@ -51,12 +52,9 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 - None at this time — all previous HANDOFF.md next steps are complete.
 
 ## Next Steps (Future)
-1. **Team member DELETE** (#10 in INCOMPLETE_FEATURES.md) — API route exists but no DELETE handler for removing team members.
-2. **Profile page stub** (#6) — API route exists at `/api/profile/[id]` but frontend may still use mock fallback.
-3. **Targeted type safety pass** (#12) — Only fix `useState<any[]>` patterns and pure function params. Leave ALL Drizzle-related `any` casts untouched (they are intentional workarounds for snake_case vs camelCase mismatches). Removing `any` casts introduces 184 new TS errors due to Drizzle's SQLite column naming.
-4. **Supabase Deployment**: Set up Supabase project with real PostgreSQL database and configure `.env.local` credentials.
-5. **Email Verification & Magic Links**: Enable email confirmation flows in Supabase dashboard as desired.
-6. **Feature Expansion**: Add more views/reports or integrations based on user feedback.
+1. **Supabase Deployment**: Set up Supabase project with real PostgreSQL database and configure `.env.local` credentials.
+2. **Email Verification & Magic Links**: Enable email confirmation flows in Supabase dashboard as desired.
+3. **Feature Expansion**: Add more views/reports or integrations based on user feedback.
 
 ## Relevant Files
 - `src/db/drizzle.ts`: Lazy DB initialization with PostgreSQL/SQLite drivers and schema creation
