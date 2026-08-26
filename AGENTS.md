@@ -51,10 +51,12 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 - None at this time — all previous HANDOFF.md next steps are complete.
 
 ## Next Steps (Future)
-1. **Integration tests**: Add more integration tests for new API routes (rotations, tags CRUD).
-2. **Supabase Deployment**: Set up Supabase project with real PostgreSQL database and configure `.env.local` credentials.
-3. **Email Verification & Magic Links**: Enable email confirmation flows in Supabase dashboard as desired.
-4. **Feature Expansion**: Add more views/reports or integrations based on user feedback.
+1. **Team member DELETE** (#10 in INCOMPLETE_FEATURES.md) — API route exists but no DELETE handler for removing team members.
+2. **Profile page stub** (#6) — API route exists at `/api/profile/[id]` but frontend may still use mock fallback.
+3. **Targeted type safety pass** (#12) — Only fix `useState<any[]>` patterns and pure function params. Leave ALL Drizzle-related `any` casts untouched (they are intentional workarounds for snake_case vs camelCase mismatches). Removing `any` casts introduces 184 new TS errors due to Drizzle's SQLite column naming.
+4. **Supabase Deployment**: Set up Supabase project with real PostgreSQL database and configure `.env.local` credentials.
+5. **Email Verification & Magic Links**: Enable email confirmation flows in Supabase dashboard as desired.
+6. **Feature Expansion**: Add more views/reports or integrations based on user feedback.
 
 ## Relevant Files
 - `src/db/drizzle.ts`: Lazy DB initialization with PostgreSQL/SQLite drivers and schema creation

@@ -72,12 +72,24 @@ Only POST (add member) is implemented. No DELETE to remove a member from a team.
 
 ## LOW SEVERITY — Code quality / technical debt
 
-### 12. Pervasive `any` types (275 instances)
-Systemic type safety gaps, concentrated in:
-- `src/lib/db/service.ts` — 60+ casts as `(res as any[]) || []`
-- `src/lib/rotation.ts` — 8 uses
-- `src/db/drizzle.ts` — 6 uses
-- `src/lib/points.ts` — 3 uses
+### 12. Pervasive `any` types (~171 instances, deferred)
+**Status: DEFERRED** — Removing `any` casts introduces more TypeScript errors than it fixes. The original codebase has 0 TS errors because `any` casts are **intentional workarounds** for Drizzle ORM's SQLite type system limitations:
+
+- Drizzle's SQLite driver returns objects with **snake_case columns** (e.g., `family_id`, `completed_at`)
+- Application code uses **camelCase properties** (e.g., `familyId`, `completedAt`)
+- Explicit interfaces expose this mismatch → 184 new TS errors
+- `as any[]` casts mask the mismatch and are necessary for build success
+
+**Safe-to-replace categories** (low risk):
+- `useState<any[]>([])` in React components — replace with local interface
+- Pure utility functions (no DB interaction) — parameter types can be specified
+
+**Unsafe categories** (keep as `any`):
+- Drizzle query results: `(res as any[])`, `(jobs as any[])`
+- DB row parameters: `job: any`, `user: any`, `m: any`
+- Drizzle raw SQL helpers: `createDb(): any`
+
+**Next attempt**: Only fix `useState<any[]>` patterns and pure function params. Leave all Drizzle-related casts untouched.
 
 ### 13. localStorage for familyId (17 instances)
 Family ID stored in client-side localStorage instead of derived from session/middleware headers. Appears in:
@@ -98,4 +110,6 @@ const debug = () => {};
 
 | Priority | Item | Why |
 |----------|------|-----|
-| 1 | **Type safety pass** (#12) | Worth doing once real queries replace stubs |
+| 1 | **Team member DELETE** (#10) | Missing functionality, no `any` cast complications |
+| 2 | **Profile page stub** (#6) | API route exists but frontend still uses mock fallback |
+| 3 | **Targeted type safety** (#12) | Only fix `useState<any[]>` and pure function params — leave Drizzle casts alone |
