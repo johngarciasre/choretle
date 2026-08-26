@@ -148,14 +148,44 @@ let _db: any = null;
 let _rawDb: Database.Database | null = null;
 export const db: any = null;
 
+/**
+ * Reset the database to a clean state. Used by integration tests.
+ */
+export function resetDb(): void {
+  if (_rawDb) {
+    // Drop all tables
+    const tables = [
+      "families", "routines", "users", "teams", "team_members",
+      "tasks", "subtasks", "slates", "slate_tasks", "lists", "list_tasks",
+      "jobs", "job_subtasks", "comments", "job_history", "reports",
+      "rotations", "swap_meet", "tags", "task_tags", "slate_tags",
+      "photos", "reviews", "invites",
+    ];
+    for (const table of tables) {
+      try { _rawDb!.exec(`DROP TABLE IF EXISTS ${table}`); } catch {}
+    }
+    // Reset db connection so next init creates fresh tables
+    _db = null;
+  }
+}
+
+/**
+ * Ensure DB is initialized. In test mode (detect by presence of SQLITE_PATH env), 
+ * always starts with a clean slate to prevent slug collisions across tests.
+ */
 export async function initDb(): Promise<any> {
   if (_db) return _db;
+  
+  // Only use file-based DB in non-test environments
+  const isTest = process.env.NODE_ENV === "test" || process.argv.some(a => a.includes("vitest"));
+  const effectivePath = isTest ? ":memory:" : (process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:");
+
   try {
     const Database = require("better-sqlite3");
-    _rawDb = new Database(DB_PATH);
+    _rawDb = new Database(effectivePath);
     createTables(_rawDb!);
     _db = construct(_rawDb!, schema as any);
-    info({ path: DB_PATH === ":memory:" ? "in-memory" : DB_PATH }, "[DB] Initialized SQLite database");
+    info({ path: effectivePath === ":memory:" ? "in-memory" : effectivePath }, "[DB] Initialized SQLite database");
   } catch (err) {
     error({ err: err }, "[DB] Failed to initialize SQLite");
     throw err;

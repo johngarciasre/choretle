@@ -527,7 +527,7 @@ export async function transitionJob(id: string, newStatus: string, userId?: stri
     updateData.completed_at = now;
   }
 
-  const updatedJob = rawUpdate("jobs", updateData, "id", id);
+  const updatedJob = await rawUpdate("jobs", updateData, "id", id);
 
   if (updatedJob) {
     try {
