@@ -109,16 +109,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    // Generate slug from name
-    const slug = slugify(body.name);
-
-    // Check if family with this slug already exists
+    // Generate a unique slug — increment suffix if there's a collision
+    let slug = slugify(body.name);
+    let suffix = 1;
+    const baseSlug = slug;
     const existingFamilyRows = await db.select().from(schema.families)
       .where(eq(schema.families.slug, slug))
       .limit(1);
-    
-    if (existingFamilyRows[0]) {
-      return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
+
+    while (existingFamilyRows[0]) {
+      slug = `${baseSlug}-${suffix}`;
+      suffix += 1;
+      const checkRows = await db.select().from(schema.families)
+        .where(eq(schema.families.slug, slug))
+        .limit(1);
+      if (!checkRows[0]) break;
+      // Safety: stop after 100 attempts to avoid infinite loops
+      if (suffix > 100) {
+        return NextResponse.json({ error: "Could not generate unique family slug" }, { status: 500 });
+      }
     }
 
     const now = new Date().toISOString();
