@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
             name: name,
             role: role,
             avatar_url: null,
-            family_id: null,
+            family_id: DEV_USERS[userIdKey].familyId,
             points_total: 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -61,7 +61,13 @@ export async function POST(request: NextRequest) {
         }
         
         const userRecord = (await db.select().from(schema.users).where(eq(schema.users.id, devUserId)).limit(1))[0];
-        familyId = userRecord?.family_id || null;
+        familyId = userRecord?.family_id || DEV_USERS[userIdKey].familyId;
+
+        // Migrate old records that were created with null family_id
+        if (!userRecord?.family_id && DEV_USERS[userIdKey].familyId) {
+          const { rawUpdate } = await import("@/db/drizzle");
+          await rawUpdate("users", { family_id: DEV_USERS[userIdKey].familyId }, "id", devUserId);
+        }
       }
     } catch (dbError) {
       error({ err: dbError }, "[DEV SIGNIN] Database sync failed");
