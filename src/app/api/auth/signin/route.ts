@@ -68,6 +68,23 @@ export async function POST(request: NextRequest) {
           const { rawUpdate } = await import("@/db/drizzle");
           await rawUpdate("users", { family_id: DEV_USERS[userIdKey].familyId }, "id", devUserId);
         }
+
+        // Ensure a family record exists for the referenced familyId (dev mode creates users with fake IDs)
+        const targetFamilyId = userRecord?.family_id || DEV_USERS[userIdKey].familyId;
+        if (targetFamilyId) {
+          const existingFamilies = await db.select().from(schema.families).where(eq(schema.families.id, targetFamilyId)).limit(1);
+          if (!existingFamilies[0]) {
+            await rawInsert("families", {
+              id: targetFamilyId,
+              name: "Dev Family",
+              slug: "dev-family",
+              week_start_day: 0,
+              teams_enabled: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
       }
     } catch (dbError) {
       error({ err: dbError }, "[DEV SIGNIN] Database sync failed");
