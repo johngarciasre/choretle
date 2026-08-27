@@ -4,42 +4,48 @@ import { eq, and, or, sql, desc } from "drizzle-orm";
 import { initDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { getLeaderboard, getCompletedJobsByUser, getUserStats } from "@/lib/db/service";
+import { parseDevSession } from "@/lib/dev-auth";
 
-// ─── Simple Auth Verification ──────────────────────────────────────
+// ─── Auth Verification (handles both dev mode and production) ──
 async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
-  const cookie = request.cookies.get("auth-token")?.value;
-  if (!cookie) {
+  // Dev mode: parse dev-session cookie directly (middleware doesn't work with Turbopack)
+  if (process.env.AUTH_MODE === "dev") {
+    const cookieHeader = request.headers.get("cookie") || "";
+    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+
+    if (setCookie) {
+      const value = setCookie.replace("dev-session=", "").trim();
+      const user = parseDevSession(value);
+      if (user) {
+        // Query DB for actual familyId to avoid cookie/DB mismatch
+        let dbFamilyId: string | null = null;
+        try {
+          const db = await initDb();
+          if (db) {
+            const dbUser = (await db.select().from(schema.users).where(eq(schema.users.id, user.id)).limit(1))[0];
+            dbFamilyId = dbUser?.family_id || null;
+          }
+        } catch {}
+
+        return { userId: user.id, familyId: dbFamilyId || user.familyId || "" };
+      }
+    }
+
     return { error: "No token provided" };
   }
 
-  try {
-    const parts = cookie.split(".");
-    if (parts.length !== 3) {
-      return { error: "Invalid token format" };
-    }
-
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    const now = Math.floor(Date.now() / 1000);
-    
-    if (payload.exp && payload.exp < now) {
-      return { error: "Token expired" };
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return { error: "Database not initialized" };
-    }
-
-    const user = (await db.select().from(schema.users).where(eq(schema.users.id, payload.userId)).limit(1))[0];
-    if (!user) {
-      return { error: "User not found" };
-    }
-
-    return { userId: payload.userId, familyId: payload.familyId || user.familyId };
-  } catch (err) {
-    error({ err: err }, "Token verification failed");
-    return { error: "Invalid token" };
+  // Production mode: use middleware-set headers
+  const userId = request.headers.get("x-user-id");
+  if (!userId) {
+    return { error: "No token provided" };
   }
+
+  const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
+  if (!familyId) {
+    return { error: "No family ID provided" };
+  }
+
+  return { userId, familyId };
 }
 
 // ─── Report Generators ──────────────────────────────────────────────

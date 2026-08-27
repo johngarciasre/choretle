@@ -3,13 +3,13 @@ import { createServerClient } from "@supabase/ssr";
 import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME, DEV_USERS } from "@/lib/dev-auth";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { error } from "@/lib/logger.server";
+import { info, error } from "@/lib/logger.server";
 import { slugify } from "@/lib/slugify";
 import { rawInsert } from "@/db/drizzle";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  
+
   if (!body?.email || !body?.password) {
     return NextResponse.json(
       { error: "Email and password are required" },
@@ -20,11 +20,11 @@ export async function POST(request: NextRequest) {
   // ─── Dev Mode: Mock sign in ──────────────────────────────
   if (process.env.AUTH_MODE === "dev") {
     const email = body?.email?.toLowerCase().trim() || "";
-    
+
     let userIdKey = "admin";
     let role = "admin";
     let name = "Admin (Parent)";
-    
+
     if (email.includes("child")) {
       userIdKey = "child";
       role = "child";
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       const db = await initDb();
       if (db) {
         const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, devUserId)).limit(1))[0];
-        
+
         if (!existingUser) {
           await rawInsert("users", {
             id: devUserId,
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           });
         }
-        
+
         const userRecord = (await db.select().from(schema.users).where(eq(schema.users.id, devUserId)).limit(1))[0];
         familyId = userRecord?.family_id || DEV_USERS[userIdKey].familyId;
 
@@ -94,15 +94,17 @@ export async function POST(request: NextRequest) {
     const session = createDevSession({ userId: devUserId });
     session.user.familyId = familyId;
 
-    const response = NextResponse.json({ 
-      ok: true, 
+    const response = NextResponse.json({
+      ok: true,
       userId: session.user.id,
       email: session.user.email,
       role: role,
       message: "Sign in successful (dev mode)"
     });
 
+    // Set new dev session cookie
     setDevSessionCookie(response.headers, session);
+
     return response;
   }
 
@@ -153,18 +155,18 @@ export async function POST(request: NextRequest) {
     const db = await initDb();
     if (db) {
       const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).limit(1))[0];
-      
+
       if (!existingUser) {
         // Generate a default slug for auto-created family
         const slug = slugify(session.user.email || "family");
-        
+
         // Check if a family with this slug already exists
         const existingFamilyRows = await db.select().from(schema.families)
           .where(eq(schema.families.slug, slug))
           .limit(1);
 
         let familyId: string | null = null;
-        
+
         if (existingFamilyRows[0]) {
           familyId = existingFamilyRows[0].id;
         } else {
@@ -176,7 +178,7 @@ export async function POST(request: NextRequest) {
             week_start_day: 0,
             teams_enabled: false,
           });
-          
+
           if (newFamily) {
             familyId = newFamily.id;
           }
@@ -196,7 +198,7 @@ export async function POST(request: NextRequest) {
         });
       } else if (existingUser.email !== session.user.email) {
         // Update email if it changed
-        await db.update(schema.users).set({ 
+        await db.update(schema.users).set({
           email: session.user.email || null,
           name: session.user.user_metadata?.name || existingUser.name,
           role: session.user.user_metadata?.role || existingUser.role,
@@ -210,8 +212,8 @@ export async function POST(request: NextRequest) {
   }
 
   const response = new Response(
-    JSON.stringify({ 
-      ok: true, 
+    JSON.stringify({
+      ok: true,
       userId: session.user.id,
       email: session.user.email,
       role: session.user.user_metadata?.role || "child",
