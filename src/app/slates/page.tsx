@@ -146,7 +146,8 @@ export default function SlatesPage() {
 
   async function handleStartBuilding(slateId: string) {
     try {
-      const res = await fetch(`/api/slates/${slateId}/tasks`);
+      const fid = await getFamilyId();
+      const res = await fetch(`/api/slates/${slateId}/tasks?familyId=${fid}`);
       if (!res.ok) throw new Error("Failed to fetch slate tasks");
       const data = await res.json();
 
