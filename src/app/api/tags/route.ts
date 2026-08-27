@@ -54,6 +54,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "name and familyId are required" }, { status: 400 });
     }
 
+    // Check for duplicate tag name within the same family
+    const existing = await db
+      .select()
+      .from(schema.tags)
+      .where(sql`${schema.tags.familyId} = ${familyId} AND ${schema.tags.name} = ${name}`)
+      .limit(1);
+
+    if (existing.length > 0) {
+      return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
+    }
+
     const tag = await rawInsert("tags", {
       id: `tag-${Date.now()}`,
       name,
@@ -81,6 +92,33 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    // Get existing tag to check family and new name
+    const existingTags = await db
+      .select()
+      .from(schema.tags)
+      .where(eq(schema.tags.id, id))
+      .limit(1);
+
+    if (existingTags.length === 0) {
+      return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+    }
+
+    const existingTag = existingTags[0];
+
+    // Check for duplicate name (only if name is changing)
+    if (name && name !== existingTag.name) {
+      const familyId = existingTag.familyId;
+      const duplicate = await db
+        .select()
+        .from(schema.tags)
+        .where(sql`${schema.tags.familyId} = ${familyId} AND ${schema.tags.name} = ${name} AND ${schema.tags.id} != ${id}`)
+        .limit(1);
+
+      if (duplicate.length > 0) {
+        return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
+      }
     }
 
     const result = await rawUpdate("tags", { name, color }, "id", id);

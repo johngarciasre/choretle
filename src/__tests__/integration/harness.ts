@@ -211,13 +211,13 @@ export class TestHarness {
         if (eqIdx === -1) continue;
         const name = trimmed.substring(0, eqIdx).trim().toLowerCase();
         const rest = trimmed.substring(eqIdx + 1).trim();
-        
+
         // Check if this is a dev-session cookie
         if (name === "dev-session") {
           // Extract value before any semicolon (value can be empty for clearing)
           const semiColonIdx = rest.indexOf(";");
           const value = semiColonIdx !== -1 ? rest.substring(0, semiColonIdx).trim() : rest;
-          
+
           if (value === "") {
             // Cookie is being cleared
             this.jar.cookies.delete("dev-session");

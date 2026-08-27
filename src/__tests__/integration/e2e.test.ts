@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
+import { resetDb } from "@/db/drizzle";
 
 describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
+  beforeEach(() => {
+    resetDb();
+  });
+
   it("Complete workflow: create family → slates → jobs → rotations", async () => {
     const harness = new TestHarness();
     

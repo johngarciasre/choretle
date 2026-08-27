@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
+import { resetDb } from "@/db/drizzle";
 
 describe("Rotations API Integration", () => {
+  beforeEach(() => {
+    resetDb();
+  });
+
   it("POST /api/rotations creates a new rotation", async () => {
     const harness = new TestHarness();
     await harness.signIn("admin@choretle.dev");

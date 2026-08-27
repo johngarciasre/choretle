@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
+import { resetDb } from "@/db/drizzle";
 
 describe("Reports API Integration", () => {
+  beforeEach(() => {
+    resetDb();
+  });
+
   it("GET /api/reports returns 400 when type is missing", async () => {
     const harness = new TestHarness();
     await harness.signIn("admin@choretle.dev");

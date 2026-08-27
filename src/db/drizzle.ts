@@ -110,7 +110,8 @@ function createTables(db: Database.Database): void {
     );
     CREATE TABLE IF NOT EXISTS tags (
       id TEXT PRIMARY KEY, family_id TEXT NOT NULL, name TEXT NOT NULL,
-      color TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      color TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      CONSTRAINT tag_name_unique UNIQUE(family_id, name)
     );
     CREATE TABLE IF NOT EXISTS task_tags (
       id TEXT PRIMARY KEY, tag_id TEXT NOT NULL, task_id TEXT NOT NULL
@@ -153,7 +154,9 @@ export const db: any = null;
  */
 export function resetDb(): void {
   if (_rawDb) {
-    // Drop all tables
+    // Enable WAL mode for better concurrent access
+    try { _rawDb!.exec("PRAGMA journal_mode=WAL"); } catch {}
+    // Truncate all tables — avoids connection close/reopen conflicts
     const tables = [
       "families", "routines", "users", "teams", "team_members",
       "tasks", "subtasks", "slates", "slate_tasks", "lists", "list_tasks",
@@ -162,20 +165,19 @@ export function resetDb(): void {
       "photos", "reviews", "invites",
     ];
     for (const table of tables) {
-      try { _rawDb!.exec(`DROP TABLE IF EXISTS ${table}`); } catch {}
+      try { _rawDb!.exec(`DELETE FROM ${table}`); } catch {}
     }
-    // Reset db connection so next init creates fresh tables
-    _db = null;
   }
 }
 
 /**
- * Ensure DB is initialized. Uses file-based SQLite for dev/prod, in-memory for tests.
+ * Ensure DB is initialized. Uses in-memory SQLite for tests, file-based for dev/prod.
  */
 export async function initDb(): Promise<any> {
   if (_db) return _db;
-  
-  const dbPath = process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:";
+
+  // Use in-memory database in test mode to avoid cross-file interference
+  const dbPath = process.env.NODE_ENV === "test" ? ":memory:" : (process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:");
 
   try {
     const Database = require("better-sqlite3");

@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
+import { resetDb } from "@/db/drizzle";
 
 describe("Auth Flow Integration", () => {
+  beforeEach(() => {
+    resetDb();
+  });
+
   it("POST /api/auth/signin creates dev session cookie", async () => {
     const harness = new TestHarness();
     const res = await harness.signIn("admin@choretle.dev");

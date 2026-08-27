@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
+import { resetDb } from "@/db/drizzle";
 
 describe("Jobs API Integration", () => {
+  beforeEach(() => {
+    resetDb();
+  });
+
   it("POST /api/jobs creates a job with familyId and slateId", async () => {
     const harness = new TestHarness();
     await harness.signIn("admin@choretle.dev");
