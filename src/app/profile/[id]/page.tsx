@@ -38,6 +38,15 @@ interface UserStats {
   longestStreak: number;
 }
 
+async function getFamilyId(): Promise<string> {
+  const authRes = await fetch("/api/auth/me");
+  if (!authRes.ok) throw new Error("Not authenticated");
+  const authData = await authRes.json();
+  const familyId = authData.familyId;
+  if (!familyId) throw new Error("No family ID");
+  return familyId;
+}
+
 export default function UserProfilePage() {
   const authChecked = useAuthRedirect();
   const params = useParams();
@@ -65,7 +74,9 @@ export default function UserProfilePage() {
 
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - User Profile");
-    fetch(`/api/profile/${userId}`)
+    getFamilyId().then((familyId) => {
+      return fetch(`/api/profile/${userId}?familyId=${familyId}`);
+    })
       .then((res) => res.json())
       .then((data) => {
         setUser(data.user || {});

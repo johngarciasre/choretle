@@ -54,9 +54,19 @@ interface SubtaskInstance {
 
 const jobId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
 
+async function getFamilyId(): Promise<string> {
+  const authRes = await fetch("/api/auth/me");
+  if (!authRes.ok) throw new Error("Not authenticated");
+  const authData = await authRes.json();
+  const familyId = authData.familyId;
+  if (!familyId) throw new Error("No family ID");
+  return familyId;
+}
+
 const fetchJob = async () => {
   try {
-    const res = await fetch(`/api/jobs/${jobId}`);
+    const familyId = await getFamilyId();
+    const res = await fetch(`/api/jobs/${jobId}?familyId=${familyId}`);
     if (!res.ok) throw new Error("Failed to fetch job");
     return await res.json();
   } catch (err) {
@@ -67,7 +77,8 @@ const fetchJob = async () => {
 
 const fetchSubtasks = async (jobId: string) => {
   try {
-    const res = await fetch(`/api/tasks/subtasks?jobId=${jobId}`);
+    const familyId = await getFamilyId();
+    const res = await fetch(`/api/tasks/subtasks?jobId=${jobId}&familyId=${familyId}`);
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
   } catch (err) {
@@ -78,7 +89,8 @@ const fetchSubtasks = async (jobId: string) => {
 
 const fetchPhotos = async (objectType: string, objectId: string) => {
   try {
-    const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}`);
+    const familyId = await getFamilyId();
+    const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}&familyId=${familyId}`);
     if (!res.ok) throw new Error("Failed to fetch photos");
     return await res.json();
   } catch (err) {
@@ -125,9 +137,10 @@ export default function JobPage() {
 
   const handleStatusChange = async (newStatus: string) => {
     if (!job) return;
-    
+
     try {
-      const res = await fetch(`/api/jobs/${job.id}`, {
+      const familyId = await getFamilyId();
+      const res = await fetch(`/api/jobs/${job.id}?familyId=${familyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -140,7 +153,7 @@ export default function JobPage() {
 
       const updated = await res.json();
       setJob(updated.job);
-      
+
       if (newStatus === "done") {
         window.location.reload();
       }
@@ -152,10 +165,11 @@ export default function JobPage() {
 
   const handleAddComment = async () => {
     if (!jobId || !commentText.trim()) return;
-    
+
     try {
+      const familyId = await getFamilyId();
       // Note: In production, this would use the user's auth token
-      await fetch(`/api/jobs/${jobId}/comments`, {
+      await fetch(`/api/jobs/${jobId}/comments?familyId=${familyId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: commentText.trim() }),
