@@ -41,6 +41,7 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 - **CRUD for Rotations**: New `/api/rotations` endpoint (GET/list, POST/upsert, DELETE); RotationBoard supports drag-and-drop between slates and removal via X button + drop zone.
 - **Tags API**: Added PUT and DELETE methods to tags route; tasks API routes updated to use middleware headers.
 - **Type Safety Pass**: Replaced `any` in pure utility functions (`points.ts`: `Subtask`, `JobLike`, `Slate`; `rotation.ts`: `Rotation`, `SlateTask`) and React state (`jobs/[jobId]/page.tsx`: `JobPhoto`). Drizzle-related casts intentionally left untouched (SQLite snake_case vs camelCase mismatch would introduce 184+ TS errors).
+- **Dev Mode FamilyId Propagation**: All client-side pages now fetch familyId from `/api/auth/me` and pass it as a query parameter to API routes. Previously, several pages (`tasks/[taskId]`, `jobs/[jobId]`, `profile/[id]`, `reports`, `rotations`, `slates`) called APIs without familyId, which would fail in dev mode since middleware headers aren't set.
 
 ### Active 🚧
 - None at this time — all HANDOFF.md next steps are complete.
