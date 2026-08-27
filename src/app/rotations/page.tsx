@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PageShell, PageHeader, PageLoader } from "@/components/ui";
 import RotationBoard from "@/components/RotationBoard";
 import type { UserRotation, SlateWithRotations, RotationAssignment } from "@/components/AssignmentCard";
@@ -19,7 +19,12 @@ export default function RotationsPage() {
   const [slates, setSlates] = useState<SlateWithRotations[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const dataLoadedRef = useRef(false);
+
   useEffect(() => {
+    if (dataLoadedRef.current) return;
+    dataLoadedRef.current = true;
+    if (!authChecked) return;
     typeof window !== "undefined" && (document.title = "Choretle - Rotations");
     loadRotationData();
   }, []);

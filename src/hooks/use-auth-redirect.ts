@@ -11,12 +11,13 @@ export function useAuthRedirect() {
         .then((res) => {
           if (!res.ok) {
             window.location.href = "/auth/signin";
+            return;
           }
+          setAuthChecked(true);
         })
         .catch(() => {
           window.location.href = "/auth/signin";
-        })
-        .finally(() => setAuthChecked(true));
+        });
     }
   }, []);
 
