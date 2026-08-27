@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(slates);
   } catch (err) {
-    error({ err: err }, "Slates GET failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Slates GET failed");
     return NextResponse.json({ error: "Failed to fetch slates" }, { status: 500 });
   }
 }
