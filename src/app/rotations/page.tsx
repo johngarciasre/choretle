@@ -156,8 +156,14 @@ export default function RotationsPage() {
 
   const handleSave = async (assignments: RotationAssignment[]) => {
     try {
+      // Get family ID from auth endpoint
+      const authRes = await fetch("/api/auth/me");
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
       for (const assignment of assignments) {
-        await fetch("/api/rotations", {
+        await fetch(`/api/rotations?familyId=${familyId}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

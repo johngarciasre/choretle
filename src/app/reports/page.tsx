@@ -28,7 +28,12 @@ export default function ReportsPage() {
 
   async function fetchReport(type: ReportType) {
     try {
-      const res = await fetch(`/api/reports?type=${type}`);
+      const authRes = await fetch("/api/auth/me");
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
+      const res = await fetch(`/api/reports?type=${type}&familyId=${familyId}`);
       if (!res.ok) return;
       const data = await res.json();
       setReportData(data);

@@ -46,7 +46,13 @@ const fetchTask = async (id: string) => {
 
 const fetchTags = async () => {
   try {
-    const res = await fetch("/api/tags?familyId=test-family");
+    const authRes = await fetch("/api/auth/me");
+    if (!authRes.ok) throw new Error("Not authenticated");
+    const authData = await authRes.json();
+    const familyId = authData.familyId;
+    if (!familyId) throw new Error("No family ID");
+
+    const res = await fetch(`/api/tags?familyId=${familyId}`);
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (err) {
