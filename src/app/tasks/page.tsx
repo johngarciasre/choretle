@@ -31,7 +31,12 @@ interface TaskFormData {
 
 const fetchTasks = async () => {
   try {
-    const res = await fetch("/api/tasks");
+    const authRes = await fetch("/api/auth/me");
+    if (!authRes.ok) throw new Error("Not authenticated");
+    const authData = await authRes.json();
+    const familyId = authData.familyId;
+
+    const res = await fetch(`/api/tasks?familyId=${familyId}`);
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
   } catch (err) {
@@ -42,7 +47,12 @@ const fetchTasks = async () => {
 
 const fetchTags = async () => {
   try {
-    const res = await fetch("/api/tags");
+    const authRes = await fetch("/api/auth/me");
+    if (!authRes.ok) throw new Error("Not authenticated");
+    const authData = await authRes.json();
+    const familyId = authData.familyId;
+
+    const res = await fetch(`/api/tags?familyId=${familyId}`);
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (err) {
@@ -109,18 +119,27 @@ export default function TasksPage() {
     if (!formData.name.trim()) return;
 
     try {
+      // Get familyId from auth endpoint
+      const authRes = await fetch("/api/auth/me");
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
       const isEdit = editingTask !== null;
-      const res = await fetch(isEdit ? `/api/tasks/${editingTask!.id}` : "/api/tasks", {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          ...(isEdit ? { id: editingTask!.id } : {}),
-        }),
-      });
+      const res = await fetch(
+        isEdit ? `/api/tasks/${editingTask!.id}?familyId=${familyId}` : `/api/tasks?familyId=${familyId}`,
+        {
+          method: isEdit ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...formData,
+            ...(isEdit ? { id: editingTask!.id } : {}),
+          }),
+        }
+      );
 
       if (!res.ok) throw new Error("Failed to save task");
-      
+
       const data = await res.json();
       if (isEdit) {
         setTasks(prev => prev.map(t => t.id === editingTask!.id ? data : t));
@@ -140,12 +159,18 @@ export default function TasksPage() {
     }
 
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
+      // Get familyId from auth endpoint
+      const authRes = await fetch("/api/auth/me");
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
+      const res = await fetch(`/api/tasks/${taskId}?familyId=${familyId}`, {
         method: "DELETE",
       });
 
       if (!res.ok) throw new Error("Failed to delete task");
-      
+
       setTasks(prev => prev.filter(t => t.id !== taskId));
     } catch (err) {
       error({ err: err }, "Delete task failed");
