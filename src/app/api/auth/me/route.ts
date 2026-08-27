@@ -15,6 +15,17 @@ export async function GET(request: NextRequest) {
       const value = setCookie.replace("dev-session=", "").trim();
       const user = parseDevSession(value);
       if (user) {
+        // Query DB for actual familyId to avoid cookie/DB mismatch
+        let dbFamilyId: string | null = null;
+        try {
+          const { initDb } = await import("@/db/drizzle");
+          const db = await initDb();
+          if (db) {
+            const dbUser = (await db.select().from(schema.users).where(eq(schema.users.id, user.id)).limit(1))[0];
+            dbFamilyId = dbUser?.family_id || null;
+          }
+        } catch {}
+
         return NextResponse.json({
           authenticated: true,
           user: {
@@ -23,7 +34,7 @@ export async function GET(request: NextRequest) {
             name: user.name,
             role: user.role,
           },
-          familyId: user.familyId,
+          familyId: dbFamilyId || user.familyId,
         });
       }
     }

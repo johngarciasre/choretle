@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJobsByList, createJob, updateJob, deleteJob } from "@/lib/db/service";
-import { initDb } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { initDb, getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest) {
@@ -23,20 +21,20 @@ export async function GET(request: NextRequest) {
 
     // Otherwise, fetch all jobs for the family
     if (familyId) {
-      const jobs = await db.select({
-        job: schema.jobs,
-        slateTask: schema.slateTasks,
-        task: schema.tasks,
-      })
-        .from(schema.jobs)
-        .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
-        .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
-        .where(
-          sql`${schema.jobs.listId} IN (SELECT id FROM lists WHERE family_id = ${familyId})`
-        )
-        .orderBy(sql`created_at DESC`);
+      const raw = getRawDb();
+      if (!raw) return NextResponse.json([]);
+      
+      const jobsRaw = raw.prepare(
+        `SELECT j.*, s.name as slate_name, t.name as task_name, t.points as task_points
+         FROM jobs j
+         LEFT JOIN slate_tasks st ON j.slate_task_id = st.id
+         LEFT JOIN slates s ON st.slate_id = s.id
+         LEFT JOIN tasks t ON st.task_id = t.id
+         WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+         ORDER BY j.created_at DESC`
+      ).all(familyId);
 
-      return NextResponse.json((jobs as any[]) || []);
+      return NextResponse.json(jobsRaw);
     }
 
     return NextResponse.json([]);
