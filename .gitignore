@@ -50,3 +50,6 @@ opencode.json
 .choretle*.sqlite
 QWEN.md
 .choretle-dev.sqlite*
+
+# supabase CLI (local dev state, not actively used)
+supabase/
