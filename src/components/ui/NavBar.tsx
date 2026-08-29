@@ -16,7 +16,6 @@ const NAV_LINKS = [
   { href: "/rotations", label: "Rotations" },
   { href: "/reports", label: "Reports" },
   // { href: "/swap-meet", label: "Swap Meet" },
-  { href: "/family", label: "Family" },
 ];
 
 interface AuthUser {
@@ -30,6 +29,8 @@ export function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [familyId, setFamilyId] = useState<string | null>(null);
+  const [familyName, setFamilyName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -37,7 +38,21 @@ export function NavBar() {
   useEffect(() => {
     fetch("/api/auth/me")
       .then((res) => res.json())
-      .then((data) => setUser(data.user ?? null))
+      .then((data) => {
+        setUser(data.user ?? null);
+        setFamilyId(data.familyId || null);
+        // Fetch family name if user has a family
+        if (data.familyId) {
+          fetch(`/api/family?id=${data.familyId}`)
+            .then((r) => r.json())
+            .then((f) => {
+              if (f.ok && f.family) setFamilyName(f.family.name);
+            })
+            .catch(() => {});
+        } else {
+          setFamilyName(null);
+        }
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, [pathname]);
@@ -129,11 +144,23 @@ export function NavBar() {
                 </button>
 
                 {menuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-[200px] rounded-lg border-2 border-ink/10 bg-white shadow-md z-50">
+                  <div className="absolute right-0 top-full mt-2 w-[240px] rounded-lg border-2 border-ink/10 bg-white shadow-md z-50">
                     <div className="border-b-2 border-b-ink/10 px-4 py-3">
-                      <p className="text-sm font-bold text-ink truncate">{user.name || user.email}</p>
-                      <p className="text-xs text-ink/60 truncate">{user.email}</p>
+                      <p className="text-sm font-bold text-ink truncate">{user?.name || user?.email}</p>
+                      {familyName && (
+                        <p className="text-xs text-ink/60 truncate">🏠 {familyName}</p>
+                      )}
                     </div>
+                    {familyId && (
+                      <Link
+                        href="/family"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex w-full items-center gap-2 border-t-2 border-t-ink/5 px-4 py-3 text-sm font-bold text-ink/70 transition hover:bg-grape/10 hover:text-grape"
+                      >
+                        <Star className="size-5 fill-coral text-coral" />
+                        Family Settings
+                      </Link>
+                    )}
                     <button
                       onClick={handleSignOut}
                       className="flex w-full items-center gap-2 border-t-2 border-t-ink/5 px-4 py-3 text-sm font-bold text-ink/70 transition hover:bg-ink/5 hover:text-ink"

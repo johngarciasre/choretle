@@ -72,7 +72,8 @@ export default function AuthPage() {
       info({ data }, "[AUTH PAGE] Response data");
 
       if (response.ok) {
-        window.location.href = "/";
+        // After signup, redirect to /family for create/join flow
+        window.location.href = "/family";
       } else {
         setError(data.error || `${mode === "signin" ? "Sign in" : "Sign up"} failed`);
       }

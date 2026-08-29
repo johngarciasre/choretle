@@ -78,6 +78,12 @@ export default function FamilyPage() {
   const [showJoin, setShowJoin] = useState(false);
   const [joinCode, setJoinCode] = useState("");
 
+  // Invite codes (join codes) management state
+  const [invites, setInvites] = useState<any[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+  const [showGenerateCode, setShowGenerateCode] = useState(false);
+  const [generatingPermanent, setGeneratingPermanent] = useState(false);
+
   // Team management state
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
@@ -174,6 +180,7 @@ export default function FamilyPage() {
   useEffect(() => {
     if (viewingFamily) {
       loadTags(viewingFamily);
+      loadInvites();
     }
   }, [viewingFamily]);
 
@@ -428,6 +435,76 @@ export default function FamilyPage() {
       error({ err: err }, "Failed to update theme");
       alert("Failed to update theme.");
     }
+  };
+
+  const loadInvites = async () => {
+    if (!familyId) return;
+    setLoadingInvites(true);
+    try {
+      const response = await fetch(`/api/family/join?familyId=${familyId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setInvites(data.invites || []);
+      }
+    } catch (err) {
+      error({ err }, "Failed to load invites");
+    } finally {
+      setLoadingInvites(false);
+    }
+  };
+
+  const handleGenerateInvite = async () => {
+    if (!familyId) return;
+    try {
+      const response = await fetch("/api/family/join/generate-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permanent: generatingPermanent }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to generate invite");
+
+      const data = await response.json();
+      setInvites((prev) => [data.invite, ...prev]);
+      setShowGenerateCode(false);
+      setGeneratingPermanent(false);
+    } catch (err) {
+      error({ err }, "Failed to generate invite");
+      alert("Failed to generate invite code.");
+    }
+  };
+
+  const handleInvalidateInvite = async (inviteId: string, code: string) => {
+    if (!confirm(`Revoke the code "${code}"?`)) return;
+    try {
+      const response = await fetch(`/api/family/join/${encodeURIComponent(code)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to invalidate invite");
+
+      setInvites((prev) => prev.filter((i) => i.id !== inviteId));
+    } catch (err) {
+      error({ err }, "Failed to invalidate invite");
+      alert("Failed to revoke invite code.");
+    }
+  };
+
+  const formatExpiry = (expiresAt: string | null): string => {
+    if (!expiresAt) return "Permanent";
+    const date = new Date(expiresAt);
+    if (date < new Date()) return "Expired";
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (days <= 0) return "Expires today";
+    if (days === 1) return "Expires tomorrow";
+    if (days < 30) return `Expires in ${days} days`;
+    const months = Math.floor(days / 30);
+    return `Expires in ${months} month${months > 1 ? "s" : ""}`;
   };
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
@@ -997,6 +1074,81 @@ export default function FamilyPage() {
             )}
           </section>
         )}
+
+        {/* Join Codes */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xl font-bold text-ink">Join Codes</h2>
+            <Button variant="primary" size="sm" onClick={() => setShowGenerateCode(!showGenerateCode)}>
+              {showGenerateCode ? "Cancel" : "+ Generate Code"}
+            </Button>
+          </div>
+
+          {/* Generate code form */}
+          {showGenerateCode && (
+            <Card accent="grape" className="p-6 space-y-3">
+              <p className="text-sm text-ink/70 font-bold">Generate a new join code</p>
+              <label className="flex items-center gap-2 text-sm font-bold text-ink/70 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={generatingPermanent}
+                  onChange={(e) => setGeneratingPermanent(e.target.checked)}
+                  className="size-5 accent-grape"
+                />
+                Make this code permanent (no expiry)
+              </label>
+              <Button onClick={handleGenerateInvite} variant="primary" size="lg" className="w-full">
+                Generate Code
+              </Button>
+            </Card>
+          )}
+
+          {/* List of join codes */}
+          {loadingInvites ? (
+            <Card accent="grape" className="p-6 text-center">
+              <p className="text-sm text-ink/60">Loading join codes...</p>
+            </Card>
+          ) : invites.length === 0 ? (
+            <Card accent="grape" className="p-6 text-center">
+              <EmptyState 
+                icon={<span className="text-2xl">🔗</span>}
+                title="No Join Codes Yet"
+                message="Generate a join code to share with family members."
+              />
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {invites.map((invite) => {
+                const isExpired = invite.expires_at && new Date(invite.expires_at) < new Date();
+                const isPermanent = !invite.expires_at;
+                return (
+                  <Card key={invite.id} accent={isExpired ? "coral" : isPermanent ? "sunny" : "grape"} className="p-4 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <code className="text-lg font-bold text-grape">{invite.code}</code>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className={`font-bold ${isExpired ? "text-coral" : isPermanent ? "text-sunny" : "text-ink/60"}`}>
+                            {formatExpiry(invite.expires_at)}
+                          </span>
+                          {invite.used && (
+                            <span className="text-teal font-bold">✓ Used</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleInvalidateInvite(invite.id, invite.code)}
+                        className="px-3 py-1.5 rounded-lg text-sm font-bold text-coral hover:bg-coral/10 transition"
+                        title="Revoke this code"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* Family Members */}
         <section className="space-y-4">

@@ -16,7 +16,6 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/signout",
   "/api/auth/me",
   "/api/auth/websudo",
-  "/api/family/join",
   "/api/schedules/generate",
 ];
 

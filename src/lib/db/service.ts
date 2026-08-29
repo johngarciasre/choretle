@@ -808,6 +808,14 @@ export async function createInvite(data: Insertable<any>) {
   return res || null;
 }
 
+export async function deleteInvite(inviteId: string) {
+  const db = await ensureDb();
+  if (!db) return false;
+  return await safeQuery(
+    rawDeleteWhere("invites", [{ col: "id", val: inviteId }])
+  ) || false;
+}
+
 // ─── Scoring & Leaderboard ──────────────────────────────────────────
 
 export interface ScoringEntry {

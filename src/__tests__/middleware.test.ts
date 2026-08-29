@@ -16,7 +16,6 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/signout",
   "/api/auth/me",
   "/api/auth/websudo",
-  "/api/family/join",
   "/api/schedules/generate",
 ];
 
@@ -59,7 +58,6 @@ describe("Middleware Public Route Detection", () => {
       ["/api/auth/signout", true],
       ["/api/auth/me", true],
       ["/api/auth/websudo", true],
-      ["/api/family/join", true],
       ["/api/schedules/generate", true],
     ])("should recognize '%s' as public API route (expected: %s)", (path, expected) => {
       const isPublic = PUBLIC_API_ROUTES.some((route) => path.startsWith(route));
