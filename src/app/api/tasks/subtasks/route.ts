@@ -3,9 +3,15 @@ import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
@@ -14,14 +20,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
     const jobId = searchParams.get("jobId");
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
-    }
+    const familyId = auth.familyId;
 
     let query: any;
-    
+
     if (jobId) {
       // Get job subtasks for a specific job
       query = db.select({
@@ -31,7 +33,6 @@ export async function GET(request: NextRequest) {
         .from(schema.jobSubtasks)
         .leftJoin(schema.subtasks, eq(schema.jobSubtasks.subtaskId, schema.subtasks.id))
         .where(and(eq(schema.jobSubtasks.jobId, jobId), sql`${schema.subtasks.familyId} = ${familyId}`));
-    } else if (taskId) {
     } else if (taskId) {
       // Get task subtasks
       query = db.select().from(schema.subtasks).where({ taskId, familyId }).orderBy(schema.subtasks.order);
@@ -49,6 +50,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
@@ -56,11 +62,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { taskId, jobId, subtaskId, name, points, order } = body;
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
-    }
+    const familyId = auth.familyId;
 
     if (jobId && subtaskId) {
       // Create a job subtask instance from a task subtask

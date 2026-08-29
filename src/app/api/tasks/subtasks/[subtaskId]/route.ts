@@ -3,9 +3,15 @@ import { initDb, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ subtaskId: string }> }) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
@@ -13,11 +19,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const subtaskId = (await params).subtaskId;
     const body = await request.json();
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
-    }
+    const familyId = auth.familyId;
 
     const updateData: Record<string, any> = {};
     if (body.name !== undefined) updateData.name = body.name;
@@ -40,13 +42,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ subtaskId: string }> }) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     const subtaskId = (await params).subtaskId;
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
+    const familyId = auth.familyId;
 
     await rawDeleteWhere("job_subtasks", [{ col: "subtask_id", val: subtaskId }]);
     if (familyId) {

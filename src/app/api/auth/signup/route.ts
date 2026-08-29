@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { createDevSession, setDevSessionCookie, parseDevSession, DEV_COOKIE_NAME, DEV_USERS } from "@/lib/dev-auth";
+import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME, parseDevSession } from "@/lib/dev-auth";
 import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 import { error, info } from "@/lib/logger.server";
 
 /**
@@ -15,6 +15,17 @@ function hasSupabaseConfig(): boolean {
 }
 
 /**
+ * Determine the role for a new user: first user gets 'admin', others get 'child'.
+ */
+async function getNewUserRole(db: any, familyId: string | null): Promise<string> {
+  const whereClause = familyId ? eq(schema.users.familyId, familyId) : sql`1=1`;
+  const result = await db.select().from(schema.users).where(whereClause).limit(0);
+  // Use count query to check if any users exist
+  const countResult = await db.select({ count: count() }).from(schema.users).where(whereClause).limit(1);
+  return (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
+}
+
+/**
  * Sign up a new user with email and password using Supabase Auth.
  * In dev mode (AUTH_MODE=dev), uses mock users instead.
  */
@@ -22,53 +33,88 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // ─── Dev Mode: Create mock user ────────────────────────
+    // ─── Dev Mode: Create mock user ─────────────────────────────
     if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
       const name = body?.name || "Dev User";
-      
-      let userId = "parent";
-      let role = "admin";
-      
-      if (email.includes("child")) {
-        userId = "child";
-        role = "child";
-      } else {
-        // Default to parent/admin role for admin@ and parent@ emails
-        userId = "admin";
-        role = "admin";
-      }
 
-      // Ensure DB user record exists in dev mode and read actual familyId
+      // Check if any users exist in DB to determine role
+      let role = "child";
       let familyId: string | null = null;
       try {
         const db = await initDb();
         if (db) {
-          const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, DEV_USERS[userId].id)).limit(1))[0];
-          
-          if (!existingUser) {
-            await rawInsert("users", {
-              id: DEV_USERS[userId].id,
-              email: email || null,
-              name: name,
-              role: role,
-              avatar_url: null,
-              family_id: null,
-              points_total: 0,
+          // Count existing users across all families
+          const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
+          role = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
+
+          // Create a default family for the new user if none exists
+          const countFamilies = await db.select({ count: count() }).from(schema.families).limit(1);
+          if ((countFamilies[0]?.count ?? 0) === 0) {
+            const familySlug = `family-${Date.now()}`;
+            await rawInsert("families", {
+              id: `family-${Date.now()}`,
+              name: `${name}'s Family`,
+              slug: familySlug,
+              week_start_day: 0,
+              teams_enabled: false,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
+            // Update role to reflect first user in this family
+            role = "admin";
           }
-          
-          const userRecord = (await db.select().from(schema.users).where(eq(schema.users.id, DEV_USERS[userId].id)).limit(1))[0];
-          familyId = userRecord?.family_id || null;
         }
       } catch (dbError) {
         // Silently fail — user is created in Supabase Auth anyway
       }
 
-      const devUserId = DEV_USERS[userId].id;
-      const session = createDevSession({ userId: devUserId });
+      // Generate a random fake user ID for dev mode
+      const userId = `dev-user-${crypto.randomUUID()}`;
+
+      // Create DB user record if database is available
+      try {
+        const db = await initDb();
+        if (db) {
+          // Find or create family
+          let targetFamilyId: string | null = null;
+          const families = await db.select().from(schema.families).limit(1);
+          if (families[0]) {
+            targetFamilyId = families[0].id;
+          } else {
+            const slug = `family-${Date.now()}`;
+            const newFamily = await rawInsert("families", {
+              id: `family-${Date.now()}`,
+              name: `${name}'s Family`,
+              slug,
+              week_start_day: 0,
+              teams_enabled: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+            targetFamilyId = newFamily?.id || null;
+          }
+
+          await rawInsert("users", {
+            id: userId,
+            email: email || null,
+            name: name,
+            role: role,
+            avatar_url: null,
+            family_id: targetFamilyId,
+            points_total: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+          familyId = targetFamilyId;
+        }
+      } catch (dbError) {
+        // Silently fail — user is created in Supabase Auth anyway
+      }
+
+      const session = createDevSession({ userId });
+      session.user.role = role;
       session.user.familyId = familyId;
 
       const response = NextResponse.json(
@@ -86,8 +132,8 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
-    // ─── Production Mode: Use Supabase Auth ────────────────
-    
+    // ─── Production Mode: Use Supabase Auth ─────────────────────
+
     if (!hasSupabaseConfig()) {
       error({ url: !!process.env.NEXT_PUBLIC_SUPABASE_URL, anonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY }, "[SIGNUP] Missing Supabase credentials");
       return NextResponse.json(
@@ -122,7 +168,6 @@ export async function POST(request: NextRequest) {
       options: {
         data: {
           name: body.name,
-          role: "parent",
         },
       },
     });
@@ -173,6 +218,10 @@ export async function POST(request: NextRequest) {
         ).limit(1)[0];
 
         if (!existingUserWithFamily) {
+          // Check if any users exist to determine role (first user = admin)
+          const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
+          const role = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
+
           // Create a default family for the new user
           const familyName = body.name ? `${body.name}'s Family` : "My Family";
           const familySlug = `family-${Date.now()}`;
@@ -181,34 +230,44 @@ export async function POST(request: NextRequest) {
             id: `family-${Date.now()}`,
             name: familyName,
             slug: familySlug,
+            week_start_day: 0,
+            teams_enabled: false,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
           
           familyId = newFamily?.id || null;
-        } else {
-          familyId = existingUserWithFamily.familyId;
-        }
 
-        // Create or update user record in users table
-        const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
-        
-        if (!existingUser) {
+          // Create or update user record in users table with correct role
           await rawInsert("users", {
             id: userId,
             email: userEmail,
             name: body.name,
-            role: "parent",
+            role: role,
+            avatar_url: null,
             family_id: familyId || null,
+            points_total: 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
-        } else if (existingUser.familyId !== familyId) {
-          await db.update(schema.users).set({ 
-            familyId,
-            name: body.name,
-            updatedAt: new Date().toISOString()
-          }).where(eq(schema.users.id, existingUser.id));
+        } else {
+          familyId = existingUserWithFamily.familyId;
+
+          // Update role if user was previously child and this is now their first real signup
+          const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
+          if (existingUser && existingUser.role !== "admin") {
+            await rawInsert("users", {
+              id: userId,
+              email: userEmail,
+              name: body.name,
+              role: existingUser.role,
+              avatar_url: null,
+              family_id: familyId || null,
+              points_total: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
         }
       }
     } catch (dbError) {
@@ -230,11 +289,11 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     error({ err: err }, "[SIGNUP] Unhandled error");
     
-    if (error instanceof Error) {
+    if (err instanceof Error) {
       return NextResponse.json(
         { 
           error: "An unexpected error occurred",
-          details: process.env.NODE_ENV === "development" ? error.message : undefined 
+          details: process.env.NODE_ENV === "development" ? err.message : undefined 
         },
         { status: 500 }
       );
@@ -252,7 +311,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // ─── Dev Mode: Check dev session cookie ────────────────
+    // ─── Dev Mode: Check dev session cookie ─────────────────────
     if (process.env.AUTH_MODE === "dev") {
       const cookieHeader = request.headers.get("cookie") || "";
       const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
@@ -279,8 +338,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ authenticated: false });
     }
 
-    // ─── Production Mode: Use Supabase Auth ────────────────
-    
+    // ─── Production Mode: Use Supabase Auth ─────────────────────
+
     if (!hasSupabaseConfig()) {
       return NextResponse.json(
         { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },

@@ -4,48 +4,15 @@ import { eq, and, or, sql, desc } from "drizzle-orm";
 import { initDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { getLeaderboard, getCompletedJobsByUser, getUserStats } from "@/lib/db/service";
-import { parseDevSession } from "@/lib/dev-auth";
+import { verifyAuth } from "@/lib/auth";
 
 // ─── Auth Verification (handles both dev mode and production) ──
-async function verifyAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
-  // Dev mode: parse dev-session cookie directly (middleware doesn't work with Turbopack)
-  if (process.env.AUTH_MODE === "dev") {
-    const cookieHeader = request.headers.get("cookie") || "";
-    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
-
-    if (setCookie) {
-      const value = setCookie.replace("dev-session=", "").trim();
-      const user = parseDevSession(value);
-      if (user) {
-        // Query DB for actual familyId to avoid cookie/DB mismatch
-        let dbFamilyId: string | null = null;
-        try {
-          const db = await initDb();
-          if (db) {
-            const dbUser = (await db.select().from(schema.users).where(eq(schema.users.id, user.id)).limit(1))[0];
-            dbFamilyId = dbUser?.family_id || null;
-          }
-        } catch {}
-
-        return { userId: user.id, familyId: dbFamilyId || user.familyId || "" };
-      }
-    }
-
+async function verifyLocalAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
+  const auth = verifyAuth(request);
+  if (!auth) {
     return { error: "No token provided" };
   }
-
-  // Production mode: use middleware-set headers
-  const userId = request.headers.get("x-user-id");
-  if (!userId) {
-    return { error: "No token provided" };
-  }
-
-  const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-  if (!familyId) {
-    return { error: "No family ID provided" };
-  }
-
-  return { userId, familyId };
+  return { userId: auth.userId, familyId: auth.familyId };
 }
 
 // ─── Report Generators ──────────────────────────────────────────────
@@ -218,7 +185,7 @@ async function getWallboardReport(familyId?: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await verifyAuth(request);
+    const authResult = await verifyLocalAuth(request);
     if ("error" in authResult) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
@@ -257,7 +224,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(report);
   } catch (err) {
-    error({ err: err }, "Reports GET failed");
+    error({ err }, "Reports GET failed");
     if (err instanceof Error && err.message.includes("Database not initialized")) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }

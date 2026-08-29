@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME, DEV_USERS } from "@/lib/dev-auth";
+import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 import { info, error } from "@/lib/logger.server";
 import { slugify } from "@/lib/slugify";
 import { rawInsert } from "@/db/drizzle";
@@ -17,82 +17,96 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // ─── Dev Mode: Mock sign in ──────────────────────────────
+  // ─── Dev Mode: Mock sign in ────────────────────────────────
   if (process.env.AUTH_MODE === "dev") {
     const email = body?.email?.toLowerCase().trim() || "";
+    const name = body?.name || "Dev User";
 
-    let userIdKey = "admin";
-    let role = "admin";
-    let name = "Admin (Parent)";
-
-    if (email.includes("child")) {
-      userIdKey = "child";
-      role = "child";
-      name = "Child";
-    } else {
-      // Default to admin for admin@ and parent@ emails
-      userIdKey = "admin";
-      role = "admin";
-      name = "Admin (Parent)";
-    }
-
-    const devUserId = DEV_USERS[userIdKey].id;
-
-    // Ensure DB user record exists in dev mode and read actual familyId
+    let userId: string = `dev-user-${crypto.randomUUID()}`;
+    let role: string = "child";
     let familyId: string | null = null;
+
+    // Check DB for existing user by email, or create new with first-user logic
     try {
-      const { initDb } = await import("@/db/drizzle");
-      const db = await initDb();
+      const db = await import("@/db/drizzle").then(m => m.initDb());
       if (db) {
-        const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, devUserId)).limit(1))[0];
+        // Look up existing user by email
+        const users = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
 
-        if (!existingUser) {
-          await rawInsert("users", {
-            id: devUserId,
-            email: email || null,
-            name: name,
-            role: role,
-            avatar_url: null,
-            family_id: DEV_USERS[userIdKey].familyId,
-            points_total: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-        }
+        if (users[0]) {
+          // Return existing user with their stored role
+          userId = users[0].id;
+          role = users[0].role || "child";
+          familyId = users[0].family_id || null;
 
-        const userRecord = (await db.select().from(schema.users).where(eq(schema.users.id, devUserId)).limit(1))[0];
-        familyId = userRecord?.family_id || DEV_USERS[userIdKey].familyId;
+          // Ensure family exists for this user
+          if (familyId) {
+            const families = await db.select().from(schema.families).where(eq(schema.families.id, familyId)).limit(1);
+            if (!families[0]) {
+              await rawInsert("families", {
+                id: familyId,
+                name: "Dev Family",
+                slug: "dev-family",
+                week_start_day: 0,
+                teams_enabled: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              });
+            }
+          }
+        } else {
+          // New user - check if any users exist to determine role
+          const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
+          role = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
 
-        // Migrate old records that were created with null family_id
-        if (!userRecord?.family_id && DEV_USERS[userIdKey].familyId) {
-          const { rawUpdate } = await import("@/db/drizzle");
-          await rawUpdate("users", { family_id: DEV_USERS[userIdKey].familyId }, "id", devUserId);
-        }
+          // Generate a random fake user ID
+          userId = `dev-user-${crypto.randomUUID()}`;
 
-        // Ensure a family record exists for the referenced familyId (dev mode creates users with fake IDs)
-        const targetFamilyId = userRecord?.family_id || DEV_USERS[userIdKey].familyId;
-        if (targetFamilyId) {
-          const existingFamilies = await db.select().from(schema.families).where(eq(schema.families.id, targetFamilyId)).limit(1);
-          if (!existingFamilies[0]) {
-            await rawInsert("families", {
-              id: targetFamilyId,
-              name: "Dev Family",
-              slug: "dev-family",
+          // Find or create family
+          const families = await db.select().from(schema.families).limit(1);
+          if (families[0]) {
+            familyId = families[0].id;
+          } else {
+            const slug = `family-${Date.now()}`;
+            const newFamily = await rawInsert("families", {
+              id: `family-${Date.now()}`,
+              name: `${name}'s Family`,
+              slug,
               week_start_day: 0,
               teams_enabled: false,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
+            familyId = newFamily?.id || null;
           }
+
+          // Create user in DB
+          await rawInsert("users", {
+            id: userId,
+            email: email || null,
+            name: name,
+            role: role,
+            avatar_url: null,
+            family_id: familyId,
+            points_total: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
         }
       }
     } catch (dbError) {
       error({ err: dbError }, "[DEV SIGNIN] Database sync failed");
+
+      // Fallback: first user is admin if no DB available
+      role = "admin";
+      userId = `dev-user-${crypto.randomUUID()}`;
     }
 
-    // Create session with actual familyId from DB
-    const session = createDevSession({ userId: devUserId });
+    const session = createDevSession({ userId });
+    session.user.role = role;
     session.user.familyId = familyId;
+    session.user.name = name || session.user.name;
+    session.user.email = email || session.user.email;
 
     const response = NextResponse.json({
       ok: true,
@@ -102,13 +116,11 @@ export async function POST(request: NextRequest) {
       message: "Sign in successful (dev mode)"
     });
 
-    // Set new dev session cookie
     setDevSessionCookie(response.headers, session);
-
     return response;
   }
 
-  // ─── Production Mode: Use Supabase Auth ────────────────
+  // ─── Production Mode: Use Supabase Auth ─────────────────────
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -184,12 +196,16 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Determine role: first user in the system gets admin
+        const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
+        const userRole = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
+
         // Create DB user record with family association
         await rawInsert("users", {
           id: session.user.id,
           email: session.user.email || null,
           name: session.user.user_metadata?.name || body.name || "User",
-          role: session.user.user_metadata?.role || "child",
+          role: userRole,
           avatar_url: session.user.user_metadata?.avatar_url || null,
           family_id: familyId,
           points_total: 0,

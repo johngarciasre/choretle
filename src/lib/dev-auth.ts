@@ -2,7 +2,7 @@
  * Development Auth Bypass Module
  * 
  * When AUTH_MODE=dev, this module provides a mock authentication system
- * that lets you demo the app without Supabase. It generates fake users
+ * that lets you demo the app without Supabase. It generates random fake users
  * and manages them via cookies.
  */
 
@@ -23,46 +23,31 @@ export interface DevSession {
 // ─── Constants ──────────────────────────────────────────────────
 
 export const DEV_COOKIE_NAME = "dev-session";
-const COOKIE_SECRET = "dev-secret-for-cookies"; // Not used in dev mode, kept for structure
 
-// Predefined dev users for consistent demo experience
-export const DEV_USERS: Record<string, DevUser> = {
-  admin: {
-    id: "dev-user-admin-001",
-    email: "admin@choretle.dev",
-    name: "Admin (Parent)",
-    role: "admin",
-    familyId: "dev-family-001",
-  },
-  parent: {
-    id: "dev-user-parent-001",
-    email: "parent@choretle.dev",
-    name: "Parent",
-    role: "admin",
-    familyId: "dev-family-001",
-  },
-  child: {
-    id: "dev-user-child-001",
-    email: "child@choretle.dev",
-    name: "Child",
-    role: "child",
-    familyId: "dev-family-001",
-  },
-};
-
-// Default dev user if none specified
-const DEFAULT_DEV_USER = DEV_USERS.admin;
+/**
+ * Generate a random fake UUID for dev mode users.
+ */
+function generateFakeId(): string {
+  return `dev-user-${crypto.randomUUID()}`;
+}
 
 // ─── Session Management ──────────────────────────────────────────────
 
 /**
- * Creates a mock session for development.
+ * Creates a mock session for development with a random user ID.
  */
 export function createDevSession(options?: { userId?: string }): DevSession {
-  const userId = options?.userId || "dev-user-admin-001";
-  const user = DEV_USERS[userId] || DEFAULT_DEV_USER;
-
-  return { user };
+  const userId = options?.userId || generateFakeId();
+  
+  return { 
+    user: {
+      id: userId,
+      email: options?.userId ? `${options.userId}@choretle.dev` : `user-${Math.random().toString(36).substring(2, 8)}@choretle.dev`,
+      name: options?.userId || "Dev User",
+      role: "child", // default; actual role determined by DB on first signup
+      familyId: null,
+    }
+  };
 }
 
 /**
@@ -161,18 +146,6 @@ export async function verifyDevAuth(
   }
 
   return user;
-}
-
-/**
- * Gets or creates a default dev user for the request.
- * Useful in middleware when no session exists but we want demo mode.
- */
-export function getOrCreateDefaultDevUser(request?: Request): DevUser {
-  if (request) {
-    const existing = getDevUserFromRequest(request);
-    if (existing) return existing;
-  }
-  return DEFAULT_DEV_USER;
 }
 
 /**

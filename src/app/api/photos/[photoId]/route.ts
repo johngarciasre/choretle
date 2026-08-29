@@ -3,16 +3,21 @@ import { initDb, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ photoId: string }> }) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     const photoId = (await params).photoId;
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
 
     await rawDeleteWhere("photos", [{ col: "id", val: photoId }]);
 

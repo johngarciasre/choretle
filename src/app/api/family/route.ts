@@ -4,35 +4,9 @@ import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { slugify } from "@/lib/slugify";
 import { error } from "@/lib/logger.server";
-import { parseDevSession } from "@/lib/dev-auth";
 import { rawInsert } from "@/db/drizzle";
 import { createDevSession, setDevSessionCookie } from "@/lib/dev-auth";
-
-/**
- * Get user from either middleware headers (prod) or dev session cookie (dev mode).
- */
-async function getCurrentUser(request: NextRequest): Promise<{ id: string; familyId: string | null } | null> {
-  // Check middleware headers first (production mode)
-  const userId = request.headers.get("x-user-id");
-  if (userId) {
-    return { id: userId, familyId: request.headers.get("x-family-id") || null };
-  }
-
-  // Fall back to dev session cookie (dev mode)
-  if (process.env.AUTH_MODE === "dev") {
-    const cookieHeader = request.headers.get("cookie") || "";
-    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
-    if (setCookie) {
-      const value = setCookie.replace("dev-session=", "").trim();
-      const user = parseDevSession(value);
-      if (user) {
-        return { id: user.id, familyId: user.familyId || null };
-      }
-    }
-  }
-
-  return null;
-}
+import { verifyAuth } from "@/lib/auth";
 
 /**
  * GET /api/family?id=<id>
@@ -47,9 +21,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
     }
 
-    // Get user-id from middleware header (set by middleware for both dev and prod)
-    const userId = request.headers.get("x-user-id");
-    
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
@@ -59,20 +30,21 @@ export async function GET(request: NextRequest) {
     const familyRows = await db.select().from(schema.families)
       .where(eq(schema.families.id, familyId))
       .limit(1);
-    
+
     const family = familyRows[0];
     if (!family) {
       return NextResponse.json({ ok: false, error: "Family not found" }, { status: 404 });
     }
 
     // Fetch users in this family (only if authenticated and they belong to it)
+    const userId = request.headers.get("x-user-id");
     let users: any[] = [];
     if (userId) {
       const userRecordRows = await db.select().from(schema.users)
         .where(eq(schema.users.id, userId))
         .limit(1);
       const userRecord = userRecordRows[0];
-      
+
       // Only return users if the requesting user belongs to this family
       if (userRecord && (userRecord.familyId === familyId || !userRecord.familyId)) {
         users = await db.select().from(schema.users)
@@ -93,9 +65,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Require authentication via middleware headers or dev cookie
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
+    const auth = verifyAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
@@ -150,7 +121,7 @@ export async function POST(request: NextRequest) {
     // Associate the current user with this family
     await db.update(schema.users)
       .set({ familyId: newFamily.id, updated_at: new Date().toISOString() })
-      .where(eq(schema.users.id, currentUser.id));
+      .where(eq(schema.users.id, auth.userId));
 
     const response = NextResponse.json({
       ok: true,
@@ -163,9 +134,10 @@ export async function POST(request: NextRequest) {
       const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
       if (setCookie) {
         const value = setCookie.replace("dev-session=", "").trim();
-        const user = parseDevSession(value);
-        if (user) {
-          const session = createDevSession({ userId: user.id });
+        const user = JSON.parse(decodeURIComponent(value));
+        const u = user.user || user;
+        if (u.id) {
+          const session = createDevSession({ userId: u.id });
           session.user.familyId = newFamily.id;
           setDevSessionCookie(response.headers, session);
         }

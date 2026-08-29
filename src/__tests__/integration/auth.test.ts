@@ -13,13 +13,27 @@ describe("API Integration — Auth Flow", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.userId).toBe("dev-user-admin-001");
+    expect(res.body.userId).toMatch(/^dev-user-/);
   });
 
-  it("POST /api/auth/signin with child email sets child role", async () => {
+  it("first user to sign in gets admin role", async () => {
     const harness = new TestHarness();
-    const res = await harness.signIn("child@choretle.dev");
+    resetDb();
+    const res = await harness.signIn("admin@choretle.dev");
 
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe("admin");
+  });
+
+  it("second user to sign in gets child role", async () => {
+    const harness = new TestHarness();
+    resetDb();
+    
+    // First sign-in creates admin
+    await harness.signIn("first@choretle.dev");
+    
+    // Second sign-in creates child
+    const res = await harness.signIn("second@choretle.dev");
     expect(res.status).toBe(200);
     expect(res.body.role).toBe("child");
   });
@@ -33,17 +47,19 @@ describe("API Integration — Auth Flow", () => {
 
   it("GET /api/auth/me with valid cookie returns user info", async () => {
     const harness = new TestHarness();
+    resetDb();
     await harness.signIn("admin@choretle.dev");
 
     const res = await harness.invokeHandler("/api/auth/me", "GET");
     expect(res.status).toBe(200);
     expect(res.body.authenticated).toBe(true);
-    expect(res.body.user.id).toBe("dev-user-admin-001");
+    expect(res.body.user.id).toMatch(/^dev-user-/);
   });
 
   it("POST /api/auth/signout clears session cookie", async () => {
     const harness = new TestHarness();
 
+    resetDb();
     await harness.signIn("admin@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
@@ -59,11 +75,12 @@ describe("API Integration — Auth Flow", () => {
   it("Multiple sign-ins replace the session cookie", async () => {
     const harness = new TestHarness();
     
-    // Sign in as admin
-    await harness.signIn("admin@choretle.dev");
+    resetDb();
+    // First sign-in creates admin
+    await harness.signIn("first@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
-    // Sign in as child — should replace the cookie
+    // Second sign-in — should create child user
     const res = await harness.signIn("child@choretle.dev");
     expect(res.status).toBe(200);
     expect(res.body.role).toBe("child");

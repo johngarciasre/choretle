@@ -3,31 +3,7 @@ import { initDb, rawInsert } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
-import { parseDevSession } from "@/lib/dev-auth";
-
-/**
- * Get current user from middleware headers (prod) or dev session cookie (dev mode).
- */
-async function getCurrentUser(request: NextRequest): Promise<{ userId: string; familyId: string } | { error: string }> {
-  const userId = request.headers.get("x-user-id");
-  if (userId) {
-    return { userId, familyId: request.headers.get("x-family-id") || "" };
-  }
-
-  if (process.env.AUTH_MODE === "dev") {
-    const cookieHeader = request.headers.get("cookie") || "";
-    const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
-    if (setCookie) {
-      const value = setCookie.replace("dev-session=", "").trim();
-      const user = parseDevSession(value);
-      if (user) {
-        return { userId: user.id, familyId: user.familyId || "" };
-      }
-    }
-  }
-
-  return { error: "Authentication required" };
-}
+import { verifyAuth } from "@/lib/auth";
 
 /**
  * Extracts the familyId from the URL path for [familyId] dynamic routes.
@@ -68,7 +44,7 @@ export async function GET(request: NextRequest) {
         const members = await db.select().from(schema.teamMembers).where(
           eq(schema.teamMembers.teamId, team.id)
         );
-        
+
         teamsWithMembers.push({
           ...team,
           members: (members as any[]),
@@ -89,9 +65,9 @@ export async function GET(request: NextRequest) {
 // ─── POST: Create a new team ────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await getCurrentUser(request);
-    if ("error" in authResult) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const body = await request.json();
@@ -115,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Verify user belongs to this family
     const userFamilyRows = await db.select().from(schema.users).where(
-      and(eq(schema.users.id, authResult.userId), eq(schema.users.familyId, familyId))
+      and(eq(schema.users.id, auth.userId), eq(schema.users.familyId, familyId))
     ).limit(1);
     const userFamily = userFamilyRows[0];
 

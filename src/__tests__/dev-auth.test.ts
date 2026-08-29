@@ -6,44 +6,34 @@ import {
   setDevSessionCookie,
   clearDevSessionCookie,
   verifyDevAuth,
-  getOrCreateDefaultDevUser,
   DEV_COOKIE_NAME,
-  DEV_USERS,
 } from "@/lib/dev-auth";
 
 describe("Dev Auth Module", () => {
   describe("createDevSession", () => {
-    it("should create a session for the default admin user", () => {
+    it("should create a session with a random user ID", () => {
       const session = createDevSession();
       expect(session).toHaveProperty("user");
-      expect(session.user.id).toBe("dev-user-admin-001");
-      expect(session.user.email).toBe("admin@choretle.dev");
-      expect(session.user.role).toBe("admin");
-      expect(session.user.familyId).toBe("dev-family-001");
+      expect(session.user.id).toMatch(/^dev-user-/);
+      expect(session.user.role).toBe("child"); // default, role determined by DB
     });
 
-    it("should create a session for the parent user by key", () => {
-      const session = createDevSession({ userId: "parent" });
-      expect(session.user.id).toBe("dev-user-parent-001");
-      expect(session.user.email).toBe("parent@choretle.dev");
-      expect(session.user.role).toBe("admin");
+    it("should create a session with provided userId", () => {
+      const session = createDevSession({ userId: "custom-id" });
+      expect(session.user.id).toBe("custom-id");
+      expect(session.user.email).toBe("custom-id@choretle.dev");
     });
 
-    it("should create a session for the child user by key", () => {
-      const session = createDevSession({ userId: "child" });
-      expect(session.user.id).toBe("dev-user-child-001");
-      expect(session.user.role).toBe("child");
-    });
-
-    it("should use default admin for unknown user key", () => {
-      const session = createDevSession({ userId: "nonexistent" });
-      expect(session.user.id).toBe("dev-user-admin-001");
+    it("should generate unique IDs for each call", () => {
+      const session1 = createDevSession();
+      const session2 = createDevSession();
+      expect(session1.user.id).not.toBe(session2.user.id);
     });
   });
 
   describe("parseDevSession", () => {
     it("should parse a valid session cookie value", () => {
-      const session = createDevSession();
+      const session = createDevSession({ userId: "test-user" });
       const json = JSON.stringify({ user: session.user });
       const parsed = parseDevSession(json);
 
@@ -165,57 +155,9 @@ describe("Dev Auth Module", () => {
     });
   });
 
-  describe("getOrCreateDefaultDevUser", () => {
-    it("should return default admin user when no request provided", () => {
-      const user = getOrCreateDefaultDevUser();
-      expect(user.id).toBe("dev-user-admin-001");
-      expect(user.role).toBe("admin");
-    });
-
-    it("should return existing user from request", () => {
-      // Test the underlying getDevUserFromRequest directly since it's the actual parser
-      const session = createDevSession({ userId: "child" });
-      const encoded = encodeURIComponent(JSON.stringify(session));
-
-      const mockRequest = new Request("http://localhost/test", {
-        headers: { cookie: `${DEV_COOKIE_NAME}=${encoded}; path=/; secure=false` },
-      });
-
-      const directUser = getDevUserFromRequest(mockRequest);
-      expect(directUser).not.toBeNull();
-    });
-
-    it("should return default admin when request has no session", () => {
-      const mockRequest = new Request("http://localhost/test");
-      const user = getOrCreateDefaultDevUser(mockRequest);
-      expect(user.id).toBe("dev-user-admin-001");
-    });
-  });
-
-  describe("DEV_USERS constants", () => {
-    it("should have all three dev users defined", () => {
-      expect(DEV_USERS.admin).toBeDefined();
-      expect(DEV_USERS.parent).toBeDefined();
-      expect(DEV_USERS.child).toBeDefined();
-    });
-
-    it("should have correct admin user properties", () => {
-      const admin = DEV_USERS.admin;
-      expect(admin.id).toBe("dev-user-admin-001");
-      expect(admin.role).toBe("admin");
-      expect(admin.email).toBe("admin@choretle.dev");
-    });
-
-    it("should have correct child user properties", () => {
-      const child = DEV_USERS.child;
-      expect(child.id).toBe("dev-user-child-001");
-      expect(child.role).toBe("child");
-    });
-  });
-
   describe("Session roundtrip", () => {
-    it("should create and parse a session correctly for parent user", () => {
-      const session = createDevSession({ userId: "parent" });
+    it("should create and parse a session correctly", () => {
+      const session = createDevSession({ userId: "test-user" });
       const json = JSON.stringify({ user: session.user });
       const parsed = parseDevSession(json);
 

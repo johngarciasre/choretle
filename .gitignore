@@ -49,3 +49,4 @@ next-env.d.ts
 opencode.json
 .choretle*.sqlite
 QWEN.md
+.choretle-dev.sqlite*
