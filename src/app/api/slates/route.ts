@@ -3,18 +3,24 @@ import { initDb, getRawDb } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) {
-      return NextResponse.json([]);
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
     // Get slates with task counts
@@ -41,6 +47,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
@@ -49,14 +60,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, description, roomLocation, frequency, interval, defaultDueDateOffset, isActive } = body;
 
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-    if (!name || !familyId) {
-      return NextResponse.json({ error: "name and familyId are required" }, { status: 400 });
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    }
+
+    if (!name) {
+      return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
     const slateId = crypto.randomUUID();
     const rawDb = getRawDb();
-    
+
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
@@ -65,7 +81,7 @@ export async function POST(request: NextRequest) {
     const stmt = rawDb.prepare(
       `INSERT INTO slates (id, name, family_id, description, room_location, frequency, interval, default_due_date_offset, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
-    
+
     stmt.run(
       slateId,
       name,

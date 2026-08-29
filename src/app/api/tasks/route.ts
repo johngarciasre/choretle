@@ -4,11 +4,20 @@ import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-    if (!familyId) return NextResponse.json([]);
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    }
 
     const searchParams = request.nextUrl.searchParams;
     const tagIds = searchParams.get("tagIds");
@@ -30,6 +39,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
@@ -38,9 +52,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { title, name, description, points, icon, archtype, tagIds, verifyRequired } = body;
 
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
-    if (!familyId || !title && !name) {
-      return NextResponse.json({ error: "familyId and title are required" }, { status: 400 });
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    }
+
+    if (!title && !name) {
+      return NextResponse.json({ error: "title is required" }, { status: 400 });
     }
 
     // Create task
@@ -79,6 +98,11 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
@@ -86,6 +110,12 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const { id, title, name, description, points, icon, archtype, isActive, tagIds, verifyRequired } = body;
+
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    }
 
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
@@ -105,7 +135,7 @@ export async function PUT(request: NextRequest) {
     // Handle tags if provided
     if (tagIds !== undefined) {
       await rawDeleteWhere("task_tags", [{ col: "task_id", val: id }]);
-      
+
       if (Array.isArray(tagIds) && tagIds.length > 0) {
         for (const tagId of tagIds) {
           await rawInsert("task_tags", {
@@ -119,7 +149,7 @@ export async function PUT(request: NextRequest) {
 
     // Fetch updated task
     const updatedTask = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1);
-    
+
     return NextResponse.json(updatedTask[0]);
   } catch (err) {
     error({ err: err }, "Update task failed");
@@ -129,6 +159,11 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
@@ -137,12 +172,18 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const { id } = body;
 
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    }
+
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
     // Delete task tags first (cascade via FK constraints in PostgreSQL)
     await rawDeleteWhere("task_tags", [{ col: "task_id", val: id }]);
     await rawDeleteWhere("tasks", [{ col: "id", val: id }]);
-    
+
     return NextResponse.json({ success: true });
   } catch (err) {
     error({ err: err }, "Delete task failed");

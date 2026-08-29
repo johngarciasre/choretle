@@ -3,17 +3,24 @@ import { initDb, rawInsert, rawDeleteWhere, rawUpdate, getRawDb } from "@/db/dri
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
-    const familyId = request.headers.get("x-family-id") || new URL(request.url).searchParams.get("familyId");
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) {
-      return NextResponse.json({ slates: [], users: [], family: null });
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
     // Get family info
@@ -30,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Get all rotations for these slates
     const slateIds = (familySlates as any[]).map((s: any) => s.id);
     const rotations: any[] = [];
-    
+
     if (slateIds.length > 0) {
       const placeholders = slateIds.map(() => '?').join(',');
       const raw = getRawDb();
@@ -80,9 +87,20 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
+    }
+
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
     const body = await request.json();
@@ -124,9 +142,20 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const db = await initDb();
     if (!db) {
       return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
+    }
+
+    // Accept familyId from query param as fallback (dev mode without middleware headers)
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) {
+      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
     const body = await request.json();

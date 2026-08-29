@@ -10,7 +10,6 @@ export default defineConfig({
     environment: "node",
     globals: true,
     sequence: { concurrent: false },
-    threads: false,
     include: ["**/*.test.ts"],
     exclude: [
       "**/node_modules/**",
