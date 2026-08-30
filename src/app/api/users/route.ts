@@ -1,28 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const url = new URL(request.url);
-    const familyId = url.searchParams.get("familyId");
+    const auth = verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
-    if (!familyId) {
-      return NextResponse.json({ ok: false, error: "Family ID is required" }, { status: 400 });
-    }
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
-
-    const users = await db.select().from(schema.users).where(eq(schema.users.familyId, familyId));
-
-    return NextResponse.json({ ok: true, users });
+    const users = rawDb.prepare(`SELECT * FROM users WHERE family_id = ?`).all(familyId) as any[];
+    return NextResponse.json(users || []);
   } catch (err) {
-    error({ err }, "Users GET failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Users GET failed");
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
   }
 }

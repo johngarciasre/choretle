@@ -1,49 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, rawInsert } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
     const auth = verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
-    }
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
-    const jobId = searchParams.get("jobId");
-    const familyId = auth.familyId;
 
-    let query: any;
-
-    if (jobId) {
-      // Get job subtasks for a specific job
-      query = db.select({
-        subtask: schema.jobSubtasks,
-        details: schema.subtasks,
-      })
-        .from(schema.jobSubtasks)
-        .leftJoin(schema.subtasks, eq(schema.jobSubtasks.subtaskId, schema.subtasks.id))
-        .where(and(eq(schema.jobSubtasks.jobId, jobId), sql`${schema.subtasks.familyId} = ${familyId}`));
-    } else if (taskId) {
-      // Get task subtasks
-      query = db.select().from(schema.subtasks).where({ taskId, familyId }).orderBy(schema.subtasks.order);
+    let subtasks: any[];
+    if (taskId) {
+      subtasks = rawDb.prepare(`SELECT * FROM subtasks WHERE task_id = ? AND family_id = ? ORDER BY "order"`).all(taskId, familyId) as any[];
     } else {
-      return NextResponse.json({ error: "taskId or jobId is required" }, { status: 400 });
+      subtasks = rawDb.prepare(`SELECT * FROM subtasks WHERE family_id = ? ORDER BY created_at DESC`).all(familyId) as any[];
     }
-
-    const subtasks = await query;
-    return NextResponse.json(subtasks);
+    return NextResponse.json(subtasks || []);
   } catch (err) {
-    error({ err: err }, "Get subtasks failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Subtasks GET failed");
     return NextResponse.json({ error: "Failed to fetch subtasks" }, { status: 500 });
   }
 }
@@ -51,54 +32,73 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
-    }
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
     const body = await request.json();
-    const { taskId, jobId, subtaskId, name, points, order } = body;
-    const familyId = auth.familyId;
+    const { taskId, name, points } = body;
+    if (!taskId || !name) return NextResponse.json({ error: "taskId and name are required" }, { status: 400 });
 
-    if (jobId && subtaskId) {
-      // Create a job subtask instance from a task subtask
-      const subtask = (await db.select().from(schema.subtasks).where({ id: subtaskId, familyId }).limit(1))[0];
-      if (!subtask) {
-        return NextResponse.json({ error: "Subtask not found in this family" }, { status: 404 });
-      }
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-      const jobSubtask = await rawInsert("job_subtasks", {
-        id: `js-${Date.now()}`,
-        job_id: jobId,
-        subtask_id: subtaskId,
-        points_awarded: (subtask as any).points || points || 0,
-      });
+    const now = new Date().toISOString();
+    const subtaskId = `subtask-${Date.now()}`;
+    rawDb.prepare(
+      `INSERT INTO subtasks (id, family_id, task_id, name, points, "order", created_at) VALUES (?, ?, ?, ?, ?, 0, ?)`
+    ).run(subtaskId, familyId, taskId, name, points || 0, now);
 
-      return NextResponse.json(jobSubtask ? jobSubtask : null);
-    }
-
-    if (taskId && name) {
-      // Create a task subtask
-      const subtask = await rawInsert("subtasks", {
-        id: `st-${Date.now()}`,
-        family_id: familyId,
-        task_id: taskId,
-        name,
-        points: points || 0,
-        "order": order ?? 0,
-        created_at: new Date().toISOString(),
-      });
-
-      return NextResponse.json(subtask ? subtask : null);
-    }
-
-    return NextResponse.json({ error: "taskId + name OR jobId + subtaskId required" }, { status: 400 });
+    const result = rawDb.prepare(`SELECT * FROM subtasks WHERE id = ?`).get(subtaskId) as any;
+    return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    error({ err: err }, "Create subtask failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Subtask POST failed");
     return NextResponse.json({ error: "Failed to create subtask" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const auth = verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+    const body = await request.json();
+    const { subtaskId, name, points } = body;
+    if (!subtaskId) return NextResponse.json({ error: "subtaskId is required" }, { status: 400 });
+
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    if (name !== undefined) { updates.push("name = ?"); values.push(name); }
+    if (points !== undefined) { updates.push("points = ?"); values.push(points); }
+    updates.push("updated_at = ?");
+    values.push(new Date().toISOString());
+    values.push(subtaskId);
+
+    rawDb.prepare(`UPDATE subtasks SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+    const result = rawDb.prepare(`SELECT * FROM subtasks WHERE id = ?`).get(subtaskId) as any;
+    return NextResponse.json(result);
+  } catch (err) {
+    error({ err: String(err), stack: (err as Error).stack }, "Subtask PUT failed");
+    return NextResponse.json({ error: "Failed to update subtask" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id } = body;
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+
+    rawDb.prepare(`DELETE FROM subtasks WHERE id = ?`).run(id);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    error({ err: String(err), stack: (err as Error).stack }, "Subtask DELETE failed");
+    return NextResponse.json({ error: "Failed to delete subtask" }, { status: 500 });
   }
 }

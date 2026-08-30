@@ -118,12 +118,14 @@ export default function FamilyPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.authenticated) {
-          setIsAuthenticated(true);
-          setFamilyId(data.familyId || "");
+          // If user already has a family, redirect them to it instead of showing create/join forms
           if (data.familyId) {
-            loadFamilyData(data.familyId);
+            setFamilyId(data.familyId);
+            router.push(`/family/${data.familyId}`);
+            return;
           }
-          return;
+          
+          setIsAuthenticated(true);
         }
       }
       setIsAuthenticated(false);
@@ -146,7 +148,7 @@ export default function FamilyPage() {
       const usersData = await usersRes.json();
       const teamsData = await teamsRes.json();
 
-      if (!familyData.ok || !usersData.ok) {
+      if (!familyRes.ok || !usersRes.ok) {
         throw new Error(`Failed to load family data: family=${familyRes.status}, users=${usersRes.status}`);
       }
 

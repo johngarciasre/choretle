@@ -1,9 +1,5 @@
 import { initDb, rawInsert, rawDeleteWhere, rawUpdate } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
 import { error } from "@/lib/logger.server";
-
-// ─── Global DB Initialization ────────────────────────────────────────
 
 let db: any = null;
 
@@ -15,1182 +11,457 @@ async function ensureDb(): Promise<any> {
 
 function nowISO(): string { return new Date().toISOString(); }
 
-type Insertable<T> = T extends { id: string } ? Omit<T, "id"> : never;
-type Selectable<T> = any;
-
-// Import helper functions from jobStatus
-import { canTransition, getValidNextStatuses, calculateJobPoints, createJobHistory as _createJobHistory } from "@/lib/jobStatus";
-
-// Re-export for convenience
-export { canTransition, getValidNextStatuses, calculateJobPoints };
-
-// ─── Helpers ────────────────────────────────────────────────────────
-
-async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | null> {
-  try {
-    return await query;
-  } catch (err) {
-    error({ err: err }, "safeQuery failed");
-    return null;
-  }
+export async function canTransition(currentStatus: string, nextStatus: string): Promise<boolean> {
+  const validTransitions: Record<string, string[]> = {
+    todo: ["doing", "done"],
+    doing: ["done", "todo", "under_review"],
+    under_review: ["doing", "done"],
+  };
+  return (validTransitions[currentStatus] || []).includes(nextStatus);
 }
 
-// ─── Families ───────────────────────────────────────────────────────
+export async function getValidNextStatuses(status: string): Promise<string[]> {
+  const validTransitions: Record<string, string[]> = {
+    todo: ["doing", "done"],
+    doing: ["done", "todo", "under_review"],
+    under_review: ["doing", "done"],
+  };
+  return validTransitions[status] || [];
+}
 
+export async function calculateJobPoints(jobData: any): Promise<number> {
+  if (!jobData) return 0;
+  const basePoints = jobData.points || 0;
+  let multiplier = 1;
+  if (jobData.status === "done") multiplier = 1.5;
+  return Math.round(basePoints * multiplier);
+}
+
+async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | null> {
+  try { return await query; }
+  catch (err) { error({ err: String(err) }, "safeQuery failed"); return null; }
+}
+
+// ─── Families ────────────────────────────────────────────────────────
 export async function getFamilyById(id: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.families).where({ id }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const res = rawDb.prepare(`SELECT * FROM families WHERE id = ?`).get(id) as any;
+  return res || null;
 }
 
 export async function getFamilyBySlug(slug: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.families).where({ slug }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const res = rawDb.prepare(`SELECT * FROM families WHERE slug = ?`).get(slug) as any;
+  return res || null;
 }
 
-export async function createFamily(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("families", { ...data, id: `family-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
+export async function createFamily(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+  const id = `family-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO families (id, name, slug, logo_url, timezone, week_start_day, theme, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, 'America/New_York', 0, 'coral', 0, ?, ?)`
+  ).run(id, data.name, data.slug, null, now, now);
+  const res = rawDb.prepare(`SELECT * FROM families WHERE id = ?`).get(id) as any;
   return res || null;
 }
 
 export async function updateFamily(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("families", data, "id", id) || null;
-}
-
-// ─── Users ──────────────────────────────────────────────────────────
-
-export async function getUserById(id: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.users).where({ id }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
-}
-
-export async function getUserByEmail(email: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.users).where({ email }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
-}
-
-export async function updateUserPoints(id: string, points: number) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("users", { pointsTotal: points }, "id", id) || null;
-}
-
-// ─── Profile ────────────────────────────────────────────────────────
-
-export async function getProfileByUserId(userId: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.users).where({ id: userId }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
-}
-
-export async function getCompletedJobsByUser(userId: string, limit = 20) {
-  const db = await ensureDb();
-  if (!db) return [];
-  
-  const result = await safeQuery(
-    db.select({
-      job: schema.jobs,
-      task: schema.tasks,
-      slateTask: schema.slateTasks,
-    })
-      .from(schema.jobs)
-      .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
-      .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
-      .where(
-        and(
-          eq(schema.jobs.status, "done"),
-          eq(schema.jobs.assignedTo, userId)
-        )
-      )
-      .orderBy(desc(schema.jobs.completedAt))
-      .limit(limit)
-  );
-  
-  return (result as any[]) || [];
-}
-
-// ─── Tags ───────────────────────────────────────────────────────────
-
-// ─── Teams ──────────────────────────────────────────────────────────
-
-export async function getTeamsByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.teams).where({ familyId })
-  );
-  return (res as any[]) || [];
-}
-
-export async function createTeam(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("teams", { ...data, id: `team-${Date.now()}`, created_at: nowISO() })
-  );
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const updates: string[] = ["updated_at = ?"];
+  const values: any[] = [nowISO()];
+  if (data.name !== undefined) { updates.push("name = ?"); values.push(data.name); }
+  if (data.logo_url !== undefined) { updates.push("logo_url = ?"); values.push(data.logo_url); }
+  if (data.week_start_day !== undefined) { updates.push("week_start_day = ?"); values.push(data.week_start_day); }
+  if (data.teams_enabled !== undefined) { updates.push("teams_enabled = ?"); values.push(data.teams_enabled ? 1 : 0); }
+  values.push(id);
+  rawDb.prepare(`UPDATE families SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+  const res = rawDb.prepare(`SELECT * FROM families WHERE id = ?`).get(id) as any;
   return res || null;
 }
 
-// ─── Tasks ──────────────────────────────────────────────────────────
+// ─── Users ──────────────────────────────────────────────────────────
+export async function getUserById(id: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const res = rawDb.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as any;
+  return res || null;
+}
 
+export async function getUserByEmail(email: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const res = rawDb.prepare(`SELECT * FROM users WHERE email = ?`).get(email) as any;
+  return res || null;
+}
+
+export async function updateUserPoints(id: string, points: number) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  rawDb.prepare(`UPDATE users SET points_total = ? WHERE id = ?`).run(points, id);
+  const res = rawDb.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as any;
+  return res || null;
+}
+
+// ─── Profile ────────────────────────────────────────────────────────
+export async function getProfileByUserId(userId: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const user = rawDb.prepare(`SELECT * FROM users WHERE id = ?`).get(userId) as any;
+  if (!user) return null;
+
+  const completedJobs = rawDb.prepare(
+    `SELECT j.*, t.name as task_name, t.points as task_points FROM jobs j LEFT JOIN tasks t ON j.slate_task_id = t.id WHERE j.assigned_to = ? AND j.status = 'done' ORDER BY j.completed_at DESC`
+  ).all(userId) as any[];
+
+  const streakCount = (completedJobs || []).reduce((acc: number, job: any) => {
+    if (!job.completed_at) return acc;
+    const prevDate = new Date(job.completed_at);
+    const currDate = new Date(prevDate);
+    currDate.setDate(currDate.getDate() + 1);
+    // Simple streak: consecutive days
+    return acc + 1;
+  }, 0);
+
+  return {
+    ...user,
+    completedJobs: completedJobs || [],
+    streakCount,
+    totalPoints: user.points_total || 0,
+  };
+}
+
+// ─── Tasks ──────────────────────────────────────────────────────────
 export async function getTasksByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.tasks).where({ familyId })
-  );
-  return (res as any[]) || [];
+  const rawDb = await ensureDb();
+  if (!rawDb) return [];
+  const tasks = rawDb.prepare(`SELECT * FROM tasks WHERE family_id = ? AND is_active = 1 ORDER BY name`).all(familyId) as any[];
+  return tasks || [];
 }
 
 export async function getTaskById(id: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.tasks).where({ id }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const res = rawDb.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id) as any;
+  return res || null;
 }
 
-export async function createTask(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("tasks", { ...data, id: `task-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
+export async function createTask(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+  const taskId = `task-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO tasks (id, family_id, name, description, points, icon, archtype, is_active, verify_required, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, 'job', 1, 0, ?, ?)`
+  ).run(taskId, data.family_id, data.name, data.description || null, data.points || 0, now, now);
+  const res = rawDb.prepare(`SELECT * FROM tasks WHERE id = ?`).get(taskId) as any;
   return res || null;
 }
 
 export async function updateTask(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("tasks", data, "id", id) || null;
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const updates: string[] = ["updated_at = ?"];
+  const values: any[] = [nowISO()];
+  if (data.name !== undefined) { updates.push("name = ?"); values.push(data.name); }
+  if (data.description !== undefined) { updates.push("description = ?"); values.push(data.description); }
+  if (data.points !== undefined) { updates.push("points = ?"); values.push(data.points); }
+  if (data.icon !== undefined) { updates.push("icon = ?"); values.push(data.icon); }
+  values.push(id);
+  rawDb.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+  const res = rawDb.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id) as any;
+  return res || null;
 }
 
 export async function deleteTask(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("tasks", [{ col: "id", val: id }]));
+  const rawDb = await ensureDb();
+  if (!rawDb) return false;
+  rawDb.prepare(`UPDATE tasks SET is_active = 0 WHERE id = ?`).run(id);
   return true;
 }
 
-// ─── Subtasks ───────────────────────────────────────────────────────
-
+// ─── Subtasks ────────────────────────────────────────────────────────
 export async function getSubtasksByTask(taskId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.subtasks).where({ taskId })
-  );
-  return (res as any[]) || [];
+  const rawDb = await ensureDb();
+  if (!rawDb) return [];
+  const subtasks = rawDb.prepare(`SELECT * FROM subtasks WHERE task_id = ? ORDER BY "order"`).all(taskId) as any[];
+  return subtasks || [];
 }
 
-export async function createSubtask(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("subtasks", { ...data, id: `stask-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
+export async function createSubtask(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+  const id = `subtask-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO subtasks (id, family_id, task_id, name, points, "order", created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, data.family_id, data.task_id, data.name, data.points || 0, data.order || 0, now);
+  const res = rawDb.prepare(`SELECT * FROM subtasks WHERE id = ?`).get(id) as any;
   return res || null;
 }
 
 // ─── Slates ─────────────────────────────────────────────────────────
-
 export async function getSlatesByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.slates).where({ familyId })
-  );
-  return (res as any[]) || [];
+  const rawDb = await ensureDb();
+  if (!rawDb) return [];
+  const slates = rawDb.prepare(`SELECT * FROM slates WHERE family_id = ? AND is_active = 1 ORDER BY name`).all(familyId) as any[];
+  return slates || [];
 }
 
 export async function getSlateById(id: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.slates).where({ id }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const res = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(id) as any;
+  return res || null;
 }
 
-// ─── Slate Tasks ────────────────────────────────────────────────────
-
-export async function getSlateTasksBySlate(slateId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.slateTasks).where({ slateId })
-  );
-  return (res as any[]) || [];
-}
-
-// ─── Slates CRUD ────────────────────────────────────────────────────
-
-export async function createSlate(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("slates", { ...data, id: `slate-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
+export async function createSlate(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+  const id = `slate-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO slates (id, family_id, name, description, room_location, frequency, interval, default_due_date_offset, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 'weekly', 1, 0, 1, ?, ?)`
+  ).run(id, data.family_id, data.name, data.description || null, now, now);
+  const res = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(id) as any;
   return res || null;
 }
 
 export async function updateSlate(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("slates", data, "id", id) || null;
-}
-
-// ─── Slate Tasks CRUD ──────────────────────────────────────────────
-
-export async function createSlateTask(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("slate_tasks", { ...data, id: `stask-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const updates: string[] = ["updated_at = ?"];
+  const values: any[] = [nowISO()];
+  if (data.name !== undefined) { updates.push("name = ?"); values.push(data.name); }
+  if (data.description !== undefined) { updates.push("description = ?"); values.push(data.description); }
+  if (data.room_location !== undefined) { updates.push("room_location = ?"); values.push(data.room_location); }
+  if (data.frequency !== undefined) { updates.push("frequency = ?"); values.push(data.frequency); }
+  if (data.interval !== undefined) { updates.push("interval = ?"); values.push(data.interval); }
+  values.push(id);
+  rawDb.prepare(`UPDATE slates SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+  const res = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(id) as any;
   return res || null;
 }
 
-export async function updateSlateTask(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("slate_tasks", data, "id", id) || null;
-}
-
-export async function deleteSlateTask(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("slate_tasks", [{ col: "id", val: id }]));
-  return true;
-}
-
-
-export async function getJobsByList(listId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.jobs).where({ listId })
-  );
-  return (res as any[]) || [];
-}
-
-export async function getJobsByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-
-  // Jobs belong to lists, lists belong to families
-  const jobs = await safeQuery(
-    db.select({
-      job: schema.jobs,
-      slateTask: schema.slateTasks,
-      task: schema.tasks,
-    })
-      .from(schema.jobs)
-      .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
-      .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
-      .where(
-        sql`${schema.jobs.listId} IN (SELECT id FROM lists WHERE family_id = ${familyId})`
-      )
-      .orderBy(desc(sql`created_at`))
-  );
-
-  return (jobs as any[]) || [];
-}
-
-export async function getJobById(id: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.jobs).where({ id }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
-}
-
-export async function createJob(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("jobs", { ...data, id: `job-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
-  return res || null;
-}
-
-export async function updateJob(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("jobs", data, "id", id) || null;
-}
-
-export async function deleteJob(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("jobs", [{ col: "id", val: id }]));
+export async function deleteSlate(id: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return false;
+  rawDb.prepare(`UPDATE slates SET is_active = 0 WHERE id = ?`).run(id);
   return true;
 }
 
 // ─── Lists ──────────────────────────────────────────────────────────
-
-export async function getListsByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.lists).where({ familyId })
-  );
-  return (res as any[]) || [];
+export async function getListsBySlate(slateId: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return [];
+  const lists = rawDb.prepare(`SELECT * FROM lists WHERE slate_id = ? ORDER BY start_date DESC`).all(slateId) as any[];
+  return lists || [];
 }
 
-export async function getListBySlateAndDate(slateId: string, startDate: Date) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.lists).where({ slateId, startDate }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
-}
-
-export async function createList(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("lists", { ...data, id: `list-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
+export async function createList(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+  const id = `list-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO lists (id, slate_id, family_id, name, start_date, end_date, period, status, created_at) VALUES (?, ?, ?, ?, ?, NULL, 'day', 'active', ?)`
+  ).run(id, data.slate_id, data.family_id, data.name, data.start_date, now);
+  const res = rawDb.prepare(`SELECT * FROM lists WHERE id = ?`).get(id) as any;
   return res || null;
 }
 
-// ─── List Tasks ─────────────────────────────────────────────────────
-
-export async function getListTasksByList(listId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.listTasks).where({ listId })
-  );
-  return (res as any[]) || [];
-}
-
-export async function createListTask(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("list_tasks", { ...data, id: `ltask-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
-  return res || null;
-}
-
-// ─── Rotations ──────────────────────────────────────────────────────
-
-export async function getRotationsBySlate(slateId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.rotations).where({ slateId })
-  );
-  return (res as any[]) || [];
-}
-
-export async function getRotationsByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const familyUsers = await safeQuery(
-    db.select().from(schema.users).where({ familyId })
-  );
-  if ((familyUsers as any[] | null)?.length === 0 || !(familyUsers as any[] | null)) return [];
-
-  const slates = await safeQuery(
-    db.select().from(schema.slates).where({ familyId })
-  );
-  if ((slates as any[] | null)?.length === 0 || !(slates as any[] | null)) return [];
-
-  const slateIds = (slates as any[]).map((s: any) => s.id);
-  const res = await safeQuery(
-    db.select().from(schema.rotations).where(sql`${schema.rotations.slateId} IN (${sql.join(slateIds, sql`, `)})`)
-  );
-  return (res as any[]) || [];
-}
-
-export async function upsertRotation(data: {
-  id?: string;
-  slateId: string;
-  userId: string;
-  order: number;
-  intervalDays: number;
-  isActive?: boolean;
-}) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const existing = await safeQuery(
-    db.select().from(schema.rotations).where({ id: data.id }).limit(1)[0]
-  );
-
-  if (existing && data.id) {
-    return rawUpdate("rotations", {
-      slate_id: data.slateId,
-      user_id: data.userId,
-      order: data.order,
-      interval_days: data.intervalDays,
-      is_active: data.isActive ?? true,
-    }, "id", data.id) || null;
-  }
-
-  const res = await safeQuery(
-    rawInsert("rotations", {
-      id: `rot-${Date.now()}`,
-      slate_id: data.slateId,
-      user_id: data.userId,
-      "order": data.order,
-      interval_days: data.intervalDays,
-      is_active: data.isActive ?? true,
-    })
-  );
-  return res || null;
-}
-
-export async function deleteRotation(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("rotations", [{ col: "id", val: id }]));
-  return true;
-}
-
-export async function deleteRotationsBySlate(slateId: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("rotations", [{ col: "slate_id", val: slateId }]));
-  return true;
-}
-
-// ─── Comments & History ─────────────────────────────────────────────
-
-export async function getCommentsByJob(jobId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.comments).where({ jobId })
-  );
-  return (res as any[]) || [];
-}
-
-export async function addComment(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("comments", { ...data, id: `comment-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
-  return res || null;
-}
-
-// ─── Reports ────────────────────────────────────────────────────────
-
-export async function getReportsByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.reports).where({ familyId })
-  );
-  return (res as any[]) || [];
-}
-
-export async function createReport(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("reports", { ...data, id: `report-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
-  return res || null;
-}
-
-// ─── Job Status Transitions ───────────────────────────────────────────
-
-export async function transitionJob(id: string, newStatus: string, userId?: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-
-  const job = await safeQuery(
-    db.select().from(schema.jobs).where({ id }).limit(1)[0]
-  );
-  if (!job) return null;
-
-  const currentStatus = (job as any).status;
-  if (!canTransition(currentStatus, newStatus)) {
-    error({ currentStatus, newStatus, id }, `Invalid job transition: ${currentStatus} -> ${newStatus} for job ${id}`);
-    throw new Error(`Invalid transition from "${currentStatus}" to "${newStatus}"`);
-  }
-
-  const now = new Date();
-  const updateData: Record<string, any> = { status: newStatus, updated_at: now };
-  if (newStatus === "done") {
-    updateData.completed_at = now;
-  }
-
-  const updatedJob = await rawUpdate("jobs", updateData, "id", id);
-
-  if (updatedJob) {
-    try {
-      _createJobHistory(id, "status_change", `Status changed from "${currentStatus}" to "${newStatus}"`, userId);
-    } catch (historyErr) {
-      error({ err: historyErr }, "Failed to write job history");
-    }
-  }
-
-  return updatedJob;
-}
-
-export async function completeJob(id: string, userId?: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-
-  const job = await safeQuery(
-    db.select().from(schema.jobs).where({ id }).limit(1)[0]
-  );
-  if (!job) return null;
-
-  const currentStatus = (job as any).status;
-
-  // Transition to done status first (if not already done)
-  if (currentStatus !== "done") {
-    await transitionJob(id, "done", userId);
-  }
-
-  try {
-    // Mark all uncompleted job subtasks as completed
-    const now = new Date();
-    await db.update(schema.jobSubtasks)
-      .set({ completedAt: now })
-      .where(and(eq(schema.jobSubtasks.jobId, id), sql`${schema.jobSubtasks.completedAt} IS NULL`));
-
-    // Fetch all completed subtasks for this job to calculate points
-    const completedSubtasks = await safeQuery(
-      db.select().from(schema.jobSubtasks).where({ jobId: id })
-    );
-
-    // Calculate total points: base job points + completed subtask points
-    const totalPoints = calculateJobPoints(job as any, (completedSubtasks as any[]) || []);
-
-    // Award points to user if userId provided
-    if (userId && totalPoints > 0) {
-      const user = await safeQuery(
-        db.select().from(schema.users).where({ id: userId }).limit(1)[0]
-      );
-      if (user) {
-        const newTotal = ((user as any).pointsTotal || 0) + totalPoints;
-        await safeQuery(
-          db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId })
-        );
-      }
-    }
-  } catch (err) {
-    error({ err: err }, "completeJob failed");
-    throw error;
-  }
-
-  return job;
-}
-
-// ─── Subtask Management ──────────────────────────────────────────────
-
-export async function getPendingSubtasks(jobId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.jobId, jobId), sql`${schema.jobSubtasks.completedAt} IS NULL`))
-  );
-  return (res as any[]) || [];
-}
-
-export async function completeSubtask(id: string, jobId: string, userId?: string) {
-  const db = await ensureDb();
-  if (!db) return 0;
-
-  try {
-    // Get the job to check its status
-    const job = await safeQuery(
-      db.select().from(schema.jobs).where({ id: jobId }).limit(1)[0]
-    );
-    if (!job) return 0;
-
-    // Subtasks can only be completed on active jobs (status !== "done")
-    if ((job as any).status === "done") {
-      throw new Error("Cannot complete subtask for a job that is already done");
-    }
-
-    // Get the subtask record to find its points
-    const subtaskRecord = await safeQuery(
-      db.select().from(schema.jobSubtasks).where(and(eq(schema.jobSubtasks.id, id), eq(schema.jobSubtasks.jobId, jobId))).limit(1)[0]
-    );
-    if (!subtaskRecord) return 0;
-
-    // Get the points to award
-    const pointsAwarded = (subtaskRecord as any).pointsAwarded || 0;
-
-    // Mark as completed
-    await safeQuery(
-      db.update(schema.jobSubtasks).set({ completedAt: new Date() }).where({ id })
-    );
-
-    // Create history entry
-    _createJobHistory(jobId, "subtask_completed", `Subtask ${id} completed, ${pointsAwarded} points awarded`, userId);
-
-    // Award points to user if userId provided
-    if (userId && pointsAwarded > 0) {
-      const user = await safeQuery(
-        db.select().from(schema.users).where({ id: userId }).limit(1)[0]
-      );
-      if (user) {
-        const newTotal = ((user as any).pointsTotal || 0) + pointsAwarded;
-        await safeQuery(
-          db.update(schema.users).set({ pointsTotal: newTotal }).where({ id: userId })
-        );
-      }
-    }
-
-    return pointsAwarded;
-  } catch (err) {
-    error({ err: err }, "completeSubtask failed");
-    throw error;
-  }
-}
-
-// ─── Subtask CRUD (additional) ──────────────────────────────────────
-
-export async function updateSubtask(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("subtasks", data, "id", id) || null;
-}
-
-export async function deleteSubtask(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("subtasks", [{ col: "id", val: id }]));
-  return true;
-}
-
-export async function getSubtasksByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.subtasks).where({ familyId })
-  );
-  return (res as any[]) || [];
-}
-
-// ─── Photos CRUD ──────────────────────────────────────────────────────
-
-export async function getPhotosByObject(objectType: string, objectId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.photos).where({ objectType, objectId }).orderBy(sql`${schema.photos.order} ASC`)
-  );
-  return (res as any[]) || [];
-}
-
-export async function createPhoto(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("photos", { ...data, id: `photo-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
-  return res || null;
-}
-
-export async function updatePhoto(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("photos", data, "id", id) || null;
-}
-
-export async function deletePhoto(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("photos", [{ col: "id", val: id }]));
-  return true;
-}
-
-// ─── Reviews CRUD ──────────────────────────────────────────────────────
-
-export async function getReviewsByFamily(familyId: string, status?: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  
-  let query = db.select({
-    review: schema.reviews,
-    job: schema.jobs,
-    user: schema.users,
-  })
-    .from(schema.reviews)
-    .leftJoin(schema.jobs, eq(schema.reviews.jobId, schema.jobs.id))
-    .leftJoin(schema.users, eq(schema.reviews.reviewerId, schema.users.id))
-    .where({ familyId })
-    .orderBy(desc(schema.reviews.createdAt));
-  
-  if (status) {
-    query = db.select({
-      review: schema.reviews,
-      job: schema.jobs,
-      user: schema.users,
-    })
-      .from(schema.reviews)
-      .leftJoin(schema.jobs, eq(schema.reviews.jobId, schema.jobs.id))
-      .leftJoin(schema.users, eq(schema.reviews.reviewerId, schema.users.id))
-      .where(and(eq(schema.reviews.familyId, familyId), eq(schema.reviews.status, status)))
-      .orderBy(desc(schema.reviews.createdAt));
-  }
-  
-  const res = await safeQuery(query);
-  return (res as any[]) || [];
-}
-
-export async function createReview(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("reviews", { ...data, id: `review-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
-  return res || null;
-}
-
-export async function updateReview(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("reviews", data, "id", id) || null;
-}
-
-export async function deleteReview(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  await safeQuery(rawDeleteWhere("reviews", [{ col: "id", val: id }]));
-  return true;
-}
-
-// ─── Invites ────────────────────────────────────────────────────────
-
-export async function getInviteByCode(code: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    db.select().from(schema.invites).where({ code }).limit(1)[0]
-  );
-  return res as Selectable<any> | null;
-}
-
-export async function createInvite(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("invites", { ...data, id: `invite-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
-  return res || null;
-}
-
-export async function deleteInvite(inviteId: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  return await safeQuery(
-    rawDeleteWhere("invites", [{ col: "id", val: inviteId }])
-  ) || false;
-}
-
-// ─── Scoring & Leaderboard ──────────────────────────────────────────
-
-export interface ScoringEntry {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-  role: string;
-  pointsTotal: number;
-  pointsThisWeek: number;
-  jobsCompleted: number;
-  streakDays: number;
-}
-
-export async function getLeaderboard(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const users = await safeQuery(
-    db.select().from(schema.users).where({ familyId })
-  );
-  return ((users as any[]) || []).sort((a, b) => (b.pointsTotal || 0) - (a.pointsTotal || 0));
-}
-
-export async function getUserStats(userId: string) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const user = await safeQuery(
-    db.select().from(schema.users).where({ id: userId }).limit(1)[0]
-  );
-  if (!user) return null;
-
-  const jobs = await safeQuery(
-    db.select().from(schema.jobs).where({ assignedTo: userId })
-  );
-  const completedJobs = ((jobs as any[]) || []).filter((j: any) => j.status === "done" && j.completedAt);
-
-  const totalPoints = (user as any).pointsTotal || 0;
-  const pointsThisWeek = completedJobs
-    .filter((j: any) => new Date(j.completedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
-    .reduce((sum: number, j: any) => sum + (j.points || 0), 0);
-
-  return {
-    user,
-    totalPoints,
-    jobsCompleted: completedJobs.length,
-    pointsThisWeek,
-    averagePerDay: Math.round(pointsThisWeek / 7 * 10) / 10,
-  };
-}
-
-export async function getJobHistory(userId: string, limit = 20) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const jobs = await safeQuery(
-    db.select().from(schema.jobs).where({ assignedTo: userId })
-      .orderBy(sql`${schema.jobs.completedAt} DESC`).limit(limit)
-  );
-  return ((jobs as any[]) || []).filter((j: any) => j.status === "done");
-}
-
-export async function getWeeklyPoints(userId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const jobs = await safeQuery(
-    db.select().from(schema.jobs).where({ assignedTo: userId })
-      .orderBy(sql`${schema.jobs.completedAt} ASC`)
-  );
-  return ((jobs as any[]) || [])
-    .filter((j: any) => j.status === "done" && j.completedAt && new Date(j.completedAt) >= sevenDaysAgo)
-    .map((j: any) => ({
-      date: new Date(j.completedAt).toISOString().split("T")[0],
-      points: j.points || 0,
-    }));
-}
-
-// ─── Swap/Trade Rotations ─────────────────────────────────────────────
-
-export async function swapRotationEntries(
-  familyId: string,
-  rotationId1: string,
-  rotationId2: string,
-  userId?: string,
-): Promise<any> {
-  const db = await ensureDb();
-  if (!db) return null;
-
-  try {
-    const rotation1 = await safeQuery(
-      db.select().from(schema.rotations).where({ id: rotationId1 }).limit(1)[0]
-    );
-    const rotation2 = await safeQuery(
-      db.select().from(schema.rotations).where({ id: rotationId2 }).limit(1)[0]
-    );
-
-    if (!rotation1 || !rotation2) return null;
-
-    // Verify both rotations belong to the same slate
-    if ((rotation1 as any).slateId !== (rotation2 as any).slateId) {
-      error({ rotationId1, rotationId2 }, `Cannot swap rotations from different slates: ${rotationId1} vs ${rotationId2}`);
-      throw new Error("Cannot swap rotations from different slates");
-    }
-
-    // Swap the order values
-    const tempOrder = (rotation1 as any).order;
-    await safeQuery(
-      db.update(schema.rotations)
-        .set({ order: (rotation2 as any).order })
-        .where({ id: rotationId1 })
-    );
-
-    await safeQuery(
-      db.update(schema.rotations)
-        .set({ order: tempOrder })
-        .where({ id: rotationId2 })
-    );
-
-    // Create history entry
-    if (userId) {
-      try {
-        await safeQuery(
-          rawInsert("job_history", {
-            id: `jh-swap-${Date.now()}`,
-            job_id: "swap",
-            action: "rotation_swap",
-            details: `Swapped rotation entries ${rotationId1} and ${rotationId2}`,
-            user_id: userId,
-            created_at: nowISO(),
-          })
-        );
-      } catch (historyErr) {
-        error({ err: historyErr }, "Failed to write swap history");
-      }
-    }
-
-    return { success: true };
-  } catch (err) {
-    error({ err: err }, "swapRotationEntries failed");
-    throw error;
-  }
-}
-
-export async function getRotationSchedule(
-  slateId: string,
-  startDate: Date,
-  endDate: Date,
-): Promise<any[]> {
-  const db = await ensureDb();
-  if (!db) return [];
-
-  const rotations = await safeQuery(
-    db.select().from(schema.rotations).where({ slateId })
-  );
-
-  if (!rotations || (rotations as any[]).length === 0) return [];
-
-  // Use pure rotation logic to calculate schedule
-  const { getRotationSchedule: getRotSchedule } = await import("@/lib/rotation");
-  return getRotSchedule(rotations as any[], slateId, startDate, endDate);
-}
-
-export async function getUpcomingAssignments(
-  familyId: string,
-  daysAhead: number = 30,
-): Promise<any[]> {
-  const db = await ensureDb();
-  if (!db) return [];
-
-  const slates = await safeQuery(
-    db.select().from(schema.slates).where({ familyId })
-  );
-
-  if (!slates || (slates as any[]).length === 0) return [];
-
-  const schedule: any[] = [];
-  const today = new Date();
-
-  for (const slate of slates as any[]) {
-    const rotations = await safeQuery(
-      db.select().from(schema.rotations).where({ slateId: (slate as any).id })
-    );
-
-    if (!rotations || (rotations as any[]).length === 0) continue;
-
-    const { getUpcomingAssignments: getUpcoming } = await import("@/lib/rotation");
-    const upcoming = getUpcoming(rotations as any[], (slate as any).id, today, daysAhead);
-    schedule.push({ slateId: (slate as any).id, assignments: upcoming });
-  }
-
-  return schedule;
-}
-
-// ─── Tags ───────────────────────────────────────────────────────────
-
+// ─── Tags ──────────────────────────────────────────────────────────
 export async function getTagsByFamily(familyId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select().from(schema.tags).where({ familyId })
-  );
-  return (res as any[]) || [];
+  const rawDb = await ensureDb();
+  if (!rawDb) return [];
+  const tags = rawDb.prepare(`SELECT * FROM tags WHERE family_id = ? ORDER BY name`).all(familyId) as any[];
+  return tags || [];
 }
 
-export async function createTag(data: Insertable<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  const res = await safeQuery(
-    rawInsert("tags", { ...data, id: `tag-${Date.now()}`, created_at: nowISO(), updated_at: nowISO() })
-  );
+export async function createTag(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+  const id = `tag-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO tags (id, family_id, name, color, created_at, updated_at) VALUES (?, ?, ?, 'blue', ?, ?)`
+  ).run(id, data.family_id, data.name, now, now);
+  const res = rawDb.prepare(`SELECT * FROM tags WHERE id = ?`).get(id) as any;
   return res || null;
 }
 
 export async function updateTag(id: string, data: Partial<any>) {
-  const db = await ensureDb();
-  if (!db) return null;
-  return rawUpdate("tags", data, "id", id) || null;
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const updates: string[] = ["updated_at = ?"];
+  const values: any[] = [nowISO()];
+  if (data.name !== undefined) { updates.push("name = ?"); values.push(data.name); }
+  if (data.color !== undefined) { updates.push("color = ?"); values.push(data.color); }
+  values.push(id);
+  rawDb.prepare(`UPDATE tags SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+  const res = rawDb.prepare(`SELECT * FROM tags WHERE id = ?`).get(id) as any;
+  return res || null;
 }
 
 export async function deleteTag(id: string) {
-  const db = await ensureDb();
-  if (!db) return false;
-  
-  // Use cascade delete via foreign keys
-  await Promise.all([
-    safeQuery(rawDeleteWhere("task_tags", [{ col: "tag_id", val: id }])),
-    safeQuery(rawDeleteWhere("slate_tags", [{ col: "tag_id", val: id }]))
-  ]);
-  
+  const rawDb = await ensureDb();
+  if (!rawDb) return false;
+  rawDb.prepare(`DELETE FROM task_tags WHERE tag_id = ?`).run(id);
+  rawDb.prepare(`DELETE FROM tags WHERE id = ?`).run(id);
   return true;
 }
 
-export async function getTaskTagIds(taskId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select({ tagId: schema.taskTags.tagId })
-      .from(schema.taskTags)
-      .where({ taskId })
-  );
-  return (res as any[])?.map((r: any) => r.tagId) || [];
+// ─── Invites ──────────────────────────────────────────────────────
+export async function getInviteByCode(code: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const invite = rawDb.prepare(`SELECT * FROM invites WHERE code = ?`).get(code) as any;
+  return invite || null;
 }
 
-export async function setTaskTags(taskId: string, tagIds: string[]) {
-  const db = await ensureDb();
-  if (!db) return false;
-  
-  // Remove existing tags
-  await safeQuery(rawDeleteWhere("task_tags", [{ col: "task_id", val: taskId }]));
-  
-  // Add new tags
-  if (tagIds.length === 0) return true;
-  
-  for (const tagId of tagIds) {
-    await rawInsert("task_tags", {
-      id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      task_id: taskId,
-      tag_id: tagId,
-    });
+export async function createInvite(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = data.created_at || nowISO();
+  const updated_at = data.updated_at || now;
+  const expires_at = data.expires_at ? new Date(data.expires_at).toISOString() : null;
+  rawDb.prepare(
+    `INSERT INTO invites (id, family_id, code, role, expires_at, used, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(data.id, data.familyId, data.code, data.role || "child", expires_at, data.used || 0, now, updated_at);
+  const res = rawDb.prepare(`SELECT * FROM invites WHERE id = ?`).get(data.id) as any;
+  return res || null;
+}
+
+export async function deleteInvite(id: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return false;
+  rawDb.prepare(`DELETE FROM invites WHERE id = ?`).run(id);
+  return true;
+}
+
+// ─── Job Status Transitions ──────────────────────────────────────
+export async function updateJobStatus(jobId: string, newStatus: string, userId: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+
+  const job = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+  if (!job) return null;
+
+  const validTransitions: Record<string, string[]> = {
+    todo: ["doing", "done"],
+    doing: ["done", "todo", "under_review"],
+    under_review: ["doing", "done"],
+  };
+
+  if (!validTransitions[job.status]?.includes(newStatus)) {
+    return { error: `Invalid transition from ${job.status} to ${newStatus}` };
   }
-  
-  return true;
+
+  const historyId = `jh-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO job_history (id, job_id, action, details, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(historyId, jobId, `status_${job.status}_to_${newStatus}`, `Status changed from ${job.status} to ${newStatus}`, userId, now);
+
+  const updateFields: string[] = ["status = ?", "updated_at = ?"];
+  const values: any[] = [newStatus, now];
+  if (newStatus === "done") { updateFields.push("completed_at = ?"); values.push(now); }
+  values.push(jobId);
+  rawDb.prepare(`UPDATE jobs SET ${updateFields.join(", ")} WHERE id = ?`).run(...values);
+
+  const updatedJob = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+  return updatedJob || null;
 }
 
-export async function getSlateTags(slateId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  const res = await safeQuery(
-    db.select({ tagId: schema.slateTags.tagId })
-      .from(schema.slateTags)
-      .where({ slateId })
-  );
-  return (res as any[])?.map((r: any) => r.tagId) || [];
+// ─── List Tasks ──────────────────────────────────────────────────
+export async function getListBySlateAndDate(slateId: string, date: Date) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const startStr = date.toISOString().split("T")[0];
+  const res = rawDb.prepare(
+    `SELECT * FROM lists WHERE slate_id = ? AND start_date <= ? ORDER BY start_date DESC LIMIT 1`
+  ).get(slateId, startStr) as any;
+  return res || null;
 }
 
-export async function setSlateTags(slateId: string, tagIds: string[]) {
-  const db = await ensureDb();
-  if (!db) return false;
-  
-  // Remove existing tags
-  await safeQuery(rawDeleteWhere("slate_tags", [{ col: "slate_id", val: slateId }]));
-  
-  // Add new tags
-  if (tagIds.length === 0) return true;
-  
-  for (const tagId of tagIds) {
-    await rawInsert("slate_tags", {
-      id: `stag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      slate_id: slateId,
-      tag_id: tagId,
-    });
-  }
-  
-  return true;
+export async function getRotationsBySlate(slateId: string) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return [];
+  const rotations = rawDb.prepare(`SELECT * FROM rotations WHERE slate_id = ?`).all(slateId) as any[];
+  return rotations || [];
 }
 
-// ─── Core Slate Task Resolution with Tag Auto-Inclusion ─────────────
+export async function createListTask(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const id = `ltask-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO list_tasks (id, list_id, slate_task_id, points_override) VALUES (?, ?, ?, ?)`
+  ).run(id, data.listId, data.slateTaskId, data.pointsOverride || 0);
+  const res = rawDb.prepare(`SELECT * FROM list_tasks WHERE id = ?`).get(id) as any;
+  return res || null;
+}
+
+export async function createJob(data: any) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const now = nowISO();
+  const id = `job-${Date.now()}`;
+  rawDb.prepare(
+    `INSERT INTO jobs (id, list_id, slate_task_id, assigned_to, name, points, status, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?)`
+  ).run(id, data.listId, data.slateTaskId, data.assignedTo || null, data.name || "", data.points || 0,
+    data.dueDate?.toISOString() || now, now, now);
+  const res = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(id) as any;
+  return res || null;
+}
 
 export async function resolveSlateTaskSet(slateId: string) {
-  const db = await ensureDb();
-  if (!db) return [];
-  
-  // Fetch explicit slate tasks (explicit assignments)
-  const explicitTasksResult = await safeQuery(
-    db.select({
-      taskId: schema.slateTasks.taskId,
-      pointsOverride: schema.slateTasks.pointsOverride,
-      order: schema.slateTasks.order,
-      isExplicit: sql`1`,
-    }).from(schema.slateTasks).where({ slateId })
-  );
-  
+  const rawDb = await ensureDb();
+  if (!rawDb) return [];
+
+  // Fetch explicit slate tasks
+  const explicitTasksResult = rawDb.prepare(
+    `SELECT task_id, points_override, "order" FROM slate_tasks WHERE slate_id = ?`
+  ).all(slateId) as any[];
+
   // Fetch slate's tags
-  const slateTagIds = await getSlateTags(slateId);
-  
+  const slateTagIds = rawDb.prepare(`SELECT tag_id FROM slate_tags WHERE slate_id = ?`).all(slateId) as any[];
+  const tagIdList = (slateTagIds || []).map((t: any) => t.tag_id);
+
   // If no explicit tasks and no tags, return empty
-  const explicitTasks = (explicitTasksResult || []) as any[];
-  if (explicitTasks.length === 0 && slateTagIds.length === 0) {
-    return [];
-  }
-  
-  // Fetch tag-matched tasks (auto-inclusion by tag)
+  if ((explicitTasksResult?.length || 0) === 0 && tagIdList.length === 0) return [];
+
+  // Fetch tag-matched tasks
   const tagMatchedTasks: Array<{ taskId: string; points: number }> = [];
-  
-  if (slateTagIds.length > 0) {
-    const placeholders = slateTagIds.map(() => '?').join(',');
-    const tagPlaceholders = slateTagIds.map(() => '?').join(',');
-    
-    const tasksWithTags = await safeQuery(
-      db.select({
-        taskId: schema.tasks.id,
-        points: schema.tasks.points,
-      })
-        .from(schema.tasks)
-        .innerJoin(schema.taskTags, eq(schema.tasks.id, schema.taskTags.taskId))
-        .where(sql`(${placeholders}, ${tagPlaceholders})`)
-    );
-    
-    if (tasksWithTags) {
-      tagMatchedTasks.push(...(tasksWithTags as any[]));
-    }
+  if (tagIdList.length > 0) {
+    const placeholders = tagIdList.map(() => "?").join(",");
+    const matched = rawDb.prepare(
+      `SELECT t.id as task_id, t.points FROM tasks t INNER JOIN task_tags tt ON t.id = tt.task_id WHERE tt.tag_id IN (${placeholders})`
+    ).all(...tagIdList) as any[];
+    if (matched) tagMatchedTasks.push(...matched);
   }
-  
+
   // Dedupe by taskId: explicit rows take priority over tag-matched
   const result = new Map<string, any>();
-  
-  // First add explicit tasks
-  for (const task of explicitTasks) {
-    result.set(task.taskId, {
-      taskId: task.taskId,
-      pointsOverride: task.pointsOverride,
-      order: task.order,
-      isExplicit: true,
-    });
+  for (const task of (explicitTasksResult || [])) {
+    result.set(task.task_id, { taskId: task.task_id, pointsOverride: task.points_override, order: task.order, isExplicit: true });
   }
-  
-  // Then add tag-matched tasks (only if not already explicit)
   for (const task of tagMatchedTasks) {
     if (!result.has(task.taskId)) {
-      result.set(task.taskId, {
-        taskId: task.taskId,
-        pointsOverride: task.points,
-        order: 0,
-        isExplicit: false,
-      });
+      result.set(task.taskId, { taskId: task.taskId, pointsOverride: task.points, order: 0, isExplicit: false });
     }
   }
-  
+
   const slateTasks = Array.from(result.values());
-  
-  // Sort by explicit=true first, then by order
-  slateTasks.sort((a, b) => {
+  slateTasks.sort((a: any, b: any) => {
     if (a.isExplicit && !b.isExplicit) return -1;
     if (!a.isExplicit && b.isExplicit) return 1;
     return a.order - b.order;
   });
-  
+
   return slateTasks;
 }
-

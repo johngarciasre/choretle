@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTasksByFamily, createTask, updateTask, deleteTask } from "@/lib/db/service";
-import { initDb, rawInsert, rawDeleteWhere } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
@@ -19,10 +16,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const tagIds = searchParams.get("tagIds");
 
-    let tasks = await getTasksByFamily(familyId);
+    // Get tasks using raw SQL (Drizzle ORM fails on SQLite)
+    let tasks = rawDb.prepare(`SELECT * FROM tasks WHERE family_id = ?`).all(familyId) as any[];
 
     // Filter by tags if provided
     if (tagIds) {
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(tasks);
   } catch (err) {
-    error({ err: err }, "Get tasks failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Get tasks failed");
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
 }
@@ -42,11 +45,6 @@ export async function POST(request: NextRequest) {
     const auth = verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     const body = await request.json();
@@ -62,36 +60,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "title is required" }, { status: 400 });
     }
 
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
     // Create task
     const taskId = `task-${Date.now()}`;
-    const task = await rawInsert("tasks", {
-      id: taskId,
-      family_id: familyId,
-      name: title || name || "",
-      description: description || null,
-      points: points || 0,
-      icon: icon || null,
-      archtype: archtype || "job",
-      is_active: true,
-      verify_required: verifyRequired ?? false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+    rawDb.prepare(
+      `INSERT INTO tasks (id, family_id, name, description, points, icon, archtype, is_active, verify_required, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      taskId,
+      familyId,
+      title || name || "",
+      description || null,
+      points || 0,
+      icon || null,
+      archtype || "job",
+      true,
+      verifyRequired ?? false,
+      new Date().toISOString(),
+      new Date().toISOString(),
+    );
 
     // Handle tags if provided
     if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
-      for (const tagId of tagIds) {
-        await rawInsert("task_tags", {
-          id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          task_id: taskId,
-          tag_id: tagId,
-        });
+      for (let i = 0; i < tagIds.length; i++) {
+        rawDb.prepare(
+          `INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`
+        ).run(
+          `tt-${Date.now()}-${i}`,
+          taskId,
+          tagIds[i],
+        );
       }
     }
 
+    const task = rawDb.prepare(`SELECT * FROM tasks WHERE id = ?`).get(taskId) as any;
+
     return NextResponse.json(task);
   } catch (err) {
-    error({ err: err }, "Create task failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Create task failed");
     return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
   }
 }
@@ -101,11 +110,6 @@ export async function PUT(request: NextRequest) {
     const auth = verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     const body = await request.json();
@@ -119,40 +123,48 @@ export async function PUT(request: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
     // Update task fields
-    await db.update(schema.tasks)
-      .set({
-        name: title || name,
-        description,
-        points,
-        icon,
-        archtype,
-        isActive,
-        verifyRequired,
-      })
-      .where(eq(schema.tasks.id, id));
+    rawDb.prepare(
+      `UPDATE tasks SET name = ?, description = ?, points = ?, icon = ?, archtype = ?, is_active = ?, verify_required = ? WHERE id = ?`
+    ).run(
+      title || name,
+      description || null,
+      points,
+      icon || null,
+      archtype,
+      isActive !== false,
+      verifyRequired ?? false,
+      id,
+    );
 
     // Handle tags if provided
     if (tagIds !== undefined) {
-      await rawDeleteWhere("task_tags", [{ col: "task_id", val: id }]);
+      rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ?`).run(id);
 
       if (Array.isArray(tagIds) && tagIds.length > 0) {
-        for (const tagId of tagIds) {
-          await rawInsert("task_tags", {
-            id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            task_id: id,
-            tag_id: tagId,
-          });
+        for (let i = 0; i < tagIds.length; i++) {
+          rawDb.prepare(
+            `INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`
+          ).run(
+            `tt-${Date.now()}-${i}`,
+            id,
+            tagIds[i],
+          );
         }
       }
     }
 
     // Fetch updated task
-    const updatedTask = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1);
+    const updatedTask = rawDb.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id) as any;
 
-    return NextResponse.json(updatedTask[0]);
+    return NextResponse.json(updatedTask);
   } catch (err) {
-    error({ err: err }, "Update task failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Update task failed");
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }
@@ -164,29 +176,29 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
-    }
-
-    const body = await request.json();
-    const { id } = body;
-
     // Accept familyId from query param as fallback (dev mode without middleware headers)
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) {
       return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
+    const body = await request.json();
+    const { id } = body;
+
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
     // Delete task tags first (cascade via FK constraints in PostgreSQL)
-    await rawDeleteWhere("task_tags", [{ col: "task_id", val: id }]);
-    await rawDeleteWhere("tasks", [{ col: "id", val: id }]);
+    rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ?`).run(id);
+    rawDb.prepare(`DELETE FROM tasks WHERE id = ?`).run(id);
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    error({ err: err }, "Delete task failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Delete task failed");
     return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }

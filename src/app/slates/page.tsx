@@ -37,44 +37,30 @@ async function getFamilyId(): Promise<string> {
   const res = await fetch("/api/auth/me");
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
-  if (!data.familyId) throw new Error("No family ID");
+  if (data.authenticated === false) throw new Error("Not authenticated");
+  if (!data.familyId) throw new Error(data.authenticated ? "No family ID" : "Not authenticated");
   return data.familyId;
 }
 
 const fetchSlates = async () => {
-  try {
-    const fid = await getFamilyId();
-    const res = await fetch(`/api/slates?familyId=${fid}`);
-    if (!res.ok) throw new Error("Failed to fetch slates");
-    return await res.json();
-  } catch (err) {
-    error({ err: err }, "Fetch slates failed");
-    return [];
-  }
+  const fid = await getFamilyId();
+  const res = await fetch(`/api/slates?familyId=${fid}`);
+  if (!res.ok) throw new Error("Failed to fetch slates");
+  return await res.json();
 };
 
 const fetchTasks = async () => {
-  try {
-    const fid = await getFamilyId();
-    const res = await fetch(`/api/tasks?familyId=${fid}`);
-    if (!res.ok) throw new Error("Failed to fetch tasks");
-    return await res.json();
-  } catch (err) {
-    error({ err: err }, "Fetch tasks failed");
-    return [];
-  }
+  const fid = await getFamilyId();
+  const res = await fetch(`/api/tasks?familyId=${fid}`);
+  if (!res.ok) throw new Error("Failed to fetch tasks");
+  return await res.json();
 };
 
 const fetchTags = async () => {
-  try {
-    const fid = await getFamilyId();
-    const res = await fetch(`/api/tags?familyId=${fid}`);
-    if (!res.ok) throw new Error("Failed to fetch tags");
-    return await res.json();
-  } catch (err) {
-    error({ err: err }, "Fetch tags failed");
-    return [];
-  }
+  const fid = await getFamilyId();
+  const res = await fetch(`/api/tags?familyId=${fid}`);
+  if (!res.ok) throw new Error("Failed to fetch tags");
+  return await res.json();
 };
 
 export default function SlatesPage() {
@@ -83,6 +69,7 @@ export default function SlatesPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notAuthenticated, setNotAuthenticated] = useState(false);
 
   const [newSlateName, setNewSlateName] = useState("");
 
@@ -96,17 +83,23 @@ export default function SlatesPage() {
   const dataLoadedRef = useRef(false);
 
   useEffect(() => {
+    if (!authChecked) return;
     if (dataLoadedRef.current) return;
     dataLoadedRef.current = true;
-    if (!authChecked) return;
     typeof window !== "undefined" && (document.title = "Choretle - Slates");
     Promise.all([fetchSlates(), fetchTasks(), fetchTags()]).then(([slates, tasks, tags]) => {
+      if (!slates || !tasks || !tags) {
+        setNotAuthenticated(true);
+        return;
+      }
       setSlates(slates);
       setTasks(tasks);
       setTags(tags);
       setLoading(false);
+    }).catch(() => {
+      setNotAuthenticated(true);
     });
-  }, []);
+  }, [authChecked]);
 
   async function handleCreateSlate() {
     if (!newSlateName.trim()) return;
@@ -221,9 +214,27 @@ export default function SlatesPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Slates" subtitle="Create and configure chore slates with tasks and tags" />
+      {notAuthenticated ? (
+        <main className="flex items-center justify-center min-h-[60vh]">
+          <Card accent="coral" className="w-full max-w-md p-8 space-y-4">
+            <h1 className="font-display text-2xl font-bold text-center text-ink">Not Signed In</h1>
+            <p className="text-sm text-ink/60 text-center">
+              You need to sign in to view slates. Please sign up or sign in first.
+            </p>
+            <div className="text-center mt-4">
+              <Link href="/auth/signin">
+                <Button variant="primary" size="lg" className="w-full">Sign In / Sign Up</Button>
+              </Link>
+            </div>
+          </Card>
+        </main>
+      ) : loading ? (
+        <PageLoader />
+      ) : (
+        <>
+          <PageHeader title="Slates" subtitle="Create and configure chore slates with tasks and tags" />
 
-      <main className="space-y-8">
+          <main className="space-y-8">
         {/* Create Slate */}
         <section>
           <Card accent="coral" className="p-6 space-y-4">
@@ -322,6 +333,8 @@ export default function SlatesPage() {
           </div>
         </div>
       )}
+          </>
+        )}
     </PageShell>
   );
 }

@@ -1,368 +1,173 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME, parseDevSession } from "@/lib/dev-auth";
-import { initDb, rawInsert } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq, sql, count } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { error, info } from "@/lib/logger.server";
 
-/**
- * Check if Supabase credentials are properly configured.
- * Requires both URL and anon key to be set.
- */
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
-/**
- * Determine the role for a new user: first user gets 'admin', others get 'child'.
- */
-async function getNewUserRole(db: any, familyId: string | null): Promise<string> {
-  const whereClause = familyId ? eq(schema.users.familyId, familyId) : sql`1=1`;
-  const result = await db.select().from(schema.users).where(whereClause).limit(0);
-  // Use count query to check if any users exist
-  const countResult = await db.select({ count: count() }).from(schema.users).where(whereClause).limit(1);
-  return (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
+async function getNewUserRole(rawDb: any, familyId: string | null): Promise<string> {
+  const countResult = rawDb.prepare(
+    familyId ? `SELECT COUNT(*) as cnt FROM users WHERE family_id = ?` : `SELECT COUNT(*) as cnt FROM users`
+  ).get(familyId || undefined) as any;
+  return (countResult?.cnt ?? 0) === 0 ? "admin" : "child";
 }
 
-/**
- * Sign up a new user with email and password using Supabase Auth.
- * In dev mode (AUTH_MODE=dev), uses mock users instead.
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
-    // ─── Dev Mode: Create mock user ─────────────────────────────
+
     if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
       const name = body?.name || "Dev User";
 
-      // Check if any users exist in DB to determine role
       let role = "child";
       let familyId: string | null = null;
       try {
-        const db = await initDb();
-        if (db) {
-          // Count existing users across all families
-          const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
-          role = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
-
-          // Create a default family for the new user if none exists
-          const countFamilies = await db.select({ count: count() }).from(schema.families).limit(1);
-          if ((countFamilies[0]?.count ?? 0) === 0) {
+        const rawDb = getRawDb();
+        if (rawDb) {
+          role = await getNewUserRole(rawDb, null);
+          const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
+          if ((countFamilies?.cnt ?? 0) === 0) {
             const familySlug = `family-${Date.now()}`;
-            await rawInsert("families", {
-              id: `family-${Date.now()}`,
-              name: `${name}'s Family`,
-              slug: familySlug,
-              week_start_day: 0,
-              teams_enabled: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-            // Update role to reflect first user in this family
+            const now = new Date().toISOString();
+            rawDb.prepare(
+              `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
+            ).run(`family-${Date.now()}`, `${name}\'s Family`, familySlug, now, now);
             role = "admin";
           }
         }
       } catch (dbError) {
-        // Silently fail — user is created in Supabase Auth anyway
+        // Silently fail
       }
 
-      // Generate a random fake user ID for dev mode
       const userId = `dev-user-${crypto.randomUUID()}`;
 
-      // Create DB user record if database is available
       try {
-        const db = await initDb();
-        if (db) {
-          // Find or create family
+        const rawDb = getRawDb();
+        if (rawDb) {
           let targetFamilyId: string | null = null;
-          const families = await db.select().from(schema.families).limit(1);
-          if (families[0]) {
-            targetFamilyId = families[0].id;
-          } else {
-            const slug = `family-${Date.now()}`;
-            const newFamily = await rawInsert("families", {
-              id: `family-${Date.now()}`,
-              name: `${name}'s Family`,
-              slug,
-              week_start_day: 0,
-              teams_enabled: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-            targetFamilyId = newFamily?.id || null;
+          const families = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
+          if (families) { targetFamilyId = families.id; }
+          else {
+            const familySlug = `family-${Date.now()}`;
+            const now = new Date().toISOString();
+            rawDb.prepare(
+              `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
+            ).run(`family-${Date.now()}`, `${name}\'s Family`, familySlug, now, now);
+            targetFamilyId = `family-${Date.now()}`;
           }
-
-          await rawInsert("users", {
-            id: userId,
-            email: email || null,
-            name: name,
-            role: role,
-            avatar_url: null,
-            family_id: targetFamilyId,
-            points_total: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-
           familyId = targetFamilyId;
+
+          const existingUser = rawDb.prepare(`SELECT role FROM users WHERE id = ?`).get(userId) as any;
+          if (!existingUser) {
+            rawDb.prepare(
+              `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?, ?)`
+            ).run(userId, email, name, role || "child", targetFamilyId, new Date().toISOString(), new Date().toISOString());
+          } else if (existingUser.role !== "admin") {
+            rawDb.prepare(
+              `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?, ?)`
+            ).run(userId, email, name, existingUser.role, targetFamilyId, new Date().toISOString(), new Date().toISOString());
+          }
         }
       } catch (dbError) {
-        // Silently fail — user is created in Supabase Auth anyway
+        error({ err: dbError }, "[SIGNUP] Database operations failed");
       }
 
-      const session = createDevSession({ userId });
-      session.user.role = role;
-      session.user.familyId = familyId;
-
+      // Set dev session cookie
+      const sessionObj = { user: { id: userId, email: email || "", name: name || "Dev User", role: role || "child", familyId } };
+      const encoded = encodeURIComponent(JSON.stringify(sessionObj));
       const response = NextResponse.json(
-        { 
-          ok: true, 
-          userId: session.user.id,
-          email: session.user.email,
-          message: "Sign up successful (dev mode)",
-          requiresEmailConfirmation: false,
-        },
+        { ok: true, userId, email, familyId: familyId || null,
+          message: "Sign up successful. Welcome to Choretle!", requiresEmailConfirmation: false },
         { status: 200 }
       );
-
-      setDevSessionCookie(response.headers, session);
+      response.headers.set("set-cookie", `dev-session=${encoded}; path=/; secure=false; httpOnly=true`);
       return response;
     }
 
-    // ─── Production Mode: Use Supabase Auth ─────────────────────
-
+    // Production Mode: Use Supabase Auth
     if (!hasSupabaseConfig()) {
-      error({ url: !!process.env.NEXT_PUBLIC_SUPABASE_URL, anonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY }, "[SIGNUP] Missing Supabase credentials");
-      return NextResponse.json(
-        { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
-        { status: 500 }
-      );
-    }
-
-    // Validate input - log what we received
-    info({ body }, "[SIGNUP] Received body");
-    
-    if (!body?.email || !body?.password || !body?.name) {
-      return NextResponse.json(
-        { error: "Email, password, and name are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Server configuration error: Supabase credentials not found." }, { status: 500 });
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
-    if (!supabase) {
-      error("Failed to initialize Supabase client");
-      return NextResponse.json(
-        { error: "Failed to initialize authentication service" },
-        { status: 500 }
-      );
-    }
-
-    // Sign up with Supabase Auth
-    const signUpResult = await supabase.auth.signUp({
-      email: body.email.toLowerCase().trim(),
-      password: body.password,
-      options: {
-        data: {
-          name: body.name,
-        },
-      },
+    const { data: { user, session } } = await supabase.auth.signUp({
+      email: body?.email || "",
+      password: body?.password || "",
+      options: { data: { name: body?.name || "", role: "child" } },
     });
 
-    if (signUpResult.error) {
-      info({ message: signUpResult.error.message }, "[SIGNUP] Supabase error");
-      
-      if (signUpResult.error.message?.includes("Email already registered")) {
-        return NextResponse.json(
-          { error: "An account with this email already exists" },
-          { status: 409 }
-        );
-      }
-      
-      if (signUpResult.error.message?.includes("Weak password")) {
-        return NextResponse.json(
-          { error: "Password is too weak. Please use at least 6 characters." },
-          { status: 400 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: signUpResult.error.message || "Failed to sign up" },
-        { status: 400 }
-      );
+    if (!user) {
+      return NextResponse.json({ error: "Sign up failed" }, { status: 500 });
     }
 
-    if (!signUpResult.data?.user) {
-      error("No user created in Supabase Auth");
-      return NextResponse.json(
-        { error: "User registration failed" },
-        { status: 500 }
-      );
-    }
-
-    const userId = signUpResult.data.user.id;
-    const userEmail = signUpResult.data.user.email || null;
-
-    // Create corresponding row in users table and ensure family membership exists
-    let familyId: string | null = null;
+    // Sync user to our database
     try {
-      const db = await initDb();
-      if (db) {
-        // Check if user already has a family assignment
-        const existingUserWithFamily = await db.select().from(schema.users).where(
-          eq(schema.users.id, userId),
-          sql`${schema.users.familyId} IS NOT NULL`
-        ).limit(1)[0];
-
-        if (!existingUserWithFamily) {
-          // Check if any users exist to determine role (first user = admin)
-          const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
-          const role = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
-
-          // Create a default family for the new user
-          const familyName = body.name ? `${body.name}'s Family` : "My Family";
-          const familySlug = `family-${Date.now()}`;
-          
-          const newFamily = await rawInsert("families", {
-            id: `family-${Date.now()}`,
-            name: familyName,
-            slug: familySlug,
-            week_start_day: 0,
-            teams_enabled: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-          
-          familyId = newFamily?.id || null;
-
-          // Create or update user record in users table with correct role
-          await rawInsert("users", {
-            id: userId,
-            email: userEmail,
-            name: body.name,
-            role: role,
-            avatar_url: null,
-            family_id: familyId || null,
-            points_total: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-        } else {
-          familyId = existingUserWithFamily.familyId;
-
-          // Update role if user was previously child and this is now their first real signup
-          const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
-          if (existingUser && existingUser.role !== "admin") {
-            await rawInsert("users", {
-              id: userId,
-              email: userEmail,
-              name: body.name,
-              role: existingUser.role,
-              avatar_url: null,
-              family_id: familyId || null,
-              points_total: 0,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
+      const rawDb = getRawDb();
+      if (rawDb) {
+        const existingUser = rawDb.prepare(`SELECT role FROM users WHERE id = ?`).get(user.id) as any;
+        if (!existingUser) {
+          const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
+          let famId: string | null = null;
+          if ((countFamilies?.cnt ?? 0) === 0) {
+            const familySlug = `family-${Date.now()}`;
+            const now = new Date().toISOString();
+            rawDb.prepare(
+              `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
+            ).run(`family-${Date.now()}`, `${body?.name || ""}\'s Family`, familySlug, now, now);
+            famId = `family-${Date.now()}`;
+          } else {
+            const fam = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
+            famId = fam?.id || null;
           }
+
+          rawDb.prepare(
+            `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, 'child', NULL, ?, 0, ?, ?)`
+          ).run(user.id, user.email || "", body?.name || "", famId, new Date().toISOString(), new Date().toISOString());
         }
       }
     } catch (dbError) {
-      error({ err: dbError }, "[SIGNUP] Database operations failed");
-      // Silently fail - user is created in Supabase Auth anyway
+      error({ err: dbError }, "[SIGNUP] Database sync failed");
     }
 
     return NextResponse.json(
-      { 
-        ok: true, 
-        userId,
-        email: userEmail,
-        familyId: familyId || null,
-        message: "Sign up successful. Welcome to Choretle!",
-        requiresEmailConfirmation: false,
-      },
+      { ok: true, userId: user.id, email: user.email || "",
+        familyId: null, message: "Sign up successful. Welcome to Choretle!", requiresEmailConfirmation: false },
       { status: 200 }
     );
   } catch (err) {
-    error({ err: err }, "[SIGNUP] Unhandled error");
-    
-    if (err instanceof Error) {
-      return NextResponse.json(
-        { 
-          error: "An unexpected error occurred",
-          details: process.env.NODE_ENV === "development" ? err.message : undefined 
-        },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Sign up failed" },
-      { status: 500 }
-    );
+    error({ err: String(err), stack: (err as Error).stack }, "[SIGNUP] Unhandled error");
+    return NextResponse.json({ error: "An unexpected error occurred" }, { status: 500 });
   }
 }
 
-/**
- * GET endpoint for sign-up page (returns the current session if logged in).
- */
 export async function GET(request: NextRequest) {
   try {
-    // ─── Dev Mode: Check dev session cookie ─────────────────────
     if (process.env.AUTH_MODE === "dev") {
       const cookieHeader = request.headers.get("cookie") || "";
-      const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
-
-      if (!setCookie) {
-        return NextResponse.json({ authenticated: false });
-      }
-
+      const setCookie = cookieHeader.split(";").find((c: string) => c.includes(DEV_COOKIE_NAME));
+      if (!setCookie) return NextResponse.json({ authenticated: false });
       const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
       const user = parseDevSession(value);
-
       if (user) {
-        return NextResponse.json({
-          authenticated: true,
-          user: {
-            id: user.id,
-            email: user.email,
-            role: user.role || "child",
-            name: user.name || "",
-          },
-        });
+        return NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, role: user.role || "child", name: user.name || "" } });
       }
-
       return NextResponse.json({ authenticated: false });
     }
 
-    // ─── Production Mode: Use Supabase Auth ─────────────────────
-
     if (!hasSupabaseConfig()) {
-      return NextResponse.json(
-        { error: "Server configuration error: Supabase credentials not found. Please check environment variables." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Server configuration error: Supabase credentials not found." }, { status: 500 });
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
-    
     const { data: { session } } = await supabase.auth.getSession();
-
     if (session) {
-      return NextResponse.json({
-        authenticated: true,
-        user: {
-          id: session.user.id,
-          email: session.user.email,
-          role: session.user.user_metadata?.role || "child",
-          name: session.user.user_metadata?.name || "",
-        },
-      });
+      return NextResponse.json({ authenticated: true, user: { id: session.user.id, email: session.user.email,
+        role: session.user.user_metadata?.role || "child", name: session.user.user_metadata?.name || "" } });
     }
-
     return NextResponse.json({ authenticated: false });
   } catch (err) {
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });

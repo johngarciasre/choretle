@@ -193,6 +193,19 @@ export async function initDb(): Promise<any> {
 }
 
 export function getRawDb(): Database.Database | null {
+  if (!_rawDb) {
+    // Synchronous init — better-sqlite3 is sync, so we can safely inline it here
+    const dbPath = process.env.NODE_ENV === "test" ? ":memory:" : (process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:");
+    try {
+      const Database = require("better-sqlite3");
+      _rawDb = new Database(dbPath);
+      createTables(_rawDb!);
+      _db = construct(_rawDb!, schema as any);
+    } catch (err) {
+      error({ err: String(err) }, "[DB] Failed to initialize SQLite in getRawDb");
+      return null;
+    }
+  }
   return _rawDb;
 }
 

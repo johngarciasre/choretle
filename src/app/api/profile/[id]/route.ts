@@ -1,176 +1,76 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as schema from "@/db/schema";
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
-import { initDb } from "@/db/drizzle";
+import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
-// ─── Auth Verification (handles both dev mode and production) ──
-async function verifyLocalAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
-  const auth = verifyAuth(request);
-  if (!auth) {
-    return { error: "No token provided" };
-  }
-  return { userId: auth.userId, familyId: auth.familyId };
-}
-
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const authResult = await verifyLocalAuth(request);
-    if ("error" in authResult) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 });
-    }
+    const auth = verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
-    const { userId, familyId } = authResult;
-    const resolvedUserId = (await params).id;
-    const targetUserId = resolvedUserId === "me" ? userId : resolvedUserId;
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const db = await initDb();
-    if (!db) {
-      throw new Error("Database not initialized");
-    }
+    const targetUserId = (await params).id;
 
-    // Get user profile data
-    const userProfileRows = await db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).limit(1);
-    const userProfile = userProfileRows[0];
+    // Verify user belongs to family
+    const userProfileRows = rawDb.prepare(`SELECT * FROM users WHERE id = ? AND family_id = ?`).get(targetUserId, familyId) as any;
+    if (!userProfileRows) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    if (!userProfile) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    // Fetch completed jobs with task info
+    const completedJobs = rawDb.prepare(
+      `SELECT j.*, t.name as task_name, t.points as task_points FROM jobs j LEFT JOIN tasks t ON j.slate_task_id = t.id WHERE j.assigned_to = ? AND j.status = 'done' ORDER BY j.completed_at DESC LIMIT 50`
+    ).all(targetUserId) as any[];
 
-    // Check if user belongs to the same family as authenticated user
-    if (userProfile.familyId !== familyId && userProfile.id !== userId) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
-    }
-
-    // Get completed jobs for this user
-    const completedJobs = await db.select({
-      job: schema.jobs,
-      task: schema.tasks,
-      slateTask: schema.slateTasks,
-    })
-      .from(schema.jobs)
-      .leftJoin(schema.slateTasks, eq(schema.jobs.slateTaskId, schema.slateTasks.id))
-      .leftJoin(schema.tasks, eq(schema.slateTasks.taskId, schema.tasks.id))
-      .where(
-        and(
-          eq(schema.jobs.status, "done"),
-          eq(schema.jobs.assignedTo, targetUserId),
-          sql`${schema.jobs.completedAt} IS NOT NULL`
-        )
-      )
-      .orderBy(desc(schema.jobs.completedAt));
-
-    // Get streaks for this user
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    const recentJobs = await db.select({
-      job: schema.jobs,
-      task: schema.tasks,
-    })
-      .from(schema.jobs)
-      .leftJoin(schema.tasks, eq(schema.jobs.slateTaskId, schema.tasks.id))
-      .where(
-        and(
-          eq(schema.jobs.status, "done"),
-          eq(schema.jobs.assignedTo, targetUserId),
-          gte(schema.jobs.completedAt, thirtyDaysAgo.toISOString())
-        )
-      )
-      .orderBy(desc(schema.jobs.completedAt));
+    // Fetch recent jobs (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentJobs = rawDb.prepare(
+      `SELECT j.*, t.name as task_name FROM jobs j LEFT JOIN tasks t ON j.slate_task_id = t.id WHERE j.assigned_to = ? AND j.created_at >= ? ORDER BY j.created_at DESC LIMIT 20`
+    ).all(targetUserId, thirtyDaysAgo.toISOString()) as any[];
 
     // Calculate streaks
-    let currentStreak = 0;
-    let longestStreak = 0;
-    const doneDates = new Set<string>();
+    const streakCount = (completedJobs || []).reduce((acc: number, job: any) => {
+      if (!job.completed_at) return acc;
+      return acc + 1;
+    }, 0);
 
-    for (const job of recentJobs as any[]) {
-      if (job.job.completedAt) {
-        const dateStr = job.job.completedAt.split("T")[0];
-        if (!doneDates.has(dateStr)) {
-          doneDates.add(dateStr);
-        }
-      }
-    }
-
-    // Calculate streaks by iterating backwards from today
-    const sortedDates = Array.from(doneDates).sort().reverse();
-    let streakStart = 0;
-
-    for (let i = 0; i < sortedDates.length; i++) {
-      const current = new Date(sortedDates[i]);
-      const expected = new Date(current.getTime() + streakStart * 24 * 60 * 60 * 1000);
-      if (current.toISOString().split("T")[0] === expected.toISOString().split("T")[0]) {
-        streakStart++;
-      } else {
-        break;
-      }
-    }
-
-    currentStreak = streakStart;
-    longestStreak = Math.max(currentStreak, longestStreak);
-
-    // Calculate total points and average
-    const totalPoints = (recentJobs as any[]).reduce((sum: number, j: any) => sum + (j.job.points || 0), 0);
-    const averagePointsPerJob = recentJobs.length > 0 ? totalPoints / recentJobs.length : 0;
-
-    // Get stats for the last 7 days
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-    const dailyStats = await db.select({
-      date: sql<string>`DATE(${schema.jobs.completedAt})`,
-      points: sql<number>`COALESCE(SUM(${schema.jobs.points}), 0)`,
-    })
-      .from(schema.jobs)
-      .where(
-        and(
-          eq(schema.jobs.status, "done"),
-          eq(schema.jobs.assignedTo, targetUserId),
-          gte(schema.jobs.completedAt, sevenDaysAgo.toISOString())
-        )
-      )
-      .groupBy(sql`DATE(${schema.jobs.completedAt})`);
-
-    // Build 7-day array with all days (including zero-point days)
-    const last7Days: { date: string; points: number }[] = [];
+    // Fetch daily stats for the last 7 days
+    const dailyStats: any[] = [];
     for (let i = 6; i >= 0; i--) {
-      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dateStr = date.toISOString().split("T")[0];
-      const dayData = (dailyStats as any[]).find((d: any) => d.date === dateStr);
-      last7Days.push({
-        date: dateStr,
-        points: dayData ? parseInt(dayData.points) : 0,
-      });
+      const day = new Date();
+      day.setDate(day.getDate() - i);
+      const dateStr = day.toISOString().split("T")[0];
+      const stats = rawDb.prepare(
+        `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done FROM jobs WHERE assigned_to = ? AND DATE(created_at) = ?`
+      ).get(targetUserId, dateStr) as any;
+      dailyStats.push({ date: dateStr, total: stats?.total || 0, done: stats?.done || 0 });
     }
-
-    const maxDayPoints = Math.max(...last7Days.map(d => d.points), 1);
 
     return NextResponse.json({
       user: {
-        id: userProfile.id,
-        email: userProfile.email,
-        name: userProfile.name,
-        role: userProfile.role,
-        avatarUrl: userProfile.avatarUrl,
-        familyId: userProfile.familyId,
-        pointsTotal: userProfile.pointsTotal || 0,
-        createdAt: userProfile.createdAt,
+        id: userProfileRows.id,
+        name: userProfileRows.name,
+        email: userProfileRows.email,
+        role: userProfileRows.role,
+        avatarUrl: userProfileRows.avatar_url,
+        pointsTotal: userProfileRows.points_total || 0,
+        streakCount,
       },
-      stats: {
-        totalPoints,
-        jobsCompleted: recentJobs.length,
-        averagePointsPerJob,
-        longestStreak,
-        dailyStats: last7Days,
-        maxDayPoints,
-      },
+      completedJobs: (completedJobs || []).map((j: any) => ({
+        id: j.id, name: j.name, status: j.status, taskName: j.task_name,
+        points: j.task_points || 0, completedAt: j.completed_at,
+      })),
+      recentJobs: (recentJobs || []).map((j: any) => ({
+        id: j.id, name: j.name, status: j.status, taskName: j.task_name,
+        createdAt: j.created_at,
+      })),
+      dailyStats,
     });
   } catch (err) {
-    error({ err }, "Profile GET failed");
-    if (err instanceof Error && err.message.includes("Database not initialized")) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
+    error({ err: String(err), stack: (err as Error).stack }, "Profile GET failed");
     return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
   }
 }

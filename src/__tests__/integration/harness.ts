@@ -236,9 +236,19 @@ export class TestHarness {
   }
 
   /**
+   * Sign up a new user (idempotent — safe to call even if they already exist).
+   */
+  async signUp(email: string, name?: string, password = "test"): Promise<MockResponse> {
+    return this.invokeHandler("/api/auth/signup", "POST", { email, name: name || email, password });
+  }
+
+  /**
    * Sign in as a specific user and update the jar.
+   * First attempts signup (idempotent) to ensure the user exists in dev mode.
    */
   async signIn(email: string, password = "test"): Promise<MockResponse> {
+    // Ensure user exists before signing in (dev mode requires pre-existing accounts)
+    await this.signUp(email, undefined, password);
     return this.invokeHandler("/api/auth/signin", "POST", { email, password });
   }
 

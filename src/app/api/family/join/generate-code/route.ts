@@ -1,79 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
-import { createInvite } from "@/lib/db/service";
-import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { generateInviteCode, isValidInviteCode } from "@/lib/invite-codes";
 
-/**
- * POST /api/family/join/generate-code
- * Generate a new invite code for the current user's family.
- */
 export async function POST(request: NextRequest) {
   try {
     const auth = verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    if (!auth.familyId) return NextResponse.json({ error: "User has no family" }, { status: 400 });
 
-    if (!auth.familyId) {
-      return NextResponse.json({ error: "User has no family" }, { status: 400 });
-    }
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    // Dynamic import to avoid bundling better-sqlite3 in client
-    const { initDb } = await import("@/db/drizzle");
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
+    const userRows = rawDb.prepare(`SELECT role FROM users WHERE id = ?`).get(auth.userId) as any;
+    if (!userRows || userRows.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
 
-    // Get user role to check admin access
-    const userRows = await db.select().from(schema.users).where(eq(schema.users.id, auth.userId)).limit(1);
-    const user = userRows[0];
-    if (!user || user.role !== "admin") {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const permanent = body?.permanent === true;
-
-    // Generate a unique code — retry if collision
     let code = generateInviteCode();
     let maxRetries = 10;
-
     while (maxRetries-- > 0) {
-      const existing = await db.select().from(schema.invites).where({ code }).limit(1);
-      if (!existing[0]) break;
+      const existing = rawDb.prepare(`SELECT id FROM invites WHERE code = ?`).get(code) as any;
+      if (!existing) break;
       code = generateInviteCode();
     }
 
-    // Validate the generated code
-    if (!isValidInviteCode(code)) {
-      return NextResponse.json({ error: "Failed to generate valid invite code" }, { status: 500 });
-    }
+    if (!isValidInviteCode(code)) return NextResponse.json({ error: "Failed to generate valid invite code" }, { status: 500 });
 
-    // Calculate expiry (6 months from now, or null if permanent)
-    const expiresAt = permanent ? null : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = false ? null : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+    const inviteId = `invite-${Date.now()}`;
 
-    const invite = await createInvite({
-      id: `invite-${Date.now()}`,
-      familyId: auth.familyId,
-      code,
-      role: "child",
-      expiresAt,
-      used: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    rawDb.prepare(
+      `INSERT INTO invites (id, family_id, code, role, expires_at, used, created_at, updated_at) VALUES (?, ?, ?, 'child', ?, 0, ?, ?)`
+    ).run(inviteId, auth.familyId, code, expiresAt, now, now);
 
-    if (!invite) {
-      return NextResponse.json({ error: "Failed to create invite code" }, { status: 500 });
-    }
-
-    return NextResponse.json({ ok: true, invite: { ...invite, expiresAt: invite.expires_at || null } });
+    const invite = rawDb.prepare(`SELECT * FROM invites WHERE id = ?`).get(inviteId) as any;
+    return NextResponse.json({ ok: true, invite: { ...invite, expires_at: invite?.expires_at || null } });
   } catch (err) {
-    error({ err }, "Generate invite code failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Generate invite code failed");
     return NextResponse.json({ error: "Failed to generate invite code" }, { status: 500 });
   }
 }

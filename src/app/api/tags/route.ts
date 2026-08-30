@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, rawInsert, rawDeleteWhere, rawUpdate } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
@@ -12,35 +10,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
-    }
-
     // Accept familyId from query param as fallback (dev mode without middleware headers)
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) {
       return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
-    // Get tags with task counts
-    const tagsWithCounts = await db.select({
-      tag: schema.tags,
-      taskCount: sql<number>`COUNT(DISTINCT ${schema.taskTags.taskId})`,
-    })
-      .from(schema.tags)
-      .leftJoin(schema.taskTags, eq(schema.tags.id, schema.taskTags.tagId))
-      .where(eq(schema.tags.familyId, familyId))
-      .groupBy(schema.tags.id);
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
 
-    const result = tagsWithCounts.map((row: any) => ({
-      ...row.tag,
-      taskCount: row.taskCount || 0,
-    }));
+    // Get tags with task counts using raw SQL (Drizzle ORM fails on SQLite joins+groupBy)
+    const tagsWithCounts = rawDb.prepare(`
+      SELECT t.*, COUNT(DISTINCT tt.id) as taskCount
+      FROM tags t
+      LEFT JOIN task_tags tt ON t.id = tt.tag_id
+      WHERE t.family_id = ?
+      GROUP BY t.id
+    `).all(familyId) as any[];
 
-    return NextResponse.json(result);
+    return NextResponse.json(tagsWithCounts);
   } catch (err) {
-    error({ err: err }, "Tags GET failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Tags GET failed");
     return NextResponse.json({ error: "Failed to fetch tags" }, { status: 500 });
   }
 }
@@ -50,11 +42,6 @@ export async function POST(request: NextRequest) {
     const auth = verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     const body = await request.json();
@@ -70,28 +57,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    // Check for duplicate tag name within the same family
-    const existing = await db
-      .select()
-      .from(schema.tags)
-      .where(sql`${schema.tags.familyId} = ${familyId} AND ${schema.tags.name} = ${name}`)
-      .limit(1);
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
 
-    if (existing.length > 0) {
+    // Check for duplicate tag name within the same family
+    const existing = rawDb.prepare(
+      `SELECT * FROM tags WHERE family_id = ? AND name = ? LIMIT 1`
+    ).get(familyId, name) as any;
+
+    if (existing) {
       return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
     }
 
-    const tag = await rawInsert("tags", {
-      id: `tag-${Date.now()}`,
-      name,
-      family_id: familyId,
-      color,
-      created_at: new Date().toISOString(),
-    });
+    const tagId = `tag-${Date.now()}`;
+    rawDb.prepare(
+      `INSERT INTO tags (id, name, family_id, color, created_at) VALUES (?, ?, ?, ?, ?)`
+    ).run(tagId, name, familyId, color || null, new Date().toISOString());
+
+    const tag = rawDb.prepare(`SELECT * FROM tags WHERE id = ?`).get(tagId) as any;
 
     return NextResponse.json(tag, { status: 201 });
   } catch (err) {
-    error({ err: err }, "Tags POST failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Tags POST failed");
     return NextResponse.json({ error: "Failed to create tag" }, { status: 500 });
   }
 }
@@ -101,11 +90,6 @@ export async function PUT(request: NextRequest) {
     const auth = verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)
@@ -121,42 +105,40 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    // Get existing tag to check family and new name
-    const existingTags = await db
-      .select()
-      .from(schema.tags)
-      .where(eq(schema.tags.id, id))
-      .limit(1);
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
 
-    if (existingTags.length === 0) {
+    // Get existing tag to check family and new name
+    const existingTag = rawDb.prepare(
+      `SELECT * FROM tags WHERE id = ?`
+    ).get(id) as any;
+
+    if (!existingTag) {
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });
     }
 
-    const existingTag = existingTags[0];
-
     // Check for duplicate name (only if name is changing)
     if (name && name !== existingTag.name) {
-      const familyId = existingTag.familyId;
-      const duplicate = await db
-        .select()
-        .from(schema.tags)
-        .where(sql`${schema.tags.familyId} = ${familyId} AND ${schema.tags.name} = ${name} AND ${schema.tags.id} != ${id}`)
-        .limit(1);
+      const duplicate = rawDb.prepare(
+        `SELECT * FROM tags WHERE family_id = ? AND name = ? AND id != ? LIMIT 1`
+      ).get(existingTag.family_id, name, id) as any;
 
-      if (duplicate.length > 0) {
+      if (duplicate) {
         return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
       }
     }
 
-    const result = await rawUpdate("tags", { name, color }, "id", id);
+    rawDb.prepare(
+      `UPDATE tags SET name = ?, color = ? WHERE id = ?`
+    ).run(name, color || null, id);
 
-    if (!result) {
-      return NextResponse.json({ error: "Tag not found" }, { status: 404 });
-    }
+    const updated = rawDb.prepare(`SELECT * FROM tags WHERE id = ?`).get(id) as any;
 
-    return NextResponse.json(result);
+    return NextResponse.json(updated);
   } catch (err) {
-    error({ err: err }, "Tags PUT failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Tags PUT failed");
     return NextResponse.json({ error: "Failed to update tag" }, { status: 500 });
   }
 }
@@ -166,11 +148,6 @@ export async function DELETE(request: NextRequest) {
     const auth = verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)
@@ -186,14 +163,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
+
     // Delete tag from junction tables first (cascade via FK constraints in PostgreSQL)
-    await rawDeleteWhere("task_tags", [{ col: "tag_id", val: id }]);
-    await rawDeleteWhere("slate_tags", [{ col: "tag_id", val: id }]);
-    await rawDeleteWhere("tags", [{ col: "id", val: id }]);
+    rawDb.prepare(`DELETE FROM task_tags WHERE tag_id = ?`).run(id);
+    rawDb.prepare(`DELETE FROM slate_tags WHERE tag_id = ?`).run(id);
+    rawDb.prepare(`DELETE FROM tags WHERE id = ?`).run(id);
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    error({ err: err }, "Tags DELETE failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Tags DELETE failed");
     return NextResponse.json({ error: "Failed to delete tag" }, { status: 500 });
   }
 }

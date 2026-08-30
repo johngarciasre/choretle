@@ -1,263 +1,129 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
-import * as schema from "@/db/schema";
-import { eq, sql, count } from "drizzle-orm";
-import { info, error } from "@/lib/logger.server";
-import { slugify } from "@/lib/slugify";
-import { rawInsert } from "@/db/drizzle";
+import { getSupabaseMiddlewareClient } from "@/lib/supabase";
+import { DEV_COOKIE_NAME, parseDevSession } from "@/lib/dev-auth";
+import { getRawDb } from "@/db/drizzle";
+import { setDevSessionCookie } from "@/lib/dev-auth";
+import { error } from "@/lib/logger.server";
+
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  try {
+    const body = await request.json();
+    const { email, password } = body;
 
-  if (!body?.email || !body?.password) {
-    return NextResponse.json(
-      { error: "Email and password are required" },
-      { status: 400 }
-    );
-  }
+    if (process.env.AUTH_MODE === "dev") {
+      const rawDb = getRawDb();
+      if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-  // ─── Dev Mode: Mock sign in ────────────────────────────────
-  if (process.env.AUTH_MODE === "dev") {
-    const email = body?.email?.toLowerCase().trim() || "";
-    const name = body?.name || "Dev User";
+      const userRow = rawDb.prepare(`SELECT * FROM users WHERE email = ?`).get(email?.toLowerCase()) as any;
+      if (!userRow) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
-    let userId: string = `dev-user-${crypto.randomUUID()}`;
-    let role: string = "child";
-    let familyId: string | null = null;
+      const userId = userRow.id;
+      const familyId = userRow.family_id;
 
-    // Check DB for existing user by email, or create new with first-user logic
+      // Create dev session cookie
+      const sessionObj = { user: { id: userId, email: email || "", name: userRow.name || "", role: userRow.role || "child", familyId } };
+      const encoded = encodeURIComponent(JSON.stringify(sessionObj));
+      const response = NextResponse.json({
+        ok: true,
+        userId,
+        email: userRow.email,
+        name: userRow.name,
+        role: userRow.role || "child",
+        familyId,
+      });
+      response.headers.set("set-cookie", `dev-session=${encoded}; path=/; secure=false; httpOnly=true`);
+      return response;
+    }
+
+    // Production Mode: Use Supabase Auth
+    if (!hasSupabaseConfig()) {
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    }
+
+    const supabase = await getSupabaseMiddlewareClient(request);
+    const { data: { user, session }, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    // Sync user to our database if not present
     try {
-      const db = await import("@/db/drizzle").then(m => m.initDb());
-      if (db) {
-        // Look up existing user by email
-        const users = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
-
-        if (users[0]) {
-          // Return existing user with their stored role
-          userId = users[0].id;
-          role = users[0].role || "child";
-          familyId = users[0].family_id || null;
-
-          // Ensure family exists for this user
-          if (familyId) {
-            const families = await db.select().from(schema.families).where(eq(schema.families.id, familyId)).limit(1);
-            if (!families[0]) {
-              await rawInsert("families", {
-                id: familyId,
-                name: "Dev Family",
-                slug: "dev-family",
-                week_start_day: 0,
-                teams_enabled: false,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              });
-            }
-          }
-        } else {
-          // New user - check if any users exist to determine role
-          const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
-          role = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
-
-          // Generate a random fake user ID
-          userId = `dev-user-${crypto.randomUUID()}`;
-
-          // Find or create family
-          const families = await db.select().from(schema.families).limit(1);
-          if (families[0]) {
-            familyId = families[0].id;
+      const rawDb = getRawDb();
+      if (rawDb) {
+        const existingUser = rawDb.prepare(`SELECT id FROM users WHERE id = ?`).get(user.id) as any;
+        if (!existingUser) {
+          // Check/create family
+          const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
+          let familyId: string | null = null;
+          if ((countFamilies?.cnt ?? 0) === 0) {
+            const familySlug = `family-${Date.now()}`;
+            const now = new Date().toISOString();
+            rawDb.prepare(
+              `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
+            ).run(`family-${Date.now()}`, `${user.email?.split("@")[0] || ""}\'s Family`, familySlug, now, now);
+            familyId = `family-${Date.now()}`;
           } else {
-            const slug = `family-${Date.now()}`;
-            const newFamily = await rawInsert("families", {
-              id: `family-${Date.now()}`,
-              name: `${name}'s Family`,
-              slug,
-              week_start_day: 0,
-              teams_enabled: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-            familyId = newFamily?.id || null;
+            const fam = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
+            familyId = fam?.id || null;
           }
 
-          // Create user in DB
-          await rawInsert("users", {
-            id: userId,
-            email: email || null,
-            name: name,
-            role: role,
-            avatar_url: null,
-            family_id: familyId,
-            points_total: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
+          rawDb.prepare(
+            `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, 'child', NULL, ?, 0, ?, ?)`
+          ).run(user.id, user.email || "", body?.name || "", familyId, new Date().toISOString(), new Date().toISOString());
+        } else {
+          // Update last login
+          rawDb.prepare(`UPDATE users SET updated_at = ? WHERE id = ?`).run(new Date().toISOString(), user.id);
         }
       }
     } catch (dbError) {
-      error({ err: dbError }, "[DEV SIGNIN] Database sync failed");
-
-      // Fallback: first user is admin if no DB available
-      role = "admin";
-      userId = `dev-user-${crypto.randomUUID()}`;
+      error({ err: dbError }, "[SIGNIN] Database sync failed");
     }
 
-    const session = createDevSession({ userId });
-    session.user.role = role;
-    session.user.familyId = familyId;
-    session.user.name = name || session.user.name;
-    session.user.email = email || session.user.email;
-
-    const response = NextResponse.json({
+    return NextResponse.json({
       ok: true,
-      userId: session.user.id,
-      email: session.user.email,
-      role: role,
-      message: "Sign in successful (dev mode)"
+      userId: user.id,
+      email: user.email,
+      name: user.user_metadata?.name || "",
+      role: user.user_metadata?.role || "child",
+      familyId: null,
     });
-
-    setDevSessionCookie(response.headers, session);
-    return response;
+  } catch (err) {
+    error({ err: String(err), stack: (err as Error).stack }, "[SIGNIN] Unhandled error");
+    return NextResponse.json({ error: "Sign in failed" }, { status: 500 });
   }
+}
 
-  // ─── Production Mode: Use Supabase Auth ─────────────────────
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          for (const cookie of cookiesToSet) {
-            const { name, value, options } = cookie;
-            let cookieStr = `${name}=${value}`;
-            if (options) {
-              for (const [key, val] of Object.entries(options)) {
-                cookieStr += `; ${key}=${val}`;
-              }
-            }
-          }
-        },
-      }
-    }
-  );
-
-  const signInResult = await supabase.auth.signInWithPassword({
-    email: body.email.toLowerCase().trim(),
-    password: body.password,
-  });
-
-  if (signInResult.error) {
-    return NextResponse.json(
-      { error: signInResult.error.message || "Failed to sign in" },
-      { status: 401 }
-    );
-  }
-
-  const session = signInResult.data.session;
-  if (!session) {
-    return NextResponse.json({ error: "Authentication failed" }, { status: 500 });
-  }
-
-  // Ensure DB user record exists after sign in — use dynamic import to avoid bundling better-sqlite3
+export async function GET(request: NextRequest) {
   try {
-    const { initDb } = await import("@/db/drizzle");
-    const db = await initDb();
-    if (db) {
-      const existingUser = (await db.select().from(schema.users).where(eq(schema.users.id, session.user.id)).limit(1))[0];
-
-      if (!existingUser) {
-        // Generate a default slug for auto-created family
-        const slug = slugify(session.user.email || "family");
-
-        // Check if a family with this slug already exists
-        const existingFamilyRows = await db.select().from(schema.families)
-          .where(eq(schema.families.slug, slug))
-          .limit(1);
-
-        let familyId: string | null = null;
-
-        if (existingFamilyRows[0]) {
-          familyId = existingFamilyRows[0].id;
-        } else {
-          // Auto-create a family for the new user
-          const newFamily = await rawInsert("families", {
-            id: `family-${Date.now()}`,
-            name: session.user.email?.split("@")[0] || "My Family",
-            slug,
-            week_start_day: 0,
-            teams_enabled: false,
-          });
-
-          if (newFamily) {
-            familyId = newFamily.id;
-          }
-        }
-
-        // Determine role: first user in the system gets admin
-        const countResult = await db.select({ count: count() }).from(schema.users).limit(1);
-        const userRole = (countResult[0]?.count ?? 0) === 0 ? "admin" : "child";
-
-        // Create DB user record with family association
-        await rawInsert("users", {
-          id: session.user.id,
-          email: session.user.email || null,
-          name: session.user.user_metadata?.name || body.name || "User",
-          role: userRole,
-          avatar_url: session.user.user_metadata?.avatar_url || null,
-          family_id: familyId,
-          points_total: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      } else if (existingUser.email !== session.user.email) {
-        // Update email if it changed
-        await db.update(schema.users).set({
-          email: session.user.email || null,
-          name: session.user.user_metadata?.name || existingUser.name,
-          role: session.user.user_metadata?.role || existingUser.role,
-          avatarUrl: session.user.user_metadata?.avatar_url || existingUser.avatarUrl,
-          updatedAt: new Date().toISOString(),
-        }).where(eq(schema.users.id, session.user.id));
+    if (process.env.AUTH_MODE === "dev") {
+      const cookieHeader = request.headers.get("cookie") || "";
+      const setCookie = cookieHeader.split(";").find((c: string) => c.includes(DEV_COOKIE_NAME));
+      if (!setCookie) return NextResponse.json({ authenticated: false });
+      const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
+      const user = parseDevSession(value);
+      if (user) {
+        return NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, role: user.role || "child", name: user.name || "" } });
       }
+      return NextResponse.json({ authenticated: false });
     }
-  } catch (dbError) {
-    error({ err: dbError }, "[SIGNIN] Database sync failed");
+
+    if (!hasSupabaseConfig()) {
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    }
+
+    const supabase = await getSupabaseMiddlewareClient(request);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      return NextResponse.json({ authenticated: true, user: { id: session.user.id, email: session.user.email,
+        role: session.user.user_metadata?.role || "child", name: session.user.user_metadata?.name || "" } });
+    }
+    return NextResponse.json({ authenticated: false });
+  } catch (err) {
+    return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
-
-  const response = new Response(
-    JSON.stringify({
-      ok: true,
-      userId: session.user.id,
-      email: session.user.email,
-      role: session.user.user_metadata?.role || "child",
-      message: "Sign in successful"
-    }),
-    { status: 200 }
-  );
-
-  const cookieName = `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL!.split("//")[1].split(".")[0]}${process.env.NODE_ENV === 'production' ? '-auth' : ''}-token`;
-  response.headers.append(
-    "set-cookie",
-    `${cookieName}=${encodeURIComponent(JSON.stringify({
-      access_token: session.access_token,
-      token_type: "bearer",
-      expires_in: session.expires_in,
-      expires_at: session.expires_at,
-      refresh_token: session.refresh_token,
-      user: {
-        id: session.user.id,
-        aud: session.user.aud,
-        email: session.user.email,
-        phone: session.user.phone,
-        app_metadata: session.user.app_metadata,
-        user_metadata: session.user.user_metadata,
-        identities: session.user.identities,
-      }
-    }))}; Path=/; Secure; HttpOnly; SameSite=Lax`
-  );
-
-  return response;
 }

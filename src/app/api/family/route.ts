@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { slugify } from "@/lib/slugify";
 import { error } from "@/lib/logger.server";
 import { rawInsert } from "@/db/drizzle";
@@ -21,18 +19,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
     }
 
-    const db = await initDb();
-    if (!db) {
+    const rawDb = getRawDb();
+    if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    // Fetch family data
-    const familyRows = await db.select().from(schema.families)
-      .where(eq(schema.families.id, familyId))
-      .limit(1);
+    // Fetch family data using raw SQL (Drizzle ORM fails on SQLite)
+    const familyRow = rawDb.prepare(`SELECT * FROM families WHERE id = ? LIMIT 1`).get(familyId) as any;
 
-    const family = familyRows[0];
-    if (!family) {
+    if (!familyRow) {
       return NextResponse.json({ ok: false, error: "Family not found" }, { status: 404 });
     }
 
@@ -40,21 +35,17 @@ export async function GET(request: NextRequest) {
     const userId = request.headers.get("x-user-id");
     let users: any[] = [];
     if (userId) {
-      const userRecordRows = await db.select().from(schema.users)
-        .where(eq(schema.users.id, userId))
-        .limit(1);
-      const userRecord = userRecordRows[0];
+      const userRecordRow = rawDb.prepare(`SELECT * FROM users WHERE id = ? LIMIT 1`).get(userId) as any;
 
       // Only return users if the requesting user belongs to this family
-      if (userRecord && (userRecord.familyId === familyId || !userRecord.familyId)) {
-        users = await db.select().from(schema.users)
-          .where(eq(schema.users.familyId, familyId));
+      if (userRecordRow && (userRecordRow.family_id === familyId || !userRecordRow.family_id)) {
+        users = rawDb.prepare(`SELECT * FROM users WHERE family_id = ?`).all(familyId) as any[];
       }
     }
 
-    return NextResponse.json({ ok: true, family, users });
+    return NextResponse.json({ ok: true, family: familyRow, users });
   } catch (e) {
-    error({ err: e }, "Family GET failed");
+    error({ err: String(e), stack: (e as Error).stack }, "Family GET failed");
     return NextResponse.json({ ok: false, error: "Failed to fetch family" }, { status: 500 });
   }
 }
@@ -82,8 +73,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Family name is required" }, { status: 400 });
     }
 
-    const db = await initDb();
-    if (!db) {
+    const rawDb = getRawDb();
+    if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
@@ -93,25 +84,19 @@ export async function POST(request: NextRequest) {
     const baseSlug = slug;
 
     // Guard: user must not already belong to a family (one family per member)
-    const existingUser = await db.select().from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-    
-    if (existingUser[0]?.familyId) {
+    const existingUser = rawDb.prepare(`SELECT * FROM users WHERE id = ? LIMIT 1`).get(userId) as any;
+
+    if (existingUser?.family_id) {
       return NextResponse.json({ error: "You are already a member of a family" }, { status: 409 });
     }
 
-    const existingFamilyRows = await db.select().from(schema.families)
-      .where(eq(schema.families.slug, slug))
-      .limit(1);
+    let existingFamily = rawDb.prepare(`SELECT * FROM families WHERE slug = ? LIMIT 1`).get(slug) as any;
 
-    while (existingFamilyRows[0]) {
+    while (existingFamily) {
       slug = `${baseSlug}-${suffix}`;
       suffix += 1;
-      const checkRows = await db.select().from(schema.families)
-        .where(eq(schema.families.slug, slug))
-        .limit(1);
-      if (!checkRows[0]) break;
+      existingFamily = rawDb.prepare(`SELECT * FROM families WHERE slug = ? LIMIT 1`).get(slug) as any;
+      if (!existingFamily) break;
       // Safety: stop after 100 attempts to avoid infinite loops
       if (suffix > 100) {
         return NextResponse.json({ error: "Could not generate unique family slug" }, { status: 500 });
@@ -121,24 +106,17 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
 
     // Create the family
-    const newFamily = await rawInsert("families", {
-      id: `family-${Date.now()}`,
-      name: body.name,
-      slug,
-      week_start_day: body.weekStartDay ?? 0,
-      teams_enabled: false,
-      created_at: now,
-      updated_at: now,
-    });
-
-    if (!newFamily) {
-      return NextResponse.json({ error: "Failed to create family" }, { status: 500 });
-    }
+    const familyId = `family-${Date.now()}`;
+    rawDb.prepare(
+      `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(familyId, body.name, slug, body.weekStartDay ?? 0, false, now, now);
 
     // Associate the current user with this family
-    await db.update(schema.users)
-      .set({ familyId: newFamily.id, updated_at: new Date().toISOString() })
-      .where(eq(schema.users.id, userId));
+    rawDb.prepare(
+      `UPDATE users SET family_id = ?, updated_at = ? WHERE id = ?`
+    ).run(familyId, now, userId);
+
+    const newFamily = rawDb.prepare(`SELECT * FROM families WHERE id = ?`).get(familyId) as any;
 
     const response = NextResponse.json({
       ok: true,
@@ -163,7 +141,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (e) {
-    error({ err: e }, "Create family failed");
+    error({ err: String(e), stack: (e as Error).stack }, "Create family failed");
     return NextResponse.json({ error: "Failed to create family" }, { status: 500 });
   }
 }

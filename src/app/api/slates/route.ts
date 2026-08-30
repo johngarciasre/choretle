@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, getRawDb } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
-import { error } from "@/lib/logger.server";
+import { getRawDb } from "@/db/drizzle";
 import { verifyAuth } from "@/lib/auth";
+import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,33 +10,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
-    }
-
     // Accept familyId from query param as fallback (dev mode without middleware headers)
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) {
       return NextResponse.json({ error: "Family ID required" }, { status: 400 });
     }
 
-    // Get slates with task counts
-    const result = await db.select({
-      slate: schema.slates,
-      taskCount: sql<number>`COUNT(DISTINCT ${schema.slateTasks.id})`,
-    })
-      .from(schema.slates)
-      .leftJoin(schema.slateTasks, eq(schema.slates.id, schema.slateTasks.slateId))
-      .where(eq(schema.slates.familyId, familyId))
-      .groupBy(schema.slates.id);
+    const rawDb = getRawDb();
+    if (!rawDb) {
+      return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    }
 
-    const slates = result.map((row: any) => ({
-      ...row.slate,
-      taskCount: row.taskCount || 0,
+    // Get slates with task counts using raw SQL (Drizzle ORM fails on SQLite joins+groupBy)
+    const stmt = rawDb.prepare(`
+      SELECT s.*, COUNT(DISTINCT st.id) as taskCount
+      FROM slates s
+      LEFT JOIN slate_tasks st ON s.id = st.slate_id
+      WHERE s.family_id = ?
+      GROUP BY s.id
+    `);
+
+    const slates = stmt.all(familyId) as any[];
+
+    // Normalize snake_case to camelCase for frontend
+    const normalizedSlates = slates.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      roomLocation: s.room_location,
+      frequency: s.frequency,
+      interval: s.interval,
+      isActive: s.is_active === 1 || s.is_active === true,
+      taskCount: s.taskCount || 0,
     }));
 
-    return NextResponse.json(slates);
+    return NextResponse.json(normalizedSlates);
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Slates GET failed");
     return NextResponse.json({ error: "Failed to fetch slates" }, { status: 500 });
@@ -50,11 +56,6 @@ export async function POST(request: NextRequest) {
     const auth = verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      return NextResponse.json({ error: "Database not initialized" }, { status: 503 });
     }
 
     const body = await request.json();
@@ -70,12 +71,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    const slateId = crypto.randomUUID();
     const rawDb = getRawDb();
-
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
+
+    const slateId = crypto.randomUUID();
 
     // Use raw SQL to avoid Drizzle ORM issues with boolean/int conversion
     const stmt = rawDb.prepare(

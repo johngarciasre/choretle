@@ -1,205 +1,106 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, rawInsert } from "@/db/drizzle";
-import * as schema from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
-/**
- * Extracts the familyId from the URL path for [familyId] dynamic routes.
- */
-function getFamilyIdFromPath(request: NextRequest): string | undefined {
-  const url = new URL(request.url);
-  const segments = url.pathname.split("/");
-  for (let i = 0; i < segments.length - 1; i++) {
-    if (segments[i] === "family" && i + 1 < segments.length) {
-      return segments[i + 1];
-    }
-  }
-  return undefined;
-}
-
-// ─── GET: Fetch family data ─────────────────────────────────────────
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ familyId: string }> }) {
   try {
-    const familyId = getFamilyIdFromPath(request);
+    const auth = verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
-    }
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const db = await initDb();
-    if (!db) {
-      throw new Error("Database not initialized");
-    }
+    const familyId = (await params).familyId;
 
-    // Fetch family data
-    const familyRows = await db.select().from(schema.families).where(eq(schema.families.id, familyId)).limit(1);
-    const family = familyRows[0];
+    const familyRows = rawDb.prepare(`SELECT * FROM families WHERE id = ?`).get(familyId) as any;
+    if (!familyRows) return NextResponse.json({ error: "Family not found" }, { status: 404 });
 
-    if (!family) {
-      return NextResponse.json({ error: "Family not found" }, { status: 404 });
-    }
-
-    // Fetch users in this family
-    const users = await db.select().from(schema.users).where(eq(schema.users.familyId, familyId));
+    const users = rawDb.prepare(`SELECT * FROM users WHERE family_id = ?`).all(familyId) as any[];
 
     return NextResponse.json({
-      ok: true,
-      family: family,
-      users: (users as any[]),
+      id: familyRows.id, name: familyRows.name, slug: familyRows.slug,
+      timezone: familyRows.timezone || "America/New_York",
+      weekStartDay: familyRows.week_start_day ?? 0,
+      theme: familyRows.theme || "coral",
+      teamsEnabled: familyRows.teams_enabled ?? false,
+      users: (users || []).map((u: any) => ({
+        id: u.id, name: u.name, email: u.email, role: u.role,
+        avatarUrl: u.avatar_url, pointsTotal: u.points_total || 0,
+      })),
     });
   } catch (err) {
-    error({ err }, "Family GET failed");
-    if (err instanceof Error && err.message.includes("Database not initialized")) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
+    error({ err: String(err), stack: (err as Error).stack }, "Family GET failed");
     return NextResponse.json({ error: "Failed to fetch family" }, { status: 500 });
   }
 }
 
-// ─── POST: Create a new family ──────────────────────────────────────
-export async function POST(request: NextRequest) {
+export async function PUT(request: NextRequest) {
   try {
     const auth = verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
     const body = await request.json();
-    const { name, weekStartDay } = body;
+    const { name, slug, timezone, weekStartDay, theme, teamsEnabled } = body;
 
-    if (!name) {
-      return NextResponse.json({ error: "Family name is required" }, { status: 400 });
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+
+    // Verify user belongs to this family
+    const userFamilyRows = rawDb.prepare(`SELECT role FROM users WHERE id = ? AND family_id = ?`).get(auth.userId, familyId) as any;
+    if (!userFamilyRows || userFamilyRows.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+
+    const updates: string[] = ["updated_at = ?"];
+    const values: any[] = [new Date().toISOString()];
+    if (name !== undefined) { updates.push("name = ?"); values.push(name); }
+    if (slug !== undefined) {
+      // Check slug uniqueness
+      const existingFamilyRows = rawDb.prepare(`SELECT id FROM families WHERE slug = ? AND id != ?`).get(slug, familyId) as any;
+      if (existingFamilyRows) return NextResponse.json({ error: "Slug already in use" }, { status: 409 });
+      updates.push("slug = ?"); values.push(slug);
     }
+    if (timezone !== undefined) { updates.push("timezone = ?"); values.push(timezone); }
+    if (weekStartDay !== undefined) { updates.push("week_start_day = ?"); values.push(weekStartDay); }
+    if (theme !== undefined) { updates.push("theme = ?"); values.push(theme); }
+    if (teamsEnabled !== undefined) { updates.push("teams_enabled = ?"); values.push(teamsEnabled ? 1 : 0); }
+    values.push(familyId);
 
-    const db = await initDb();
-    if (!db) {
-      throw new Error("Database not initialized");
-    }
+    rawDb.prepare(`UPDATE families SET ${updates.join(", ")} WHERE id = ?`).run(...values);
 
-    // Generate slug from name
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-
-    // Check if family with this slug already exists
-    const existingFamilyRows = await db.select().from(schema.families).where(eq(schema.families.slug, slug)).limit(1);
-    if (existingFamilyRows[0]) {
-      return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
-    }
-
-    // Create family with current user as the first member
-    const newFamily = await rawInsert("families", {
-      id: `family-${Date.now()}`,
-      name,
-      slug,
-      week_start_day: weekStartDay ?? 0,
-      teams_enabled: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-
-    const newFamilyId = newFamily?.[0]?.id;
-
-    if (!newFamilyId) {
-      return NextResponse.json({ error: "Failed to create family" }, { status: 500 });
-    }
-
-    // Add current user to the family
-    await db.update(schema.users).set({ familyId: newFamilyId }).where(eq(schema.users.id, auth.userId));
-
-    // Create a default team for the family
-    await rawInsert("teams", {
-      id: `team-${Date.now()}`,
-      family_id: newFamilyId,
-      name: "General",
-      created_at: new Date().toISOString(),
-    });
-
+    const updatedFamilyRows = rawDb.prepare(`SELECT * FROM families WHERE id = ?`).get(familyId) as any;
     return NextResponse.json({
-      ok: true,
-      family: {
-        id: newFamilyId,
-        name,
-        slug,
-        teamsEnabled: false,
-      },
+      id: updatedFamilyRows.id, name: updatedFamilyRows.name, slug: updatedFamilyRows.slug,
+      timezone: updatedFamilyRows.timezone || "America/New_York",
+      weekStartDay: updatedFamilyRows.week_start_day ?? 0,
+      theme: updatedFamilyRows.theme || "coral",
+      teamsEnabled: updatedFamilyRows.teams_enabled ?? false,
     });
   } catch (err) {
-    error({ err }, "Family POST failed");
-    if (err instanceof Error && err.message.includes("Database not initialized")) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
-    return NextResponse.json({ error: "Failed to create family", details: String(err) }, { status: 500 });
+    error({ err: String(err), stack: (err as Error).stack }, "Family PUT failed");
+    return NextResponse.json({ error: "Failed to update family" }, { status: 500 });
   }
 }
 
-// ─── PATCH: Update family settings (e.g., teamsEnabled, name, theme) ─────────────
-export async function PATCH(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
     const auth = verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
-    // Extract familyId from the URL path
-    const familyId = getFamilyIdFromPath(request);
+    const rawDb = getRawDb();
+    if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
-    }
+    const userFamilyRows = rawDb.prepare(`SELECT role FROM users WHERE id = ? AND family_id = ?`).get(auth.userId, familyId) as any;
+    if (!userFamilyRows || userFamilyRows.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
 
-    const body = await request.json();
-    const { teamsEnabled, name, theme } = body;
-
-    if (teamsEnabled === undefined && !name && !theme) {
-      return NextResponse.json({ error: "At least one of teamsEnabled, name, or theme is required" }, { status: 400 });
-    }
-
-    const db = await initDb();
-    if (!db) {
-      throw new Error("Database not initialized");
-    }
-
-    // Verify user belongs to this family
-    const userFamilyRows = await db.select().from(schema.users).where(
-      and(eq(schema.users.id, auth.userId), eq(schema.users.familyId, familyId))
-    ).limit(1);
-    const userFamily = userFamilyRows[0];
-
-    if (!userFamily) {
-      return NextResponse.json({ error: "You don't have access to this family" }, { status: 403 });
-    }
-
-    // Build update object with only provided fields
-    const updates: any = { updated_at: new Date().toISOString() };
-    if (teamsEnabled !== undefined) updates.teams_enabled = teamsEnabled;
-    if (name) {
-      const newSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-      const existingFamilyRows = await db.select().from(schema.families).where(eq(schema.families.slug, newSlug)).limit(1);
-      if (existingFamilyRows[0] && existingFamilyRows[0].id !== familyId) {
-        return NextResponse.json({ error: "A family with this name already exists" }, { status: 409 });
-      }
-      updates.name = name;
-      updates.slug = newSlug;
-    }
-    if (theme) updates.theme = theme;
-
-    // Update family settings
-    await db.update(schema.families).set(updates)
-      .where(eq(schema.families.id, familyId));
-
-    const updatedFamilyRows = await db.select().from(schema.families)
-      .where(eq(schema.families.id, familyId)).limit(1);
-
-    return NextResponse.json({
-      ok: true,
-      family: updatedFamilyRows[0],
-    });
+    rawDb.prepare(`DELETE FROM users WHERE family_id = ?`).run(familyId);
+    rawDb.prepare(`DELETE FROM families WHERE id = ?`).run(familyId);
+    return NextResponse.json({ success: true });
   } catch (err) {
-    error({ err }, "Family PATCH failed");
-    if (err instanceof Error && err.message.includes("Database not initialized")) {
-      return NextResponse.json({ error: "Database not available" }, { status: 503 });
-    }
-    return NextResponse.json({ error: "Failed to update family", details: String(err) }, { status: 500 });
+    error({ err: String(err), stack: (err as Error).stack }, "Family DELETE failed");
+    return NextResponse.json({ error: "Failed to delete family" }, { status: 500 });
   }
 }

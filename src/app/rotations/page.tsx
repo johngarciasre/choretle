@@ -22,12 +22,12 @@ export default function RotationsPage() {
   const dataLoadedRef = useRef(false);
 
   useEffect(() => {
+    if (!authChecked) return;
     if (dataLoadedRef.current) return;
     dataLoadedRef.current = true;
-    if (!authChecked) return;
     typeof window !== "undefined" && (document.title = "Choretle - Rotations");
     loadRotationData();
-  }, []);
+  }, [authChecked]);
 
   async function loadRotationData() {
     try {

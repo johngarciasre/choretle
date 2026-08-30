@@ -34,11 +34,17 @@ export default function ReportsPage() {
       const familyId = authData.familyId;
 
       const res = await fetch(`/api/reports?type=${type}&familyId=${familyId}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.error(`Report fetch failed: ${res.status}`);
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       setReportData(data);
     } catch (err) {
       console.error("Failed to fetch report:", err);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -55,8 +61,12 @@ export default function ReportsPage() {
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
-  if (loading || !reportData) {
+  if (loading) {
     return <PageShell><PageLoader label="Loading reports..." /></PageShell>;
+  }
+
+  if (!reportData) {
+    return <PageShell><EmptyState icon={<span className="text-2xl">📊</span>} title="No data available" message="There are no reports to display." /></PageShell>;
   }
 
   return (
