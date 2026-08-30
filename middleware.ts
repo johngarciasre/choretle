@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { getDevUserFromRequest } from "@/lib/dev-auth";
+import { getDevUserFromRequest, createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 
 const PUBLIC_ROUTES = [
   "/_next/static",
@@ -17,6 +17,7 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/me",
   "/api/auth/websudo",
   "/api/schedules/generate",
+  "/api/family/join",
 ];
 
 function hasSupabaseConfig(): boolean {
@@ -154,21 +155,30 @@ export async function middleware(request: NextRequest) {
     return redirect;
   }
 
-  // ─── Dev Mode: Check dev session cookie ──────────────────────
-  const devUser = getDevUserFromRequest(request);
+  // ─── Dev Mode: Check or auto-create dev session cookie ──────────────
+  let devUser = getDevUserFromRequest(request);
 
   if (!devUser) {
-    // Allow requests to auth pages through (so they can show forms)
-    if (pathname.startsWith("/auth/signin") || pathname.startsWith("/auth/signup")) {
-      return response;
-    }
-    const redirect = NextResponse.redirect(new URL("/auth/signin", request.url));
-    setNoCacheHeaders(redirect);
-    return redirect;
+    // Auto-login: create a fresh random identity on first visit (e.g. after server restart).
+    // Set-Cookie only takes effect once — the browser stores it and sends it on subsequent requests,
+    // so this won't regenerate on every request.
+    const session = createDevSession();
+    setDevSessionCookie(response.headers, session);
+    devUser = session.user;
+  }
+
+  // Allow requests to auth pages through (so they can show forms)
+  if (pathname.startsWith("/auth/signin") || pathname.startsWith("/auth/signup")) {
+    response.headers.set("x-user-id", devUser.id);
+    response.headers.set("x-email", devUser.email);
+    response.headers.set("x-role", devUser.role);
+    response.headers.set("x-family-id", devUser.familyId || "");
+    setNoCacheHeaders(response);
+    return response;
   }
 
   // Redirect dev users from landing page to family
-  if (pathname === "/" && devUser) {
+  if (pathname === "/") {
     const redirectUrl = devUser.familyId ? `/family/${devUser.familyId}` : "/family";
     const redirect = NextResponse.redirect(new URL(redirectUrl, request.url));
     setNoCacheHeaders(redirect);

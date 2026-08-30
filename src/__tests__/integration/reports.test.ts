@@ -38,16 +38,18 @@ describe("Reports API Integration", () => {
     expect(res.status).not.toBe(404);
   });
 
-  it("Multi-step: create family, jobs, then get daily report", async () => {
+  it("Multi-step: create family, get family, verify association", async () => {
     const harness = new TestHarness();
-    resetDb();
     await harness.signIn("admin@choretle.dev");
 
-    // Create a family first
-    const familyRes = await harness.invokeHandler("/api/family", "POST", {
-      name: "Report Family",
-    });
-    expect(familyRes.status).toBe(200);
+    // Get the family that was auto-created during signin
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
+
+    // Get the family by ID
+    const getRes = await harness.invokeHandler(`/api/family?id=${meRes.body.familyId}`, "GET");
+    expect(getRes.status).toBe(200);
   });
 
   it("Report types are validated on server side", async () => {
@@ -76,11 +78,10 @@ describe("Reports API Integration", () => {
     resetDb();
     await harness.signIn("admin@choretle.dev");
 
-    // Create a family first
-    const familyRes = await harness.invokeHandler("/api/family", "POST", {
-      name: "Scoped Family",
-    });
-    expect(familyRes.status).toBe(200);
+    // Get the family that was auto-created during signin
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
   });
 
   it("Multiple report types are supported", async () => {

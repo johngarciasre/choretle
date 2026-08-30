@@ -6,7 +6,7 @@ import { slugify } from "@/lib/slugify";
 import { error } from "@/lib/logger.server";
 import { rawInsert } from "@/db/drizzle";
 import { createDevSession, setDevSessionCookie } from "@/lib/dev-auth";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, extractUserId } from "@/lib/auth";
 
 /**
  * GET /api/family?id=<id>
@@ -66,7 +66,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = verifyAuth(request);
-    if (!auth) {
+    let userId: string | null = auth?.userId ?? null;
+
+    // Fallback: user may be authenticated but have no family yet (e.g., first-time create)
+    if (!userId) {
+      userId = extractUserId(request);
+    }
+
+    if (!userId) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
@@ -84,6 +91,16 @@ export async function POST(request: NextRequest) {
     let slug = slugify(body.name);
     let suffix = 1;
     const baseSlug = slug;
+
+    // Guard: user must not already belong to a family (one family per member)
+    const existingUser = await db.select().from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    
+    if (existingUser[0]?.familyId) {
+      return NextResponse.json({ error: "You are already a member of a family" }, { status: 409 });
+    }
+
     const existingFamilyRows = await db.select().from(schema.families)
       .where(eq(schema.families.slug, slug))
       .limit(1);
@@ -121,7 +138,7 @@ export async function POST(request: NextRequest) {
     // Associate the current user with this family
     await db.update(schema.users)
       .set({ familyId: newFamily.id, updated_at: new Date().toISOString() })
-      .where(eq(schema.users.id, auth.userId));
+      .where(eq(schema.users.id, userId));
 
     const response = NextResponse.json({
       ok: true,

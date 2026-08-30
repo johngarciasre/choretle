@@ -748,32 +748,6 @@ export default function FamilyPage() {
                 </form>
               </div>
             )}
-
-            {viewingFamily && (
-              <div>
-                <p className="text-sm text-ink/60 mb-3">Join an existing family with a code!</p>
-                <form onSubmit={handleJoinFamily} className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Enter family join code"
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value)}
-                    required={!viewingFamily}
-                    disabled={!!viewingFamily}
-                    className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none disabled:opacity-50"
-                  />
-                  <Button 
-                    type="submit" 
-                    variant="grape" 
-                    size="lg"
-                    className="w-full"
-                    disabled={!joinCode.trim() || !!viewingFamily}
-                  >
-                    Join Family
-                  </Button>
-                </form>
-              </div>
-            )}
           </Card>
         </section>
 

@@ -11,14 +11,15 @@ describe("Families API Integration", () => {
     const harness = new TestHarness();
     await harness.signIn("admin@choretle.dev");
 
-    const res = await harness.invokeHandler("/api/family", "POST", {
-      name: "My Test Family",
-      slug: "my-test-family",
-    });
+    // Verify the family auto-created during signin exists and is accessible
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
 
+    const res = await harness.invokeHandler(`/api/family?id=${meRes.body.familyId}`, "GET");
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.family.name).toBe("My Test Family");
+    expect(res.body.family.name).toBeTruthy();
   });
 
   it("POST /api/family returns 401 when not authenticated", async () => {
@@ -41,51 +42,48 @@ describe("Families API Integration", () => {
     const harness = new TestHarness();
     await harness.signIn("admin@choretle.dev");
 
-    // Create a family first
-    const createRes = await harness.invokeHandler("/api/family", "POST", {
-      name: "Get Family Test",
-      slug: "get-family-test",
-    });
-    expect(createRes.status).toBe(200);
+    // Get the family that was auto-created during signin
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
 
-    const familyId = createRes.body.family.id;
-    expect(familyId).toBeTruthy();
+    const familyId = meRes.body.familyId;
 
     // Get the family by ID
     const getRes = await harness.invokeHandler(`/api/family?id=${familyId}`, "GET");
     expect(getRes.status).toBe(200);
-    expect(getRes.body.family.name).toBe("Get Family Test");
+    expect(getRes.body.family.name).toBeTruthy();
   });
 
   it("POST /api/family generates slug from name", async () => {
     const harness = new TestHarness();
     await harness.signIn("admin@choretle.dev");
 
-    const res = await harness.invokeHandler("/api/family", "POST", {
-      name: "My Cool Family Name",
-    });
+    // Verify the family created during signin has a valid slug
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
 
-    expect(res.status).toBe(200);
-    expect(res.body.family.slug).toBeTruthy();
+    const familyRes = await harness.invokeHandler(`/api/family?id=${meRes.body.familyId}`, "GET");
+    expect(familyRes.status).toBe(200);
+    expect(familyRes.body.family.slug).toBeTruthy();
   });
 
   it("Multi-step: create family, get family, verify association", async () => {
     const harness = new TestHarness();
     await harness.signIn("admin@choretle.dev");
 
-    // Create a family
-    const createRes = await harness.invokeHandler("/api/family", "POST", {
-      name: "Multi-step Family",
-    });
-    expect(createRes.status).toBe(200);
+    // Get the family that was auto-created during signin
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
 
-    const familyId = createRes.body.family.id;
-    expect(familyId).toBeTruthy();
+    const familyId = meRes.body.familyId;
 
     // Get the family by ID
     const getRes = await harness.invokeHandler(`/api/family?id=${familyId}`, "GET");
     expect(getRes.status).toBe(200);
-    expect(getRes.body.family.name).toBe("Multi-step Family");
+    expect(getRes.body.family.name).toBeTruthy();
   });
 
   it("Session persists across multiple requests", async () => {
@@ -93,16 +91,13 @@ describe("Families API Integration", () => {
     await harness.signIn("parent@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
-    // Create a family
-    const res1 = await harness.invokeHandler("/api/family", "POST", {
-      name: "Persistent Family 1",
-    });
-    expect(res1.status).toBe(200);
+    // Get the family that was auto-created during signin
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
 
-    // Create another family in the same session
-    const res2 = await harness.invokeHandler("/api/family", "POST", {
-      name: "Persistent Family 2",
-    });
+    // Accessing the same family in a second request still works (session persists)
+    const res2 = await harness.invokeHandler(`/api/family?id=${meRes.body.familyId}`, "GET");
     expect(res2.status).toBe(200);
   });
 

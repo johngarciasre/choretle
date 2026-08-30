@@ -10,41 +10,39 @@ describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
   it("Complete workflow: create family → slates → jobs → rotations", async () => {
     const harness = new TestHarness();
     
-    // Step 1: Sign in as admin
+    // Step 1: Sign in as admin (auto-creates a family)
     await harness.signIn("admin@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
-    // Set family ID (dev users have hardcoded familyId)
-    harness.setFamilyId("dev-family-001");
+    // Get the auto-created family ID
+    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.familyId).toBeTruthy();
+    const familyId = meRes.body.familyId;
 
-    // Step 2: Create family
-    const familyRes = await harness.invokeHandler("/api/family", "POST", {
-      name: "E2E Family",
-    });
-    expect(familyRes.status).toBe(200);
-
-    // Step 3: Create a slate
+    // Step 2: Create a slate (using the auto-created family)
     const slateRes = await harness.invokeHandler("/api/slates", "POST", {
       name: "E2E Slate",
+      familyId,
     });
     expect(slateRes.status).toBe(201);
 
-    // Step 4: Create a job
+    // Step 3: Create a job
     const jobRes = await harness.invokeHandler("/api/jobs", "POST", {
       name: "E2E Job",
-      familyId: "dev-family-001",
+      familyId,
       slateId: slateRes.body.id,
     });
     expect(jobRes.status).toBe(200);
 
-    // Step 5: Create a rotation
+    // Step 4: Create a rotation
     const rotRes = await harness.invokeHandler("/api/rotations", "POST", {
       slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
+      userId: meRes.body.user?.id || "dev-user-admin-001",
     });
     expect(rotRes.status).toBe(201);
 
-    // Step 6: Complete the job workflow
+    // Step 5: Complete the job workflow
     const doingRes = await harness.invokeHandler("/api/jobs", "PUT", {
       id: jobRes.body.id,
       status: "doing",
@@ -61,25 +59,29 @@ describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
   it("Cross-user workflow: admin creates family, child does chores", async () => {
     const harness = new TestHarness();
     
-    // Admin signs in and creates a family
+    // Admin signs in (auto-creates a family)
     await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-    const familyRes = await harness.invokeHandler("/api/family", "POST", {
-      name: "Cross-User Family",
-    });
-    expect(familyRes.status).toBe(200);
+    const adminMeRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(adminMeRes.status).toBe(200);
+    expect(adminMeRes.body.familyId).toBeTruthy();
+    const adminFamilyId = adminMeRes.body.familyId;
 
-    // Child signs in and creates a job
+    // Child signs in (gets their own family — different user)
     await harness.signIn("child@choretle.dev");
-    
+    const childMeRes = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(childMeRes.status).toBe(200);
+    expect(childMeRes.body.familyId).toBeTruthy();
+
+    // Child creates a job in their own family
     const slateRes = await harness.invokeHandler("/api/slates", "POST", {
       name: "Child Slate",
+      familyId: childMeRes.body.familyId,
     });
     expect(slateRes.status).toBe(201);
 
     const jobRes = await harness.invokeHandler("/api/jobs", "POST", {
       name: "Child Job",
-      familyId: "dev-family-001",
+      familyId: childMeRes.body.familyId,
       slateId: slateRes.body.id,
     });
     expect(jobRes.status).toBe(200);
@@ -90,21 +92,19 @@ describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
     const harness1 = new TestHarness();
     await harness1.signIn("admin@choretle.dev");
     
-    const family1Res = await harness1.invokeHandler("/api/family", "POST", {
-      name: "Family 1",
-    });
-    expect(family1Res.status).toBe(200);
+    const me1Res = await harness1.invokeHandler("/api/auth/me", "GET");
+    expect(me1Res.status).toBe(200);
+    expect(me1Res.body.familyId).toBeTruthy();
 
-    // Create second harness and sign in as child
+    // Create second harness and sign in as child (different user)
     const harness2 = new TestHarness();
     await harness2.signIn("child@choretle.dev");
     
-    const family2Res = await harness2.invokeHandler("/api/family", "POST", {
-      name: "Family 2",
-    });
-    expect(family2Res.status).toBe(200);
+    const me2Res = await harness2.invokeHandler("/api/auth/me", "GET");
+    expect(me2Res.status).toBe(200);
+    expect(me2Res.body.familyId).toBeTruthy();
 
-    // Verify both sessions work independently
+    // Verify both sessions work independently with valid cookies
     expect(harness1.getCookieJar().get("dev-session")).toBeTruthy();
     expect(harness2.getCookieJar().get("dev-session")).toBeTruthy();
   });
@@ -166,9 +166,10 @@ describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
     const noAuthRes = await harness.invokeHandler("/api/family", "POST", {});
     expect(noAuthRes.status).toBe(401);
 
-    // Valid auth, missing required field
+    // Valid auth, missing required field — signin auto-creates a family
     await harness.signIn("admin@choretle.dev");
-    const missingFieldRes = await harness.invokeHandler("/api/family", "POST", { name: "" });
-    expect(missingFieldRes.status).not.toBe(200);
+    // Trying to create another family with empty name returns 400 (name validation)
+    const alreadyHasFamily = await harness.invokeHandler("/api/family", "POST", { name: "" });
+    expect(alreadyHasFamily.status).toBe(400);
   });
 });

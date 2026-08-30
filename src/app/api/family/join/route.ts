@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { getInviteByCode, createInvite, deleteInvite } from "@/lib/db/service";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { error, info } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, extractUserId } from "@/lib/auth";
 
 /**
  * GET /api/family/join?familyId=<id>
@@ -61,24 +60,8 @@ export async function joinFamily(code: string, request: NextRequest) {
   try {
     if (!code) return NextResponse.json({ error: "Invite code is required" }, { status: 400 });
 
-    // Get current user — production mode uses Supabase session, dev mode uses x-user-id header
-    let userId: string | null = null;
-    
-    const cookieHeader = request.headers.get("cookie") || "";
-    if (cookieHeader && !process.env.AUTH_MODE) {
-      try {
-        const supabase = await getSupabaseMiddlewareClient(request);
-        const { data: { session } } = await supabase.auth.getSession();
-        userId = session?.user?.id || null;
-      } catch (e) {
-        error({ err: e }, "[JOIN] Supabase session check failed");
-      }
-    }
-
-    // Fallback to middleware header for dev mode
-    if (!userId) {
-      userId = request.headers.get("x-user-id");
-    }
+    // Get current user — uses middleware headers (prod) or dev-session cookie fallback (dev/Turbopack)
+    const userId = extractUserId(request);
 
     if (!userId) {
       return NextResponse.json({ error: "You must be logged in to join a family" }, { status: 401 });
@@ -99,6 +82,12 @@ export async function joinFamily(code: string, request: NextRequest) {
     const { initDb } = await import("@/db/drizzle");
     const db = await initDb();
     if (db) {
+      // Guard: user must not already belong to a family (one family per member)
+      const existingUser = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+      if (existingUser[0]?.familyId) {
+        return NextResponse.json({ error: "You are already a member of a family" }, { status: 409 });
+      }
+
       await db.update(schema.invites).set({ 
         used: 1,
         updatedAt: new Date().toISOString(),

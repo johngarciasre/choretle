@@ -23,6 +23,30 @@ export interface AuthResult {
  *   1. x-user-id / x-family-id headers (set by middleware in production)
  *   2. dev-session cookie (set by signin route in dev mode)
  */
+/**
+ * Extracts just the userId from a request (without requiring familyId).
+ * Used by routes that need to authenticate a user who may not yet have a family.
+ */
+export function extractUserId(request: NextRequest): string | null {
+  // Middleware headers — works in production AND dev when middleware runs
+  const userId = request.headers.get("x-user-id");
+  if (userId) return userId;
+
+  // Cookie fallback — needed when Turbopack doesn't run middleware
+  const cookieHeader = request.headers.get("cookie") || "";
+  const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+
+  if (setCookie) {
+    const value = setCookie.replace("dev-session=", "").trim();
+    const user = parseDevSession(value);
+    if (user) {
+      return user.id;
+    }
+  }
+
+  return null;
+}
+
 export function verifyAuth(request: NextRequest): AuthResult | null {
   // Middleware headers — works in production AND dev when middleware runs
   const userId = request.headers.get("x-user-id");
