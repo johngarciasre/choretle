@@ -124,8 +124,9 @@ export default function FamilyPage() {
             router.push(`/family/${data.familyId}`);
             return;
           }
-          
+
           setIsAuthenticated(true);
+          return;
         }
       }
       setIsAuthenticated(false);

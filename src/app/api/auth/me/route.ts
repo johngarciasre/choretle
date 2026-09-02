@@ -15,19 +15,21 @@ export async function GET(request: NextRequest) {
       const setCookie = cookieHeader.split(";").find((c: string) => c.includes(DEV_COOKIE_NAME));
       if (!setCookie) return NextResponse.json({ authenticated: false });
       const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
-      const user = parseDevSession(value);
-      if (user) {
+      const sessionUser = parseDevSession(value);
+      if (sessionUser) {
         const rawDb = getRawDb();
         if (rawDb) {
-          const dbUser = rawDb.prepare(`SELECT * FROM users WHERE id = ?`).get(user.id) as any;
+          // Look up by email instead of user ID — the session cookie may have a stale/fake ID
+          // from middleware auto-generation, but the email stays consistent across sessions.
+          const dbUser = rawDb.prepare(`SELECT * FROM users WHERE email = ?`).get((sessionUser.email || "").toLowerCase()) as any;
           return NextResponse.json({
             authenticated: true,
-            user: { id: user.id, email: user.email, name: user.name || "", role: user.role || "child" },
+            user: { id: dbUser?.id || sessionUser.id, email: dbUser?.email || sessionUser.email, name: dbUser?.name || sessionUser.name || "", role: dbUser?.role || sessionUser.role || "child" },
             familyId: dbUser?.family_id || null,
             familyName: null,
           });
         }
-        return NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, name: user.name || "", role: user.role || "child" }, familyId: null, familyName: null });
+        return NextResponse.json({ authenticated: true, user: { id: sessionUser.id, email: sessionUser.email, name: sessionUser.name || "", role: sessionUser.role || "child" }, familyId: null, familyName: null });
       }
       return NextResponse.json({ authenticated: false });
     }

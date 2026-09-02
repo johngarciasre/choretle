@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
       const userId = userRow.id;
       const familyId = userRow.family_id;
 
-      // Create dev session cookie
-      const sessionObj = { user: { id: userId, email: email || "", name: userRow.name || "", role: userRow.role || "child", familyId } };
+      // Create dev session cookie — ensures it matches the database user
+      const sessionObj = { user: { id: userId, email: userRow.email || "", name: userRow.name || "", role: userRow.role || "child", familyId } };
       const encoded = encodeURIComponent(JSON.stringify(sessionObj));
       const response = NextResponse.json({
         ok: true,
@@ -61,12 +61,12 @@ export async function POST(request: NextRequest) {
           const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
           let familyId: string | null = null;
           if ((countFamilies?.cnt ?? 0) === 0) {
-            const familySlug = `family-${Date.now()}`;
+            const ts = Date.now();
             const now = new Date().toISOString();
             rawDb.prepare(
               `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-            ).run(`family-${Date.now()}`, `${user.email?.split("@")[0] || ""}\'s Family`, familySlug, now, now);
-            familyId = `family-${Date.now()}`;
+            ).run(`family-${ts}`, `${user.email?.split("@")[0] || ""}'s Family`, `family-${ts}`, now, now);
+            familyId = `family-${ts}`;
           } else {
             const fam = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
             familyId = fam?.id || null;

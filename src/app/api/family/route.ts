@@ -104,9 +104,10 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString();
+    const ts = Date.now();
 
     // Create the family
-    const familyId = `family-${Date.now()}`;
+    const familyId = `family-${ts}`;
     rawDb.prepare(
       `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(familyId, body.name, slug, body.weekStartDay ?? 0, false, now, now);

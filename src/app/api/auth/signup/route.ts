@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
       const name = body?.name || "Dev User";
+      const ts = Date.now();
+      const now = new Date().toISOString();
 
       let role = "child";
       let familyId: string | null = null;
@@ -31,11 +33,10 @@ export async function POST(request: NextRequest) {
           role = await getNewUserRole(rawDb, null);
           const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
           if ((countFamilies?.cnt ?? 0) === 0) {
-            const familySlug = `family-${Date.now()}`;
-            const now = new Date().toISOString();
+            const familySlug = `family-${ts}`;
             rawDb.prepare(
               `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-            ).run(`family-${Date.now()}`, `${name}\'s Family`, familySlug, now, now);
+            ).run(`family-${ts}`, `${name}'s Family`, familySlug, now, now);
             role = "admin";
           }
         }
@@ -43,33 +44,37 @@ export async function POST(request: NextRequest) {
         // Silently fail
       }
 
-      const userId = `dev-user-${crypto.randomUUID()}`;
+      let userId: string;
 
       try {
         const rawDb = getRawDb();
         if (rawDb) {
-          let targetFamilyId: string | null = null;
-          const families = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
-          if (families) { targetFamilyId = families.id; }
-          else {
-            const familySlug = `family-${Date.now()}`;
-            const now = new Date().toISOString();
+          // Reuse existing user with the same email instead of creating a new one
+          const existingUser = rawDb.prepare(`SELECT id, role FROM users WHERE email = ?`).get(email) as any;
+          if (existingUser) {
+            userId = existingUser.id;
+            // Update name in case it changed
             rawDb.prepare(
-              `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-            ).run(`family-${Date.now()}`, `${name}\'s Family`, familySlug, now, now);
-            targetFamilyId = `family-${Date.now()}`;
-          }
-          familyId = targetFamilyId;
-
-          const existingUser = rawDb.prepare(`SELECT role FROM users WHERE id = ?`).get(userId) as any;
-          if (!existingUser) {
+              `UPDATE users SET name = ?, updated_at = ? WHERE id = ?`
+            ).run(name, now, userId);
+          } else {
+            // New user — ensure a family exists
+            let targetFamilyId: string | null = null;
+            const families = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
+            if (families) {
+              targetFamilyId = families.id;
+            } else {
+              const familySlug = `family-${ts}`;
+              rawDb.prepare(
+                `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
+              ).run(`family-${ts}`, `${name}'s Family`, familySlug, now, now);
+              targetFamilyId = `family-${ts}`;
+            }
+            familyId = targetFamilyId;
+            userId = `dev-user-${crypto.randomUUID()}`;
             rawDb.prepare(
               `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?, ?)`
-            ).run(userId, email, name, role || "child", targetFamilyId, new Date().toISOString(), new Date().toISOString());
-          } else if (existingUser.role !== "admin") {
-            rawDb.prepare(
-              `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?, ?)`
-            ).run(userId, email, name, existingUser.role, targetFamilyId, new Date().toISOString(), new Date().toISOString());
+            ).run(userId, email, name, role || "child", targetFamilyId, now, now);
           }
         }
       } catch (dbError) {
@@ -113,12 +118,12 @@ export async function POST(request: NextRequest) {
           const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
           let famId: string | null = null;
           if ((countFamilies?.cnt ?? 0) === 0) {
-            const familySlug = `family-${Date.now()}`;
+            const ts = Date.now();
             const now = new Date().toISOString();
             rawDb.prepare(
               `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-            ).run(`family-${Date.now()}`, `${body?.name || ""}\'s Family`, familySlug, now, now);
-            famId = `family-${Date.now()}`;
+            ).run(`family-${ts}`, `${body?.name || ""}'s Family`, `family-${ts}`, now, now);
+            famId = `family-${ts}`;
           } else {
             const fam = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
             famId = fam?.id || null;
