@@ -174,7 +174,18 @@ export function resetDb(): void {
  * Ensure DB is initialized. Uses in-memory SQLite for tests, file-based for dev/prod.
  */
 export async function initDb(): Promise<any> {
-  if (_db) return _db;
+  if (_db) {
+    // Verify cached Drizzle instance still works via its raw connection
+    try {
+      _rawDb!.prepare("SELECT 1").get();
+      return _db;
+    } catch {
+      error({}, "[DB] Stale Drizzle instance detected, reconnecting");
+      try { _rawDb!.close(); } catch {}
+      _rawDb = null;
+      _db = null;
+    }
+  }
 
   // Use in-memory database in test mode to avoid cross-file interference
   const dbPath = process.env.NODE_ENV === "test" ? ":memory:" : (process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:");
@@ -206,6 +217,19 @@ export function getRawDb(): Database.Database | null {
       return null;
     }
   }
+
+  // Detect stale connection — Next.js hot-reload can leave _rawDb pointing to a closed/stale handle.
+  // Test with a simple query; if it fails, reconnect.
+  try {
+    _rawDb!.prepare("SELECT 1").get();
+  } catch {
+    error({}, "[DB] Stale database connection detected, reconnecting");
+    try { _rawDb!.close(); } catch {}
+    _rawDb = null;
+    _db = null;
+    return getRawDb(); // Reinitialize
+  }
+
   return _rawDb;
 }
 
