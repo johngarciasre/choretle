@@ -134,7 +134,8 @@ function createTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS invites (
       id TEXT PRIMARY KEY, family_id TEXT NOT NULL, code TEXT UNIQUE NOT NULL,
       email TEXT, role TEXT DEFAULT 'child' NOT NULL, expires_at TEXT,
-      used INTEGER DEFAULT 0 NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      used INTEGER DEFAULT 0 NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_family ON tasks(family_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_archtype ON tasks(archtype);

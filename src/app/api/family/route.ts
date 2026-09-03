@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     let userId: string | null = auth?.userId ?? null;
 
     // Fallback: user may be authenticated but have no family yet (e.g., first-time create)
@@ -142,7 +142,10 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (e) {
-    error({ err: String(e), stack: (e as Error).stack }, "Create family failed");
-    return NextResponse.json({ error: "Failed to create family" }, { status: 500 });
+    error({ err: String(e), stack: (e as Error).stack }, `Create family failed`);
+    return NextResponse.json(
+      { error: e instanceof Error && e.message ? e.message : "Failed to create family" },
+      { status: 500 }
+    );
   }
 }

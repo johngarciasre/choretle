@@ -5,7 +5,7 @@ import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ familyId: string; teamId: string }> }) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
     const rawDb = getRawDb();
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ familyId: string; teamId: string }> }) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
     const body = await request.json();
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ familyId: string; teamId: string }> }) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
     const body = await request.json();

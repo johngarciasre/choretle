@@ -4,7 +4,7 @@ import { error, warn } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
 async function verifyLocalAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
-  const auth = verifyAuth(request);
+  const auth = await verifyAuth(request);
   if (!auth) return { error: "No token provided" };
   const rawDb = getRawDb();
   if (!rawDb) return { error: "Database not initialized" };

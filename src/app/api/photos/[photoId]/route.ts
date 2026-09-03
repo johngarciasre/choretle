@@ -5,7 +5,7 @@ import { verifyAuth } from "@/lib/auth";
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ photoId: string }> }) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
     const rawDb = getRawDb();

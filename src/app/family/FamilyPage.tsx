@@ -98,6 +98,9 @@ export default function FamilyPage() {
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState("#6366ee");
 
+  // Member management state
+  const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
+
   // Name editing state
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState("");
@@ -113,6 +116,7 @@ export default function FamilyPage() {
         const data = await response.json();
         if (data.authenticated && data.familyId) {
           setFamilyId(data.familyId);
+          setViewingFamily(data.familyId);
           return;
         }
       }
@@ -152,10 +156,12 @@ export default function FamilyPage() {
   // Track auth completion to defer data loading and avoid infinite loops
   const [authReady, setAuthReady] = useState(false);
 
-  // DEBUG: Simple effect — load data from URL path immediately
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - Family");
-    
+
+    // Check auth first — if user has a family, redirect to viewing it
+    checkAuth().finally(() => setAuthReady(true));
+
     // Load family data from the last segment of the URL
     const segments = typeof window !== "undefined" ? window.location.pathname.split("/").filter(Boolean) : [];
     const id = segments[segments.length > 1 ? segments.length - 1 : segments.length];
@@ -166,6 +172,15 @@ export default function FamilyPage() {
       loadInvites();
     }
   }, []);
+
+  // When checkAuth sets viewingFamily, load the data
+  useEffect(() => {
+    if (viewingFamily && !family) {
+      loadFamilyData(viewingFamily);
+      loadTags(viewingFamily);
+      loadInvites();
+    }
+  }, [viewingFamily]);
 
   const handleCreateFamily = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,16 +194,19 @@ export default function FamilyPage() {
         credentials: "include",
       });
 
-      if (!response.ok) throw new Error("Failed to create family");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Server error ${response.status}`);
+      }
 
       const data = await response.json();
       setFamilyId(data.family.id);
+      setViewingFamily(data.family.id);
       localStorage.setItem("familyId", data.family.id);
-
-      // No router needed — component re-renders on familyId change
     } catch (err) {
-      error({ err: err }, "Failed to create family");
-      alert("Failed to create family. Please try again.");
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      error({ err: err }, `Failed to create family: ${msg}`);
+      alert(msg);
     }
   };
 
@@ -416,6 +434,47 @@ export default function FamilyPage() {
     } catch (err) {
       error({ err: err }, "Failed to update theme");
       alert("Failed to update theme.");
+    }
+  };
+
+  const handleToggleMemberRole = async (userId: string, currentRole: string) => {
+    if (!familyId || !viewingFamily) return;
+    const newRole = currentRole === "admin" ? "child" : "admin";
+
+    try {
+      const response = await fetch(`/api/users`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, role: newRole }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to update member role");
+
+      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
+    } catch (err) {
+      error({ err }, "Failed to toggle member role");
+      alert("Failed to update member role.");
+    }
+  };
+
+  const handleDeleteMember = async (userId: string, userName: string) => {
+    if (!confirm(`Remove "${userName}" from this family?`)) return;
+
+    try {
+      const response = await fetch(`/api/users`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete member");
+
+      setUsers(users.filter(u => u.id !== userId));
+    } catch (err) {
+      error({ err }, "Failed to delete member");
+      alert("Failed to remove member.");
     }
   };
 
@@ -1093,11 +1152,16 @@ export default function FamilyPage() {
 
         {/* Family Members */}
         <section className="space-y-4">
-          <h2 className="font-display text-xl font-bold text-ink">Family Members</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="font-display text-xl font-bold text-ink flex items-center gap-2">
+              <Users size={20} />
+              Family Members
+            </h2>
+          </div>
 
           {(users ?? []).length === 0 ? (
             <Card accent="grape" className="p-8 text-center">
-              <EmptyState 
+              <EmptyState
                 icon={<Users size={32} />}
                 title="No Family Members Yet"
                 message="Add family members to get started with chore assignments!"
@@ -1122,16 +1186,35 @@ export default function FamilyPage() {
                         {user.name.charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <div>
-                      <h3 className="font-display text-lg font-bold text-ink">{user.name}</h3>
-                      <p className="text-sm text-ink/60">{user.email}</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-display text-lg font-bold text-ink truncate">{user.name}</h3>
+                      <p className="text-sm text-ink/60 truncate">{user.email}</p>
                     </div>
                   </div>
 
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-ink/60">Role:</span>
-                      <span className="font-bold text-ink capitalize">{user.role}</span>
+                      {viewingFamily && (
+                        <button
+                          onClick={() => handleToggleMemberRole(user.id, user.role)}
+                          className={`px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer ${
+                            user.role === "admin"
+                              ? "bg-teal/20 text-teal hover:bg-teal/30"
+                              : "bg-sunny/20 text-sunny hover:bg-sunny/30"
+                          }`}
+                          title={user.role === "admin" ? "Click to make child" : "Click to make adult"}
+                        >
+                          {user.role === "admin" ? "👨‍💼 Adult" : "👦 Child"}
+                        </button>
+                      )}
+                      {!viewingFamily && (
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          user.role === "admin" ? "bg-teal/20 text-teal" : "bg-sunny/20 text-sunny"
+                        }`}>
+                          {user.role}
+                        </span>
+                      )}
                     </div>
                     <div className="flex justify-between">
                       <span className="text-ink/60">Total Points:</span>
@@ -1146,7 +1229,7 @@ export default function FamilyPage() {
                       <p className="text-sm font-bold text-ink/60 mb-2">Teams:</p>
                       <div className="flex flex-wrap gap-1.5">
                         {(teams as any[]).filter((t: Team) => {
-                          const teamWithMembers = (teams as any[]).find((tm: Team) => 
+                          const teamWithMembers = (teams as any[]).find((tm: Team) =>
                             tm.members?.some((m: TeamMember) => m.userId === user.id)
                           );
                           return teamWithMembers && teamWithMembers.name === t.name;
@@ -1156,6 +1239,35 @@ export default function FamilyPage() {
                           </Badge>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Delete member button */}
+                  {viewingFamily && users.length > 1 && (
+                    <div className="pt-3 border-t border-ink/10">
+                      {deletingMemberId === user.id ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleDeleteMember(user.id, user.name)}
+                            className="flex-1 text-xs font-bold text-coral hover:text-coral/80 px-3 py-2 rounded-lg bg-coral/10 transition"
+                          >
+                            Confirm Remove
+                          </button>
+                          <button
+                            onClick={() => setDeletingMemberId(null)}
+                            className="flex-1 text-xs font-bold text-ink/60 hover:text-ink/90 px-3 py-2 rounded-lg transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeletingMemberId(user.id)}
+                          className="w-full text-xs font-bold text-coral/60 hover:text-coral hover:bg-coral/10 px-3 py-2 rounded-lg transition"
+                        >
+                          Remove member
+                        </button>
+                      )}
                     </div>
                   )}
                 </Card>

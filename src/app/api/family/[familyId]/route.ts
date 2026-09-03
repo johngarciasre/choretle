@@ -5,7 +5,7 @@ import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ familyId: string }> }) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
     const rawDb = getRawDb();
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PUT(request: NextRequest) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
@@ -48,9 +48,8 @@ export async function PUT(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    // Verify user belongs to this family
-    const userFamilyRows = rawDb.prepare(`SELECT role FROM users WHERE id = ? AND family_id = ?`).get(auth.userId, familyId) as any;
-    if (!userFamilyRows || userFamilyRows.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    // Verify user belongs to this family and is admin
+    if (auth.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
 
     const updates: string[] = ["updated_at = ?"];
     const values: any[] = [new Date().toISOString()];
@@ -85,7 +84,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = verifyAuth(request);
+    const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
@@ -93,8 +92,8 @@ export async function DELETE(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const userFamilyRows = rawDb.prepare(`SELECT role FROM users WHERE id = ? AND family_id = ?`).get(auth.userId, familyId) as any;
-    if (!userFamilyRows || userFamilyRows.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    // Verify user belongs to this family and is admin
+    if (auth.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
 
     rawDb.prepare(`DELETE FROM users WHERE family_id = ?`).run(familyId);
     rawDb.prepare(`DELETE FROM families WHERE id = ?`).run(familyId);

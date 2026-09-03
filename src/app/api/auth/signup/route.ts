@@ -9,10 +9,27 @@ function hasSupabaseConfig(): boolean {
 }
 
 async function getNewUserRole(rawDb: any, familyId: string | null): Promise<string> {
+  // The first person in a family is always admin (adult)
   const countResult = rawDb.prepare(
     familyId ? `SELECT COUNT(*) as cnt FROM users WHERE family_id = ?` : `SELECT COUNT(*) as cnt FROM users`
   ).get(familyId || undefined) as any;
   return (countResult?.cnt ?? 0) === 0 ? "admin" : "child";
+}
+
+async function getOrCreateFamily(rawDb: any, name: string): Promise<{ familyId: string; slug: string }> {
+  const ts = Date.now();
+  const now = new Date().toISOString();
+  // Check if a family already exists
+  const existing = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
+  if (existing) {
+    return { familyId: existing.id, slug: "" };
+  }
+  // Create a new family
+  const familySlug = `family-${ts}`;
+  rawDb.prepare(
+    `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
+  ).run(`family-${ts}`, `${name}'s Family`, familySlug, now, now);
+  return { familyId: `family-${ts}`, slug: familySlug };
 }
 
 export async function POST(request: NextRequest) {
@@ -23,60 +40,38 @@ export async function POST(request: NextRequest) {
     if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
       const name = body?.name || "Dev User";
-      const ts = Date.now();
       const now = new Date().toISOString();
 
       let role = "child";
       let familyId: string | null = null;
-      try {
-        const rawDb = getRawDb();
-        if (rawDb) {
-          role = await getNewUserRole(rawDb, null);
-          const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
-          if ((countFamilies?.cnt ?? 0) === 0) {
-            const familySlug = `family-${ts}`;
-            rawDb.prepare(
-              `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-            ).run(`family-${ts}`, `${name}'s Family`, familySlug, now, now);
-            role = "admin";
-          }
-        }
-      } catch (dbError) {
-        // Silently fail
-      }
-
       let userId = "";
 
       try {
         const rawDb = getRawDb();
-        if (rawDb) {
-          // Reuse existing user with the same email instead of creating a new one
-          const existingUser = rawDb.prepare(`SELECT id, role FROM users WHERE email = ?`).get(email) as any;
-          if (existingUser) {
-            userId = existingUser.id;
-            // Update name in case it changed
-            rawDb.prepare(
-              `UPDATE users SET name = ?, updated_at = ? WHERE id = ?`
-            ).run(name, now, userId);
-          } else {
-            // New user — ensure a family exists
-            let targetFamilyId: string | null = null;
-            const families = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
-            if (families) {
-              targetFamilyId = families.id;
-            } else {
-              const familySlug = `family-${ts}`;
-              rawDb.prepare(
-                `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-              ).run(`family-${ts}`, `${name}'s Family`, familySlug, now, now);
-              targetFamilyId = `family-${ts}`;
-            }
-            familyId = targetFamilyId;
-            userId = `dev-user-${crypto.randomUUID()}`;
-            rawDb.prepare(
-              `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?, ?)`
-            ).run(userId, email, name, role || "child", targetFamilyId, now, now);
-          }
+        if (!rawDb) throw new Error("Database not available");
+
+        // Reuse existing user with the same email instead of creating a new one
+        const existingUser = rawDb.prepare(`SELECT id, role, family_id FROM users WHERE email = ?`).get(email) as any;
+        if (existingUser) {
+          userId = existingUser.id;
+          familyId = existingUser.family_id;
+          role = existingUser.role || "child";
+          // Update name in case it changed
+          rawDb.prepare(
+            `UPDATE users SET name = ?, updated_at = ? WHERE id = ?`
+          ).run(name, now, userId);
+        } else {
+          // New user — ensure a family exists
+          const fam = await getOrCreateFamily(rawDb, name);
+          familyId = fam.familyId;
+
+          // First person in this family is admin
+          role = await getNewUserRole(rawDb, familyId);
+
+          userId = `dev-user-${crypto.randomUUID()}`;
+          rawDb.prepare(
+            `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?, ?)`
+          ).run(userId, email, name, role, familyId, now, now);
         }
       } catch (dbError) {
         error({ err: dbError }, "[SIGNUP] Database operations failed");
@@ -116,23 +111,18 @@ export async function POST(request: NextRequest) {
       if (rawDb) {
         const existingUser = rawDb.prepare(`SELECT role FROM users WHERE id = ?`).get(user.id) as any;
         if (!existingUser) {
-          const countFamilies = rawDb.prepare(`SELECT COUNT(*) as cnt FROM families`).get() as any;
-          let famId: string | null = null;
-          if ((countFamilies?.cnt ?? 0) === 0) {
-            const ts = Date.now();
-            const now = new Date().toISOString();
-            rawDb.prepare(
-              `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-            ).run(`family-${ts}`, `${body?.name || ""}'s Family`, `family-${ts}`, now, now);
-            famId = `family-${ts}`;
-          } else {
-            const fam = rawDb.prepare(`SELECT id FROM families LIMIT 1`).get() as any;
-            famId = fam?.id || null;
-          }
+          const fam = await getOrCreateFamily(rawDb, body?.name || "");
+          const famId = fam.familyId;
+
+          // First person in this family is admin
+          const userRole = await getNewUserRole(rawDb, famId);
 
           rawDb.prepare(
-            `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, 'child', NULL, ?, 0, ?, ?)`
-          ).run(user.id, user.email || "", body?.name || "", famId, new Date().toISOString(), new Date().toISOString());
+            `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?, ?)`
+          ).run(user.id, user.email || "", body?.name || "", userRole, famId, new Date().toISOString(), new Date().toISOString());
+        } else {
+          // Update last login
+          rawDb.prepare(`UPDATE users SET updated_at = ? WHERE id = ?`).run(new Date().toISOString(), user.id);
         }
       }
     } catch (dbError) {
