@@ -1095,7 +1095,7 @@ export default function FamilyPage() {
         <section className="space-y-4">
           <h2 className="font-display text-xl font-bold text-ink">Family Members</h2>
 
-          {users.length === 0 ? (
+          {(users ?? []).length === 0 ? (
             <Card accent="grape" className="p-8 text-center">
               <EmptyState 
                 icon={<Users size={32} />}
