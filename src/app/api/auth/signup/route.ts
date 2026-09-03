@@ -18,6 +18,7 @@ async function getNewUserRole(rawDb: any, familyId: string | null): Promise<stri
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log("[SIGNUP] Request received, AUTH_MODE:", process.env.AUTH_MODE);
 
     if (process.env.AUTH_MODE === "dev") {
       const email = body?.email?.toLowerCase().trim() || "";
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
         // Silently fail
       }
 
-      let userId: string;
+      let userId = "";
 
       try {
         const rawDb = getRawDb();

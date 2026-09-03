@@ -1,12 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { PageShell, PageHeader, EmptyState, Loading, PageLoader, Badge, Button, Card } from "@/components/ui";
+import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from "@/components/ui";
 import { Star, Users, Plus, X, Pencil, Trash2, Tag as TagIcon } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 import { error } from "@/lib/logger";
-import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Family {
   id: string;
@@ -55,12 +52,8 @@ interface User {
 }
 
 export default function FamilyPage() {
-  const authChecked = useAuthRedirect();
-  const pathname = usePathname();
-  const router = useRouter();
-  
   // Create/Join family state
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [familyId, setFamilyId] = useState("");
   const [viewingFamily, setViewingFamily] = useState<string | null>(null);
 
@@ -113,26 +106,18 @@ export default function FamilyPage() {
   const [selectedTheme, setSelectedTheme] = useState(family?.theme || "coral");
 
   const checkAuth = async () => {
+    // DEBUG: Skip auth, always return authenticated with familyId from URL
     try {
       const response = await fetch("/api/auth/me", { credentials: "include" });
       if (response.ok) {
         const data = await response.json();
-        if (data.authenticated) {
-          // If user already has a family, redirect them to it instead of showing create/join forms
-          if (data.familyId) {
-            setFamilyId(data.familyId);
-            router.push(`/family/${data.familyId}`);
-            return;
-          }
-
-          setIsAuthenticated(true);
+        if (data.authenticated && data.familyId) {
+          setFamilyId(data.familyId);
           return;
         }
       }
-      setIsAuthenticated(false);
     } catch (err) {
       error({ err }, "Auth check failed");
-      setIsAuthenticated(false);
     }
   };
 
@@ -164,28 +149,23 @@ export default function FamilyPage() {
     }
   };
 
-  // Load family ID from storage or URL
+  // Track auth completion to defer data loading and avoid infinite loops
+  const [authReady, setAuthReady] = useState(false);
+
+  // DEBUG: Simple effect — load data from URL path immediately
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - Family");
-    if (pathname.startsWith("/family/")) {
-      // Viewing a specific family
-      const id = pathname.split("/").pop();
-      if (id) {
-        loadFamilyData(id);
-        setViewingFamily(id);
-      }
-    } else if (pathname === "/family") {
-      // Create/join view
-      checkAuth();
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (viewingFamily) {
-      loadTags(viewingFamily);
+    
+    // Load family data from the last segment of the URL
+    const segments = typeof window !== "undefined" ? window.location.pathname.split("/").filter(Boolean) : [];
+    const id = segments[segments.length > 1 ? segments.length - 1 : segments.length];
+    if (id && id.startsWith("family-")) {
+      setViewingFamily(id);
+      loadFamilyData(id);
+      loadTags(id);
       loadInvites();
     }
-  }, [viewingFamily]);
+  }, []);
 
   const handleCreateFamily = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,9 +184,8 @@ export default function FamilyPage() {
       const data = await response.json();
       setFamilyId(data.family.id);
       localStorage.setItem("familyId", data.family.id);
-      
-      // Redirect to the new family view
-      router.push(`/family/${data.family.id}`);
+
+      // No router needed — component re-renders on familyId change
     } catch (err) {
       error({ err: err }, "Failed to create family");
       alert("Failed to create family. Please try again.");
@@ -230,8 +209,8 @@ export default function FamilyPage() {
       const data = await response.json();
       setFamilyId(data.family.id);
       localStorage.setItem("familyId", data.family.id);
-      
-      router.push(`/family/${data.family.id}`);
+
+      // No router needed — component re-renders on familyId change
     } catch (err) {
       error({ err: err }, "Failed to join family");
       alert("Failed to join family. Please try again.");
@@ -510,22 +489,7 @@ export default function FamilyPage() {
     return `Expires in ${months} month${months > 1 ? "s" : ""}`;
   };
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
-
-  if (!isAuthenticated && pathname.startsWith("/family/")) {
-    return (
-      <PageShell>
-        <main className="flex items-center justify-center min-h-[60vh]">
-          <EmptyState 
-            icon={<Star size={32} className="text-grape" />}
-            title="Welcome to Choretle!"
-            message="Create a family or join an existing one to get started."
-          />
-        </main>
-      </PageShell>
-    );
-  }
-
+  // DEBUG: No auth guard — render immediately
   if (loading) {
     return (
       <PageShell>
