@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
-import PhotoUploadModal from "@/components/PhotoUploadModal";
+import { X } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
@@ -18,6 +17,7 @@ interface Task {
   archtype?: string;
   isActive?: boolean;
   verifyRequired?: boolean;
+  tagIds?: string[];
 }
 
 interface Tag {
@@ -31,6 +31,14 @@ interface Subtask {
   name: string;
   points: number;
   order: number;
+}
+
+interface TaskFormData {
+  name: string;
+  description: string;
+  points: number;
+  verifyRequired: boolean;
+  tagIds: string[];
 }
 
 const fetchTask = async (id: string) => {
@@ -86,17 +94,20 @@ const fetchSubtasks = async (taskId: string) => {
 
 export default function TaskPage() {
   const authChecked = useAuthRedirect();
-  const router = useRouter();
   const taskId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
-  
+
   const [task, setTask] = useState<Task | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState("");
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [showUpload, setShowUpload] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState<TaskFormData>({
+    name: "",
+    description: "",
+    points: 10,
+    verifyRequired: false,
+    tagIds: [],
+  });
 
   // New subtask form state
   const [newSubtaskName, setNewSubtaskName] = useState("");
@@ -108,8 +119,6 @@ export default function TaskPage() {
     Promise.all([fetchTask(taskId), fetchTags(), fetchSubtasks(taskId)]).then(([taskData, tags, subtasks]) => {
       if (taskData) {
         setTask(taskData);
-        setNameValue(taskData.name);
-        setSelectedTagIds(taskData.tagIds || []);
       }
       setTags(tags);
       setSubtasks(subtasks || []);
@@ -117,31 +126,40 @@ export default function TaskPage() {
     });
   }, [taskId]);
 
+  function openEditModal() {
+    if (!task) return;
+    setFormData({
+      name: task.name,
+      description: task.description,
+      points: task.points,
+      verifyRequired: task.verifyRequired || false,
+      tagIds: task.tagIds || [],
+    });
+    setShowModal(true);
+  }
+
   async function handleUpdateTask() {
     if (!task || !taskId) return;
-    
+
     try {
-      const body = {
-        id: task.id,
-        name: nameValue,
-        description: task.description,
-        points: task.points,
-        verifyRequired: task.verifyRequired,
-        tagIds: selectedTagIds,
-      };
-      
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          id: task.id,
+          name: formData.name,
+          description: formData.description,
+          points: formData.points,
+          verifyRequired: formData.verifyRequired,
+          tags: formData.tagIds,
+        }),
       });
 
       if (!res.ok) throw new Error("Failed to update task");
-      
+
       const updated = await res.json();
       setTask(updated);
-      setNameValue(updated.name);
-      setSelectedTagIds(updated.tagIds || []);
+      setShowModal(false);
     } catch (err) {
       error({ err: err }, "Update task failed");
       alert("Failed to save changes");
@@ -188,12 +206,6 @@ export default function TaskPage() {
     }
   }
 
-  function toggleTag(tagId: string) {
-    setSelectedTagIds(prev => 
-      prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
-    );
-  }
-
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
   if (loading) return <PageLoader label="Loading task..." />;
@@ -204,56 +216,29 @@ export default function TaskPage() {
       <Card accent="coral" className="space-y-6">
         {/* Task Details */}
         <section className="space-y-4">
-          <div>
-            {editingName ? (
-              <input
-                type="text"
-                value={nameValue}
-                onChange={(e) => setNameValue(e.target.value)}
-                onBlur={() => setEditingName(false)}
-                onKeyDown={(e) => e.key === "Enter" && setEditingName(false)}
-                className="w-full px-4 py-2 rounded-xl border-2 border-ink/15 bg-white focus:border-grape focus:outline-none font-bold text-ink"
-              />
-            ) : (
-              <h2 
-                className="font-display text-3xl font-bold text-ink cursor-pointer hover:text-grape transition-colors"
-                onClick={() => { setEditingName(true); setNameValue(task.name); }}
-              >
-                {task.name}
-              </h2>
-            )}
+          <div className="flex items-center gap-3">
+            <h2 className="font-display text-3xl font-bold text-ink">{task.name}</h2>
+            <Button variant="ghost" onClick={openEditModal}>
+              Edit
+            </Button>
           </div>
 
-          <p className="text-ink/60">{task.description}</p>
-          
-          <div className="flex items-center gap-6">
+          {task.description && (
+            <p className="text-ink/60">{task.description}</p>
+          )}
+
+          <div className="flex items-center gap-4">
             <Badge status="points">{task.points} pts</Badge>
             {task.archtype && (
-              <>
-                <span className="text-sm text-ink/60">Type:</span>
-                <Badge status="neutral" className="text-xs px-2 py-0.5">{task.archtype}</Badge>
-              </>
+              <Badge status="neutral" className="text-xs px-2 py-0.5">{task.archtype}</Badge>
             )}
-          </div>
-
-          {/* Verify Required Toggle */}
-          <div className="flex items-center gap-3 pt-2 border-t border-ink/10 pt-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={task.verifyRequired || false}
-                onChange={(e) => setTask({ ...task, verifyRequired: e.target.checked })}
-                className="mr-1 accent-grape"
-              />
-              <span className="text-sm font-medium text-ink">Require verification on completion</span>
-            </label>
           </div>
         </section>
 
         {/* Subtasks Section */}
         <Card accent="teal" className="pt-6 space-y-4">
           <h3 className="font-display text-lg font-bold text-ink">Subtasks ({subtasks.length})</h3>
-          
+
           {subtasks.length === 0 ? (
             <p className="text-sm text-ink/60">No subtasks yet.</p>
           ) : (
@@ -305,61 +290,115 @@ export default function TaskPage() {
           </div>
         </Card>
 
-        {/* Tag Editor */}
-        <section className="pt-4 border-t border-ink/10">
-          <h3 className="font-display text-lg font-bold text-ink mb-3">Tags</h3>
-          
-          {tags.length === 0 ? (
-            <p className="text-sm text-ink/60">No tags available. Create tags in the app settings.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {tags.map(tag => (
-                <TagPill
-                  key={tag.id}
-                  active={selectedTagIds.includes(tag.id)}
-                  onClick={() => toggleTag(tag.id)}
-                >
-                  {tag.name}
-                </TagPill>
-              ))}
-            </div>
-          )}
-
-          <p className="mt-2 text-sm text-ink/60">
-            Select tags to assign to this task. Tags can be used for filtering and auto-inclusion in slates.
-          </p>
-        </section>
-
-        {/* Action Buttons */}
-        <section className="flex gap-4 pt-4 border-t border-ink/10">
-          {editingName ? (
-            <>
-              <Button variant="primary" onClick={handleUpdateTask}>
-                Save Changes
-              </Button>
-              <Button variant="ghost" onClick={() => { setEditingName(false); setNameValue(task.name); }}>
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <Button variant="primary" onClick={() => { setEditingName(true); setNameValue(task.name); }}>
-              Edit Task Details
-            </Button>
-          )}
-          
+        {/* Back Link */}
+        <section className="flex justify-end pt-4 border-t border-ink/10">
           <Link href="/tasks" className="px-6 py-2 rounded-full font-bold border-2 border-ink/15 hover:bg-grape/5 hover:border-grape/40 transition-colors text-ink">
             Back to Tasks
           </Link>
         </section>
       </Card>
 
-      {showUpload && (
-        <PhotoUploadModal
-          isOpen={showUpload}
-          onClose={() => setShowUpload(false)}
-          objectType="task"
-          objectId={taskId}
-        />
+      {/* Edit Task Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-xl font-bold text-ink">Edit Task</h3>
+              <button onClick={() => setShowModal(false)} className="text-ink/40 hover:text-ink transition">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="task-name" className="block text-sm font-bold text-ink mb-1">
+                  Task Name *
+                </label>
+                <input
+                  id="task-name"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="task-desc" className="block text-sm font-bold text-ink mb-1">
+                  Description
+                </label>
+                <textarea
+                  id="task-desc"
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe what needs to be done..."
+                  rows={3}
+                  className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none resize-y"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="task-points" className="block text-sm font-bold text-ink mb-1">
+                  Points
+                </label>
+                <input
+                  id="task-points"
+                  type="number"
+                  min={0}
+                  value={formData.points}
+                  onChange={(e) => setFormData(prev => ({ ...prev, points: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-ink mb-2">Tags</label>
+                {tags.length === 0 ? (
+                  <p className="text-sm text-ink/60">No tags available.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map(tag => (
+                      <TagPill
+                        key={tag.id}
+                        active={formData.tagIds.includes(tag.id)}
+                        onClick={() => {
+                          const newTagIds = formData.tagIds.includes(tag.id)
+                            ? formData.tagIds.filter(id => id !== tag.id)
+                            : [...formData.tagIds, tag.id];
+                          setFormData(prev => ({ ...prev, tagIds: newTagIds }));
+                        }}
+                      >
+                        {tag.name}
+                      </TagPill>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="task-verify"
+                  type="checkbox"
+                  checked={formData.verifyRequired}
+                  onChange={(e) => setFormData(prev => ({ ...prev, verifyRequired: e.target.checked }))}
+                  className="accent-grape"
+                />
+                <label htmlFor="task-verify" className="text-sm font-medium text-ink">
+                  Require verification on completion
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button variant="primary" onClick={handleUpdateTask} className="flex-1 justify-center">
+                Update Task
+              </Button>
+              <Button variant="ghost" onClick={() => setShowModal(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </PageShell>
   );

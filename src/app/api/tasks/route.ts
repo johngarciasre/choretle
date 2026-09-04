@@ -24,16 +24,24 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const tagIds = searchParams.get("tagIds");
 
-    // Get tasks using raw SQL (Drizzle ORM fails on SQLite)
-    let tasks = rawDb.prepare(`SELECT * FROM tasks WHERE family_id = ?`).all(familyId) as any[];
+    // Get tasks with their tags using raw SQL (Drizzle ORM fails on SQLite)
+    const tasks = rawDb.prepare(
+      `SELECT t.*, GROUP_CONCAT(tt.tag_id) as tag_ids FROM tasks t LEFT JOIN task_tags tt ON t.id = tt.task_id WHERE t.family_id = ? GROUP BY t.id`
+    ).all(familyId) as any[];
+
+    // Enrich each task with tagIds array
+    const enrichedTasks = tasks.map((task: any) => ({
+      ...task,
+      tagIds: task.tag_ids ? task.tag_ids.split(",") : [],
+    }));
 
     // Filter by tags if provided
     if (tagIds) {
       const tagIdArray = JSON.parse(tagIds);
-      tasks = tasks.filter((task: any) => task.tagIds && tagIdArray.some((id: string) => task.tagIds.includes(id)));
+      return NextResponse.json(enrichedTasks.filter((task: any) => task.tagIds && tagIdArray.some((id: string) => task.tagIds.includes(id))));
     }
 
-    return NextResponse.json(tasks);
+    return NextResponse.json(enrichedTasks);
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Get tasks failed");
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });

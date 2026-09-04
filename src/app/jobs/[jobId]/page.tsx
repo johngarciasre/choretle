@@ -324,12 +324,12 @@ export default function JobPage() {
                   Done
                 </Button>
                 {job.verifyRequired ? (
-                  <Button variant="warning" onClick={() => handleStatusChange("under_review")}>
+                  <Button variant="grape" onClick={() => handleStatusChange("under_review")}>
                     Submit for Review
                   </Button>
                 ) : (
                   <Button variant="grape" onClick={() => handleStatusChange("todo")}>
-                    Start Over
+                    Reset to Todo
                   </Button>
                 )}
               </>

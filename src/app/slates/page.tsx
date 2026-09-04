@@ -452,8 +452,7 @@ function SlateBuilderPage({
   }
 
   return (
-    <PageShell>
-      <Card accent="coral" className="space-y-8 p-6">
+    <Card accent="coral" className="space-y-8 p-6">
         {/* Search Bar */}
         <section>
           <input
@@ -598,7 +597,6 @@ function SlateBuilderPage({
             Cancel
           </Button>
         </section>
-      </Card>
-    </PageShell>
+    </Card>
   );
 }
