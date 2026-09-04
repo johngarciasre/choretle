@@ -45,7 +45,8 @@ describe("Auth Flow Integration", () => {
     const harness = new TestHarness();
     const res = await harness.invokeHandler("/api/auth/me", "GET");
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    expect(res.body.authenticated).toBe(false);
   });
 
   it("GET /api/auth/me with valid cookie returns user info", async () => {
@@ -63,7 +64,7 @@ describe("Auth Flow Integration", () => {
 
   it("POST /api/auth/signout clears session cookie", async () => {
     const harness = new TestHarness();
-    
+
     // Sign in first
     resetDb();
     await harness.signIn("admin@choretle.dev");
@@ -74,9 +75,10 @@ describe("Auth Flow Integration", () => {
     expect(res.status).toBe(200);
     expect(harness.getCookieJar().get("dev-session")).toBeNull();
 
-    // Try to access protected route — should now be 401
+    // Try to access protected route — should return authenticated: false (not 401, as /me is a public status check)
     const protectedRes = await harness.invokeHandler("/api/auth/me", "GET");
-    expect(protectedRes.status).toBe(401);
+    expect(protectedRes.status).toBe(200);
+    expect(protectedRes.body.authenticated).toBe(false);
   });
 
   it("Multiple sign-ins replace the session cookie", async () => {

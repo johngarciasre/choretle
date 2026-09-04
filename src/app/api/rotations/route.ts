@@ -74,20 +74,19 @@ export async function POST(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const now = new Date().toISOString();
     if (id) {
       // Update existing rotation
       rawDb.prepare(
-        `UPDATE rotations SET slate_id = ?, user_id = ?, "order" = ?, interval_days = ?, is_active = ?, updated_at = ? WHERE id = ?`
-      ).run(slateId, userId, order || 0, intervalDays || 7, (isActive !== false) ? 1 : 0, now, id);
+        `UPDATE rotations SET slate_id = ?, user_id = ?, "order" = ?, interval_days = ?, is_active = ? WHERE id = ?`
+      ).run(slateId, userId, order || 0, intervalDays || 7, (isActive !== false) ? 1 : 0, id);
       const result = rawDb.prepare(`SELECT * FROM rotations WHERE id = ?`).get(id) as any;
       return NextResponse.json(result, { status: 200 });
     } else {
       // Create new rotation
       const rotId = `rot-${Date.now()}`;
       rawDb.prepare(
-        `INSERT INTO rotations (id, slate_id, user_id, "order", interval_days, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(rotId, slateId, userId, order || 0, intervalDays || 7, (isActive !== false) ? 1 : 0, now, now);
+        `INSERT INTO rotations (id, slate_id, user_id, "order", interval_days, is_active) VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(rotId, slateId, userId, order || 0, intervalDays || 7, (isActive !== false) ? 1 : 0);
       const result = rawDb.prepare(`SELECT * FROM rotations WHERE id = ?`).get(rotId) as any;
       return NextResponse.json(result, { status: 201 });
     }

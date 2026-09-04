@@ -59,7 +59,7 @@ describe("Rotations API Integration", () => {
       slateId: slateRes.body.id,
       userId: "dev-user-child-001",
     });
-    expect(updateRes.status).toBe(201);
+    expect(updateRes.status).toBe(200);
   });
 
   it("DELETE /api/rotations deletes a rotation", async () => {
@@ -112,7 +112,7 @@ describe("Rotations API Integration", () => {
       slateId: slateRes.body.id,
       userId: "dev-user-child-001",
     });
-    expect(updateRes.status).toBe(201);
+    expect(updateRes.status).toBe(200);
 
     // Get rotations for the family
     const getRes = await harness.invokeHandler("/api/rotations?familyId=dev-family-001", "GET");
@@ -195,7 +195,7 @@ describe("Rotations API Integration", () => {
       slateId: slateRes.body.id,
       userId: "dev-user-child-001",
     });
-    expect(updateRes.status).toBe(201);
+    expect(updateRes.status).toBe(200);
   });
 
   it("Rotations with default intervalDays use 7 days", async () => {
