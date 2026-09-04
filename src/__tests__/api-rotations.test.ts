@@ -25,7 +25,7 @@ describe("API Routes — Rotations", () => {
 
     db.prepare("INSERT INTO families (id, name, slug) VALUES (?, ?, ?)").run(familyId, "Test Family", "test-family");
     db.prepare("INSERT INTO users (id, email, name, role, family_id) VALUES (?, ?, ?, ?, ?)").run(userId1, "user1@test.com", "User 1", "child", familyId);
-    db.prepare("INSERT INTO users (id, email, name, role, family_id) VALUES (?, ?, ?, ?, ?)").run(userId2, "user2@test.com", "User 2", "admin", familyId);
+    db.prepare("INSERT INTO users (id, email, name, role, family_id) VALUES (?, ?, ?, ?, ?)").run(userId2, "user2@test.com", "User 2", "parent", familyId);
     db.prepare("INSERT INTO slates (id, family_id, name, frequency, interval, is_active) VALUES (?, ?, ?, ?, ?, ?)").run(slateId, familyId, "Test Slate", "weekly", 1, 1);
 
     // Create rotations

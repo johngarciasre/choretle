@@ -10,7 +10,7 @@ describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
   it("Complete workflow: create family → slates → jobs → rotations", async () => {
     const harness = new TestHarness();
     
-    // Step 1: Sign in as admin (auto-creates a family)
+    // Step 1: Sign in as parent (auto-creates a family)
     await harness.signIn("admin@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
@@ -56,10 +56,10 @@ describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
     expect(doneRes.status).toBe(200);
   });
 
-  it("Cross-user workflow: admin creates family, child does chores", async () => {
+  it("Cross-user workflow: parent creates family, child does chores", async () => {
     const harness = new TestHarness();
-    
-    // Admin signs in (auto-creates a family)
+
+    // Parent signs in (auto-creates a family)
     await harness.signIn("admin@choretle.dev");
     const adminMeRes = await harness.invokeHandler("/api/auth/me", "GET");
     expect(adminMeRes.status).toBe(200);
@@ -88,7 +88,7 @@ describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
   });
 
   it("Session isolation — each harness has independent cookies", async () => {
-    // Create first harness and sign in as admin
+    // Create first harness and sign in as parent
     const harness1 = new TestHarness();
     await harness1.signIn("admin@choretle.dev");
     
