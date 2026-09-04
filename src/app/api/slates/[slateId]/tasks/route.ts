@@ -52,8 +52,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    error({ err: err }, "Slate tasks PUT failed");
-    return NextResponse.json({ error: "Failed to update slate tasks" }, { status: 500 });
+    const errMsg = String(err);
+    error({ err: errMsg }, "Slate tasks PUT failed");
+    return NextResponse.json({ error: `Failed to update slate tasks: ${errMsg}` }, { status: 500 });
   }
 }
 

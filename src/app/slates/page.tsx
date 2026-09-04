@@ -181,13 +181,18 @@ export default function SlatesPage() {
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error("Failed to save slate");
+      if (!res.ok) {
+        const respBody = await res.text().catch(() => "");
+        error({ status: res.status, body: respBody }, "Save slate failed");
+        alert(`Failed to save slate (${res.status}): ${respBody || "Unknown error"}`);
+        return;
+      }
 
       setBuildingSlateId(null);
       fetchTasks();
     } catch (err) {
-      error({ err: err }, "Save slate failed");
-      alert("Failed to save slate configuration");
+      error({ err: String(err) }, "Save slate failed");
+      alert(`Failed to save slate configuration: ${String(err)}`);
     }
   }
 
