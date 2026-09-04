@@ -96,13 +96,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const taskId = (await params).taskId;
-    rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ?`).run(taskId);
-    rawDb.prepare(`DELETE FROM subtasks WHERE task_id = ?`).run(taskId);
-    rawDb.prepare(`UPDATE tasks SET is_active = 0 WHERE id = ?`).run(taskId);
+
+    // Verify task exists and belongs to family before deleting
+    const task = rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(taskId, familyId);
+    if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+
+    rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ? AND family_id = ?)`).run(taskId, taskId, familyId);
+    rawDb.prepare(`DELETE FROM subtasks WHERE task_id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ? AND family_id = ?)`).run(taskId, taskId, familyId);
+    rawDb.prepare(`DELETE FROM tasks WHERE id = ? AND family_id = ?`).run(taskId, familyId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -201,8 +201,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete task tags first (cascade via FK constraints in PostgreSQL)
-    rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ?`).run(id);
-    rawDb.prepare(`DELETE FROM tasks WHERE id = ?`).run(id);
+    rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ? AND family_id = ?)`).run(id, id, familyId);
+    rawDb.prepare(`DELETE FROM tasks WHERE id = ? AND family_id = ?`).run(id, familyId);
 
     return NextResponse.json({ success: true });
   } catch (err) {
