@@ -17,19 +17,19 @@ describe("Auth Flow Integration", () => {
     expect(res.headers["set-cookie"]).toContain("dev-session=");
   });
 
-  it("first user to sign up gets admin role", async () => {
+  it("first user to sign up gets parent role", async () => {
     const harness = new TestHarness();
     const res = await harness.signIn("admin@choretle.dev");
 
     expect(res.status).toBe(200);
-    expect(res.body.role).toBe("admin");
+    expect(res.body.role).toBe("parent");
   });
 
-  it("first user to sign up gets admin role on signup route", async () => {
+  it("first user to sign up gets parent role on signup route", async () => {
     const harness = new TestHarness();
     // Reset DB for clean state
     resetDb();
-    
+
     const res = await harness.invokeHandler("/api/auth/signup", "POST", {
       email: "first@choretle.dev",
       password: "password123",
@@ -38,7 +38,7 @@ describe("Auth Flow Integration", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    // First user should be admin (checked via /api/auth/me)
+    // First user should be parent (checked via /api/auth/me)
   });
 
   it("GET /api/auth/me without cookie returns 401", async () => {
@@ -50,7 +50,7 @@ describe("Auth Flow Integration", () => {
 
   it("GET /api/auth/me with valid cookie returns user info", async () => {
     const harness = new TestHarness();
-    // Reset DB for clean state to ensure first user is admin
+    // Reset DB for clean state to ensure first user is parent
     resetDb();
     
     await harness.signIn("admin@choretle.dev");
@@ -87,10 +87,10 @@ describe("Auth Flow Integration", () => {
     await harness.signIn("admin@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
-    // Sign in again — should create a new user with admin role (first user)
+    // Sign in again — should create a new user with parent role (first user)
     const res = await harness.signIn("second@choretle.dev");
     expect(res.status).toBe(200);
-    // Second user should be child since first is already admin
+    // Second user should be child since first is already parent
     expect(res.body.role).toBe("child");
   });
 

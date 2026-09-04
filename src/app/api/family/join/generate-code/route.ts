@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     if (!auth.familyId) return NextResponse.json({ error: "User has no family" }, { status: 400 });
-    if (auth.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    if (auth.role !== "parent") return NextResponse.json({ error: "Parent access required" }, { status: 403 });
 
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });

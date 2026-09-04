@@ -42,7 +42,7 @@ describe("API Routes — Family Settings", () => {
       familyId, "My Family", "my-family", "coral"
     );
     db.prepare("INSERT INTO users (id, email, name, role, family_id) VALUES (?, ?, ?, ?, ?)").run(
-      userId1, "user1@test.com", "User 1", "admin", familyId
+      userId1, "user1@test.com", "User 1", "parent", familyId
     );
     db.prepare("INSERT INTO users (id, email, name, role, family_id) VALUES (?, ?, ?, ?, ?)").run(
       userId2, "user2@test.com", "User 2", "child", familyId
@@ -358,10 +358,10 @@ describe("API Routes — Family Settings", () => {
       expect(users.length).toBe(2);
     });
 
-    it("should identify admin vs child roles", () => {
+    it("should identify parent vs child roles", () => {
       const users = db.prepare("SELECT * FROM users WHERE family_id = ?").all(familyId);
       const roles = users.map((u: any) => u.role);
-      expect(roles).toContain("admin");
+      expect(roles).toContain("parent");
       expect(roles).toContain("child");
     });
   });

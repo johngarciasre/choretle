@@ -130,7 +130,7 @@ describe("Rotations API Integration", () => {
     });
     expect(slateRes.status).toBe(201);
 
-    // Create rotation for admin
+    // Create rotation for parent
     const res1 = await harness.invokeHandler("/api/rotations", "POST", {
       slateId: slateRes.body.id,
       userId: "dev-user-admin-001",

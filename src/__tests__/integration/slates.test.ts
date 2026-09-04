@@ -103,11 +103,11 @@ describe("Slates API Integration", () => {
   it("Slates created by different users are associated with family", async () => {
     const harness = new TestHarness();
 
-    // Admin creates a slate
+    // Parent creates a slate
     await harness.signIn("admin@choretle.dev");
     harness.setFamilyId("dev-family-001");
     const adminRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Admin Slate",
+      name: "Parent Slate",
     });
     expect(adminRes.status).toBe(201);
 

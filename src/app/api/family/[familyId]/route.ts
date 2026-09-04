@@ -48,8 +48,8 @@ export async function PUT(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    // Verify user belongs to this family and is admin
-    if (auth.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    // Verify user belongs to this family and is parent
+    if (auth.role !== "parent") return NextResponse.json({ error: "Parent access required" }, { status: 403 });
 
     const updates: string[] = ["updated_at = ?"];
     const values: any[] = [new Date().toISOString()];
@@ -92,8 +92,8 @@ export async function DELETE(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    // Verify user belongs to this family and is admin
-    if (auth.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    // Verify user belongs to this family and is parent
+    if (auth.role !== "parent") return NextResponse.json({ error: "Parent access required" }, { status: 403 });
 
     rawDb.prepare(`DELETE FROM users WHERE family_id = ?`).run(familyId);
     rawDb.prepare(`DELETE FROM families WHERE id = ?`).run(familyId);

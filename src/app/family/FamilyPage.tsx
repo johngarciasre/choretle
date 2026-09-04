@@ -169,7 +169,7 @@ export default function FamilyPage() {
       setViewingFamily(id);
       loadFamilyData(id);
       loadTags(id);
-      loadInvites();
+      loadInvites(id);
     }
   }, []);
 
@@ -178,7 +178,7 @@ export default function FamilyPage() {
     if (viewingFamily && !family) {
       loadFamilyData(viewingFamily);
       loadTags(viewingFamily);
-      loadInvites();
+      loadInvites(viewingFamily);
     }
   }, [viewingFamily]);
 
@@ -439,7 +439,7 @@ export default function FamilyPage() {
 
   const handleToggleMemberRole = async (userId: string, currentRole: string) => {
     if (!familyId || !viewingFamily) return;
-    const newRole = currentRole === "admin" ? "child" : "admin";
+    const newRole = currentRole === "parent" ? "child" : "parent";
 
     try {
       const response = await fetch(`/api/users`, {
@@ -478,11 +478,12 @@ export default function FamilyPage() {
     }
   };
 
-  const loadInvites = async () => {
-    if (!familyId) return;
+  const loadInvites = async (fid?: string) => {
+    const id = fid || familyId;
+    if (!id) return;
     setLoadingInvites(true);
     try {
-      const response = await fetch(`/api/family/join?familyId=${familyId}`);
+      const response = await fetch(`/api/family/join?familyId=${id}`, { credentials: "include" });
       if (response.ok) {
         const data = await response.json();
         setInvites(data.invites || []);
@@ -1199,18 +1200,18 @@ export default function FamilyPage() {
                         <button
                           onClick={() => handleToggleMemberRole(user.id, user.role)}
                           className={`px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer ${
-                            user.role === "admin"
+                            user.role === "parent"
                               ? "bg-teal/20 text-teal hover:bg-teal/30"
                               : "bg-sunny/20 text-sunny hover:bg-sunny/30"
                           }`}
-                          title={user.role === "admin" ? "Click to make child" : "Click to make adult"}
+                          title={user.role === "parent" ? "Click to make child" : "Click to make parent"}
                         >
-                          {user.role === "admin" ? "👨‍💼 Adult" : "👦 Child"}
+                          {user.role === "parent" ? "👨‍💼 Parent" : "👦 Child"}
                         </button>
                       )}
                       {!viewingFamily && (
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          user.role === "admin" ? "bg-teal/20 text-teal" : "bg-sunny/20 text-sunny"
+                          user.role === "parent" ? "bg-teal/20 text-teal" : "bg-sunny/20 text-sunny"
                         }`}>
                           {user.role}
                         </span>

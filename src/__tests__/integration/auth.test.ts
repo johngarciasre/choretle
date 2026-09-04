@@ -16,20 +16,20 @@ describe("API Integration — Auth Flow", () => {
     expect(res.body.userId).toMatch(/^dev-user-/);
   });
 
-  it("first user to sign in gets admin role", async () => {
+  it("first user to sign in gets parent role", async () => {
     const harness = new TestHarness();
     resetDb();
     const res = await harness.signIn("admin@choretle.dev");
 
     expect(res.status).toBe(200);
-    expect(res.body.role).toBe("admin");
+    expect(res.body.role).toBe("parent");
   });
 
   it("second user to sign in gets child role", async () => {
     const harness = new TestHarness();
     resetDb();
-    
-    // First sign-in creates admin
+
+    // First sign-in creates parent
     await harness.signIn("first@choretle.dev");
     
     // Second sign-in creates child
@@ -76,7 +76,7 @@ describe("API Integration — Auth Flow", () => {
     const harness = new TestHarness();
     
     resetDb();
-    // First sign-in creates admin
+    // First sign-in creates parent
     await harness.signIn("first@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 

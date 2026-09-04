@@ -8,7 +8,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { code } = await params;
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    if (auth.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    if (auth.role !== "parent") return NextResponse.json({ error: "Parent access required" }, { status: 403 });
 
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });

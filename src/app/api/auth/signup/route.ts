@@ -9,11 +9,11 @@ function hasSupabaseConfig(): boolean {
 }
 
 async function getNewUserRole(rawDb: any, familyId: string | null): Promise<string> {
-  // The first person in a family is always admin (adult)
+  // The first person in a family is always parent (adult)
   const countResult = rawDb.prepare(
     familyId ? `SELECT COUNT(*) as cnt FROM users WHERE family_id = ?` : `SELECT COUNT(*) as cnt FROM users`
   ).get(familyId || undefined) as any;
-  return (countResult?.cnt ?? 0) === 0 ? "admin" : "child";
+  return (countResult?.cnt ?? 0) === 0 ? "parent" : "child";
 }
 
 async function getOrCreateFamily(rawDb: any, name: string): Promise<{ familyId: string; slug: string }> {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
           const fam = await getOrCreateFamily(rawDb, name);
           familyId = fam.familyId;
 
-          // First person in this family is admin
+          // First person in this family is parent
           role = await getNewUserRole(rawDb, familyId);
 
           userId = `dev-user-${crypto.randomUUID()}`;
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
           const fam = await getOrCreateFamily(rawDb, body?.name || "");
           const famId = fam.familyId;
 
-          // First person in this family is admin
+          // First person in this family is parent
           const userRole = await getNewUserRole(rawDb, famId);
 
           rawDb.prepare(
