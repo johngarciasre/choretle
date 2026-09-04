@@ -77,8 +77,8 @@ export async function POST(request: NextRequest) {
       points || 0,
       icon || null,
       archtype || "job",
-      true,
-      verifyRequired ?? false,
+      1,
+      verifyRequired ? 1 : 0,
       new Date().toISOString(),
       new Date().toISOString(),
     );
@@ -137,8 +137,8 @@ export async function PUT(request: NextRequest) {
       points,
       icon || null,
       archtype,
-      isActive !== false,
-      verifyRequired ?? false,
+      isActive !== false ? 1 : 0,
+      verifyRequired ? 1 : 0,
       id,
     );
 

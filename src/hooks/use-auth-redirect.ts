@@ -7,7 +7,7 @@ export function useAuthRedirect() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      fetch("/api/auth/me")
+      fetch("/api/auth/me", { credentials: "include" })
         .then((res) => {
           if (!res.ok) {
             window.location.href = "/auth/signin";

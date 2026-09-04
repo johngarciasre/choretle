@@ -35,13 +35,13 @@ interface Subtask {
 
 const fetchTask = async (id: string) => {
   try {
-    const authRes = await fetch("/api/auth/me");
+    const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
     const familyId = authData.familyId;
     if (!familyId) throw new Error("No family ID");
 
-    const res = await fetch(`/api/tasks/${id}?familyId=${familyId}`);
+    const res = await fetch(`/api/tasks/${id}?familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch task");
     return await res.json();
   } catch (err) {
@@ -52,13 +52,13 @@ const fetchTask = async (id: string) => {
 
 const fetchTags = async () => {
   try {
-    const authRes = await fetch("/api/auth/me");
+    const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
     const familyId = authData.familyId;
     if (!familyId) throw new Error("No family ID");
 
-    const res = await fetch(`/api/tags?familyId=${familyId}`);
+    const res = await fetch(`/api/tags?familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (err) {
@@ -69,13 +69,13 @@ const fetchTags = async () => {
 
 const fetchSubtasks = async (taskId: string) => {
   try {
-    const authRes = await fetch("/api/auth/me");
+    const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
     const familyId = authData.familyId;
     if (!familyId) throw new Error("No family ID");
 
-    const res = await fetch(`/api/tasks/subtasks?taskId=${taskId}&familyId=${familyId}`);
+    const res = await fetch(`/api/tasks/subtasks?taskId=${taskId}&familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
   } catch (err) {

@@ -41,7 +41,7 @@ interface SwapMeetEntry {
 }
 
 async function getFamilyId(): Promise<string> {
-  const res = await fetch("/api/auth/me");
+  const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
   if (!data.familyId) throw new Error("No family ID");
@@ -81,7 +81,7 @@ export default function SwapMeetPage() {
   const fetchSchedule = async (fid: string, days: number) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/swap-meet?familyId=${fid}&daysAhead=${days}`);
+      const response = await fetch(`/api/swap-meet?familyId=${fid}&daysAhead=${days}`, { credentials: "include" });
       const data = await response.json();
 
       if (!response.ok) {
@@ -104,7 +104,7 @@ export default function SwapMeetPage() {
 
   const fetchRotations = async (fid: string, slateId: string) => {
     try {
-      const response = await fetch(`/api/rotations?familyId=${fid}&slateId=${slateId}`);
+      const response = await fetch(`/api/rotations?familyId=${fid}&slateId=${slateId}`, { credentials: "include" });
       if (!response.ok) return;
       const data = await response.json();
       setRotations(data.rotations || []);
@@ -115,7 +115,7 @@ export default function SwapMeetPage() {
 
   const fetchSwaps = async (fid: string) => {
     try {
-      const response = await fetch(`/api/family/swap-meet?familyId=${fid}`);
+      const response = await fetch(`/api/family/swap-meet?familyId=${fid}`, { credentials: "include" });
       if (!response.ok) return;
       const data = await response.json();
       setSwaps(data.swaps || []);

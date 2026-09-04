@@ -31,12 +31,12 @@ interface TaskFormData {
 
 const fetchTasks = async () => {
   try {
-    const authRes = await fetch("/api/auth/me");
+    const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
     const familyId = authData.familyId;
 
-    const res = await fetch(`/api/tasks?familyId=${familyId}`);
+    const res = await fetch(`/api/tasks?familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch tasks");
     return await res.json();
   } catch (err) {
@@ -47,12 +47,12 @@ const fetchTasks = async () => {
 
 const fetchTags = async () => {
   try {
-    const authRes = await fetch("/api/auth/me");
+    const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
     const familyId = authData.familyId;
 
-    const res = await fetch(`/api/tags?familyId=${familyId}`);
+    const res = await fetch(`/api/tags?familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (err) {
@@ -120,7 +120,7 @@ export default function TasksPage() {
 
     try {
       // Get familyId from auth endpoint
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
       const familyId = authData.familyId;
@@ -135,6 +135,7 @@ export default function TasksPage() {
             ...formData,
             ...(isEdit ? { id: editingTask!.id } : {}),
           }),
+          credentials: "include",
         }
       );
 
@@ -160,13 +161,14 @@ export default function TasksPage() {
 
     try {
       // Get familyId from auth endpoint
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
       const familyId = authData.familyId;
 
       const res = await fetch(`/api/tasks/${taskId}?familyId=${familyId}`, {
         method: "DELETE",
+        credentials: "include",
       });
 
       if (!res.ok) throw new Error("Failed to delete task");

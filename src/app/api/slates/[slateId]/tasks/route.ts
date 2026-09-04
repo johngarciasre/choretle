@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRawDb } from "@/db/drizzle";
+import { verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const rawDb = getRawDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
@@ -11,31 +17,40 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const slateId = (await params).slateId;
     const body = await request.json();
-    const { taskIds, pointsOverrides, orders } = body;
+    const { explicitTaskIds, autoIncludeTagIds } = body as { explicitTaskIds?: string[]; autoIncludeTagIds?: string[] };
 
     // Delete existing slate tasks for this slate
     rawDb.prepare(`DELETE FROM slate_tasks WHERE slate_id = ?`).run(slateId);
 
-    if (!taskIds || taskIds.length === 0) {
-      return NextResponse.json({ success: true });
-    }
-
-    // Insert new slate tasks
-    const insertStmt = rawDb.prepare(
-      `INSERT INTO slate_tasks (id, slate_id, task_id, points_override, "order") VALUES (?, ?, ?, ?, ?)`
-    );
-
-    for (let i = 0; i < taskIds.length; i++) {
-      insertStmt.run(
-        `stask-${Date.now()}-${i}`,
-        slateId,
-        taskIds[i],
-        pointsOverrides?.[i] ?? null,
-        orders?.[i] ?? i,
+    if (explicitTaskIds) {
+      // Insert new slate tasks with deterministic IDs
+      const insertStmt = rawDb.prepare(
+        `INSERT INTO slate_tasks (id, slate_id, task_id, points_override, "order") VALUES (?, ?, ?, ?, ?)`
       );
+
+      for (let i = 0; i < explicitTaskIds.length; i++) {
+        insertStmt.run(
+          `stask-${slateId}-${i}`,
+          slateId,
+          explicitTaskIds[i],
+          null,
+          i,
+        );
+      }
     }
 
-    return NextResponse.json({ success: true, count: taskIds.length });
+    // Update auto-include tag associations
+    rawDb.prepare(`DELETE FROM slate_tags WHERE slate_id = ?`).run(slateId);
+    if (autoIncludeTagIds && autoIncludeTagIds.length > 0) {
+      const insertTagStmt = rawDb.prepare(
+        `INSERT INTO slate_tags (id, slate_id, tag_id) VALUES (?, ?, ?)`
+      );
+      for (const tagId of autoIncludeTagIds) {
+        insertTagStmt.run(`stag-${slateId}-${tagId}`, slateId, tagId);
+      }
+    }
+
+    return NextResponse.json({ success: true });
   } catch (err) {
     error({ err: err }, "Slate tasks PUT failed");
     return NextResponse.json({ error: "Failed to update slate tasks" }, { status: 500 });
@@ -44,6 +59,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const rawDb = getRawDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
@@ -62,6 +82,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const explicitTaskIds = slateTasks.map((st: any) => st.task_id);
 
+    // Get auto-include tag associations
+    const slateTags = rawDb.prepare(
+      `SELECT tag_id FROM slate_tags WHERE slate_id = ?`
+    ).all(slateId) as any[];
+    const autoIncludeTagIds = (slateTags || []).map((t: any) => t.tag_id);
+
     return NextResponse.json({
       tasks: slateTasks.map((st: any) => ({
         id: st.task_id,
@@ -71,7 +97,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         tagIds: [],
       })),
       explicitTaskIds,
-      autoIncludeTagIds: [],
+      autoIncludeTagIds,
     });
   } catch (err) {
     error({ err: err }, "Slate tasks GET failed");

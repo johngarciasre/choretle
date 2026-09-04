@@ -55,7 +55,7 @@ interface SubtaskInstance {
 const jobId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
 
 async function getFamilyId(): Promise<string> {
-  const authRes = await fetch("/api/auth/me");
+  const authRes = await fetch("/api/auth/me", { credentials: "include" });
   if (!authRes.ok) throw new Error("Not authenticated");
   const authData = await authRes.json();
   const familyId = authData.familyId;
@@ -66,7 +66,7 @@ async function getFamilyId(): Promise<string> {
 const fetchJob = async () => {
   try {
     const familyId = await getFamilyId();
-    const res = await fetch(`/api/jobs/${jobId}?familyId=${familyId}`);
+    const res = await fetch(`/api/jobs/${jobId}?familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch job");
     return await res.json();
   } catch (err) {
@@ -78,7 +78,7 @@ const fetchJob = async () => {
 const fetchSubtasks = async (jobId: string) => {
   try {
     const familyId = await getFamilyId();
-    const res = await fetch(`/api/tasks/subtasks?jobId=${jobId}&familyId=${familyId}`);
+    const res = await fetch(`/api/tasks/subtasks?jobId=${jobId}&familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
   } catch (err) {
@@ -90,7 +90,7 @@ const fetchSubtasks = async (jobId: string) => {
 const fetchPhotos = async (objectType: string, objectId: string) => {
   try {
     const familyId = await getFamilyId();
-    const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}&familyId=${familyId}`);
+    const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}&familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch photos");
     return await res.json();
   } catch (err) {

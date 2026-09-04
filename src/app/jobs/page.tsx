@@ -19,16 +19,16 @@ interface Job {
 async function fetchJobs() {
   try {
     // Get family ID from auth endpoint
-    const authRes = await fetch("/api/auth/me");
+    const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
     const familyId = authData.familyId;
-    
+
     if (!familyId) {
       throw new Error("No family ID");
     }
 
-    const res = await fetch(`/api/jobs?familyId=${familyId}`);
+    const res = await fetch(`/api/jobs?familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch jobs");
     const data = await res.json();
     return data;

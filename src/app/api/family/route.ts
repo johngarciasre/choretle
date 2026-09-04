@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     const familyId = `family-${ts}`;
     rawDb.prepare(
       `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(familyId, body.name, slug, body.weekStartDay ?? 0, false, now, now);
+    ).run(familyId, body.name, slug, body.weekStartDay ?? 0, 0, now, now);
 
     // Associate the current user with this family
     rawDb.prepare(

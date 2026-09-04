@@ -17,7 +17,7 @@ interface User extends SupabaseUser {
 
 async function checkAuthInternal() {
   try {
-    const res = await fetch("/api/auth/me");
+    const res = await fetch("/api/auth/me", { credentials: "include" });
     if (res.ok) {
       const data = await res.json();
       return data.user;

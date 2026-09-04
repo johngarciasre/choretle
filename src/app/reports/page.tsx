@@ -28,12 +28,12 @@ export default function ReportsPage() {
 
   async function fetchReport(type: ReportType) {
     try {
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
       const familyId = authData.familyId;
 
-      const res = await fetch(`/api/reports?type=${type}&familyId=${familyId}`);
+      const res = await fetch(`/api/reports?type=${type}&familyId=${familyId}`, { credentials: "include" });
       if (!res.ok) {
         console.error(`Report fetch failed: ${res.status}`);
         setLoading(false);

@@ -39,7 +39,7 @@ interface UserStats {
 }
 
 async function getFamilyId(): Promise<string> {
-  const authRes = await fetch("/api/auth/me");
+  const authRes = await fetch("/api/auth/me", { credentials: "include" });
   if (!authRes.ok) throw new Error("Not authenticated");
   const authData = await authRes.json();
   const familyId = authData.familyId;
@@ -75,7 +75,7 @@ export default function UserProfilePage() {
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - User Profile");
     getFamilyId().then((familyId) => {
-      return fetch(`/api/profile/${userId}?familyId=${familyId}`);
+      return fetch(`/api/profile/${userId}?familyId=${familyId}`, { credentials: "include" });
     })
       .then((res) => res.json())
       .then((data) => {

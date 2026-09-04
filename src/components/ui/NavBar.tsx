@@ -36,14 +36,14 @@ export function NavBar() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
         setUser(data.user ?? null);
         setFamilyId(data.familyId || null);
         // Fetch family name if user has a family
         if (data.familyId) {
-          fetch(`/api/family?id=${data.familyId}`)
+          fetch(`/api/family?id=${data.familyId}`, { credentials: "include" })
             .then((r) => r.json())
             .then((f) => {
               if (f.ok && f.family) setFamilyName(f.family.name);

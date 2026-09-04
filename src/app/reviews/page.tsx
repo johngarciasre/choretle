@@ -29,7 +29,7 @@ interface ReviewItem {
 }
 
 async function getFamilyId(): Promise<string> {
-  const res = await fetch("/api/auth/me");
+  const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
   if (!data.familyId) throw new Error("No family ID");
@@ -57,6 +57,7 @@ export default function ReviewQueuePage() {
 
       const res = await fetch(`/api/reviews?status=${filter}`, {
         headers,
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();

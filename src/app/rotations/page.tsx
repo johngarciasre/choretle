@@ -32,16 +32,16 @@ export default function RotationsPage() {
   async function loadRotationData() {
     try {
       // Get family ID from auth endpoint
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
       const familyId = authData.familyId;
-      
+
       if (!familyId) {
         throw new Error("No family ID");
       }
 
-      const response = await fetch(`/api/rotations?familyId=${familyId}`);
+      const response = await fetch(`/api/rotations?familyId=${familyId}`, { credentials: "include" });
       if (response.ok) {
         const data = await response.json();
         setFamily(data.family || null);
@@ -162,7 +162,7 @@ export default function RotationsPage() {
   const handleSave = async (assignments: RotationAssignment[]) => {
     try {
       // Get family ID from auth endpoint
-      const authRes = await fetch("/api/auth/me");
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
       const familyId = authData.familyId;
@@ -174,6 +174,7 @@ export default function RotationsPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(assignment),
+          credentials: "include",
         });
       }
     } catch (err) {

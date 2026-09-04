@@ -34,7 +34,7 @@ interface Slate {
 }
 
 async function getFamilyId(): Promise<string> {
-  const res = await fetch("/api/auth/me");
+  const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
   if (data.authenticated === false) throw new Error("Not authenticated");
@@ -44,21 +44,21 @@ async function getFamilyId(): Promise<string> {
 
 const fetchSlates = async () => {
   const fid = await getFamilyId();
-  const res = await fetch(`/api/slates?familyId=${fid}`);
+  const res = await fetch(`/api/slates?familyId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch slates");
   return await res.json();
 };
 
 const fetchTasks = async () => {
   const fid = await getFamilyId();
-  const res = await fetch(`/api/tasks?familyId=${fid}`);
+  const res = await fetch(`/api/tasks?familyId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch tasks");
   return await res.json();
 };
 
 const fetchTags = async () => {
   const fid = await getFamilyId();
-  const res = await fetch(`/api/tags?familyId=${fid}`);
+  const res = await fetch(`/api/tags?familyId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch tags");
   return await res.json();
 };
@@ -79,6 +79,10 @@ export default function SlatesPage() {
   const [buildingSlateTasks, setBuildingSlateTasks] = useState<Task[]>([]);
   const [buildingSlateExplicitTaskIds, setBuildingSlateExplicitTaskIds] = useState<string[]>([]);
   const [buildingSlateAutoIncludeTagIds, setBuildingSlateAutoIncludeTagIds] = useState<string[]>([]);
+
+  // Slate builder search/filter state
+  const [builderSearchQuery, setBuilderSearchQuery] = useState("");
+  const [builderShowAvailableTasks, setBuilderShowAvailableTasks] = useState(true);
 
   const dataLoadedRef = useRef(false);
 
@@ -110,6 +114,7 @@ export default function SlatesPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newSlateName }),
+        credentials: "include",
       });
 
       if (!res.ok) throw new Error("Failed to create slate");
@@ -131,6 +136,7 @@ export default function SlatesPage() {
     try {
       const res = await fetch(`/api/slates/${slateId}`, {
         method: "DELETE",
+        credentials: "include",
       });
 
       if (!res.ok) throw new Error("Failed to delete slate");
@@ -145,7 +151,7 @@ export default function SlatesPage() {
   async function handleStartBuilding(slateId: string) {
     try {
       const fid = await getFamilyId();
-      const res = await fetch(`/api/slates/${slateId}/tasks?familyId=${fid}`);
+      const res = await fetch(`/api/slates/${slateId}/tasks?familyId=${fid}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch slate tasks");
       const data = await res.json();
 
@@ -172,6 +178,7 @@ export default function SlatesPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        credentials: "include",
       });
 
       if (!res.ok) throw new Error("Failed to save slate");
@@ -359,10 +366,24 @@ function SlateBuilderPage({
   onCancel: () => void;
 }) {
   const [selectedTasks, setSelectedTasks] = useState<Task[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     setSelectedTasks(tasks.filter(t => explicitTaskIds.includes(t.id)));
   }, [tasks, explicitTaskIds]);
+
+  // Filter available (unselected) tasks by search query
+  const availableTasks = tasks.filter(task => {
+    const isSelected = explicitTaskIds.includes(task.id);
+    const matchesSearch = !searchQuery || task.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return !isSelected && matchesSearch;
+  });
+
+  // Filter selected tasks by search query
+  const filteredSelectedTasks = selectedTasks.filter(task => {
+    if (!searchQuery) return true;
+    return task.name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   const getTagMatchedTasks = () => {
     if (autoIncludeTagIds.length === 0) return new Set<string>();
@@ -395,11 +416,31 @@ function SlateBuilderPage({
     return tasks.filter(t => allIds.has(t.id));
   };
 
-  if (!tasks.length || !tags.length) {
+  if (!tasks.length && !tags.length) {
     return (
       <PageShell>
         <div className="min-h-screen bg-cream flex items-center justify-center p-8">
-          <EmptyState icon={<span className="text-2xl">📋</span>} title="Loading slate builder..." message="Please wait while we prepare the editor..." />
+          <EmptyState icon={<span className="text-2xl">📋</span>} title="No tasks or tags available" message="Create some tasks and tags first before configuring slates." />
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (!tasks.length) {
+    return (
+      <PageShell>
+        <div className="min-h-screen bg-cream flex items-center justify-center p-8">
+          <EmptyState icon={<span className="text-2xl">📋</span>} title="No tasks available" message="Create some tasks first before configuring slates. Go to the Tasks page to add tasks." />
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (!tags.length) {
+    return (
+      <PageShell>
+        <div className="min-h-screen bg-cream flex items-center justify-center p-8">
+          <EmptyState icon={<span className="text-2xl">🏷</span>} title="No tags available" message="Create some tags first to auto-include tasks by tag." />
         </div>
       </PageShell>
     );
@@ -408,21 +449,70 @@ function SlateBuilderPage({
   return (
     <PageShell>
       <Card accent="coral" className="space-y-8 p-6">
-        {/* Section 1: Explicit Tasks */}
+        {/* Search Bar */}
+        <section>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search tasks by name..."
+            className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+          />
+        </section>
+
+        {/* Section 1: Available Tasks */}
         <section className="space-y-4">
+          <h2 className="font-display text-xl font-bold text-ink">Available Tasks</h2>
+          <p className="text-sm text-ink/60">
+            Click to add tasks to this slate. Added tasks will appear in the Explicit Tasks list below.
+          </p>
+
+          {availableTasks.length === 0 ? (
+            searchQuery ? (
+              <p className="text-sm text-ink/60">No tasks match "{searchQuery}".</p>
+            ) : (
+              <p className="text-sm text-ink/60">All tasks have been added to this slate.</p>
+            )
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {availableTasks.map(task => (
+                <button
+                  key={task.id}
+                  onClick={() => onToggleTask(task.id)}
+                  className="flex items-start justify-between p-4 bg-white rounded-xl border-2 border-ink/10 hover:border-grape/30 transition-colors text-left"
+                >
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-ink">{task.name}</h3>
+                    {task.description && (
+                      <p className="text-xs text-ink/60 mt-1 truncate max-w-xs">{task.description}</p>
+                    )}
+                    <Badge status="points" className="mt-1">{task.points} pts</Badge>
+                  </div>
+                  <span className="text-grape text-2xl leading-none">+</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Section 2: Explicit Tasks */}
+        <Card accent="teal" className="pt-6 space-y-4">
           <h2 className="font-display text-xl font-bold text-ink">Explicit Tasks (must be completed)</h2>
           <p className="text-sm text-ink/60">
             These tasks are always included and must be explicitly marked as complete.
           </p>
 
-          {selectedTasks.length === 0 ? (
+          {filteredSelectedTasks.length === 0 ? (
             <p className="text-sm text-ink/60">No explicit tasks selected.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {selectedTasks.map(task => (
-                <div key={task.id} className="flex items-start justify-between p-4 bg-cream rounded-xl">
+              {filteredSelectedTasks.map(task => (
+                <div key={task.id} className="flex items-start justify-between p-4 bg-white rounded-xl border-2 border-grape/20">
                   <div>
                     <h3 className="font-display text-lg font-bold text-ink">{task.name}</h3>
+                    {task.description && (
+                      <p className="text-xs text-ink/60 mt-1 truncate max-w-xs">{task.description}</p>
+                    )}
                     <Badge status="points" className="mt-1">{task.points} pts</Badge>
                   </div>
                   <Button variant="ghost" onClick={() => onToggleTask(task.id)}>
@@ -432,9 +522,9 @@ function SlateBuilderPage({
               ))}
             </div>
           )}
-        </section>
+        </Card>
 
-        {/* Section 2: Auto-Include by Tags */}
+        {/* Section 3: Auto-Include by Tags */}
         <Card accent="sunny" className="pt-6 space-y-4">
           <h2 className="font-display text-xl font-bold text-ink">Auto-Include Tasks by Tag</h2>
           <p className="text-sm text-ink/60 mb-4">
@@ -465,25 +555,31 @@ function SlateBuilderPage({
           </p>
         </Card>
 
-        {/* Section 3: Effective Task List */}
-        <Card accent="teal" className="pt-6 space-y-4">
-          <h2 className="font-display text-xl font-bold text-ink">Effective Tasks (Total)</h2>
+        {/* Section 4: Effective Task List */}
+        <Card accent="bubblegum" className="pt-6 space-y-4">
+          <h2 className="font-display text-xl font-bold text-ink">Effective Tasks Preview ({getEffectiveTasks().length})</h2>
           <p className="text-sm text-ink/60 mb-4">
-            This is the union of explicit tasks and tag-matched tasks.
+            This is the union of explicit tasks and tag-matched tasks — these are the chores that will appear in the slate.
           </p>
 
           {getEffectiveTasks().length === 0 ? (
-            <p className="text-sm text-ink/60">No tasks will be included.</p>
+            <p className="text-sm text-ink/60">No tasks will be included. Add some tasks or select tags above.</p>
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-              {getEffectiveTasks().map(task => (
-                <div key={task.id} className="flex items-center justify-between p-3 bg-cream rounded-xl">
-                  <div>
-                    <h3 className="font-display text-lg font-bold text-ink">{task.name}</h3>
-                    <Badge status="points" className="mt-1">{task.points} pts</Badge>
+              {getEffectiveTasks().map(task => {
+                const isExplicit = explicitTaskIds.includes(task.id);
+                return (
+                  <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-xl">
+                    <div>
+                      <h3 className="font-display text-lg font-bold text-ink">{task.name}</h3>
+                      <Badge status="points" className="mt-1">{task.points} pts</Badge>
+                      {isExplicit && (
+                        <Badge status="info" className="ml-2 text-xs">explicit</Badge>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>

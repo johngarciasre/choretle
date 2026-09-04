@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRawDb } from "@/db/drizzle";
+import { verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const rawDb = getRawDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     const slateId = (await params).slateId;
-    
+
     const slate = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(slateId) as any;
-    
+
     if (!slate) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
@@ -34,6 +40,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const rawDb = getRawDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
@@ -48,7 +59,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     ).run(name, description || null, roomLocation || null, frequency, interval, defaultDueDateOffset, (isActive !== false) ? 1 : 0, slateId);
 
     const updated = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(slateId) as any;
-    
+
     if (!updated) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
@@ -70,19 +81,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const rawDb = getRawDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     const slateId = (await params).slateId;
-    
+
     // Delete associated entries first (cascade via FK constraints in PostgreSQL)
     rawDb.prepare(`DELETE FROM slate_tasks WHERE slate_id = ?`).run(slateId);
-    rawDb.prepare(`DELETE FROM rotations WHERE slate_id = ?`).run(slateId);
     rawDb.prepare(`DELETE FROM slate_tags WHERE slate_id = ?`).run(slateId);
+    rawDb.prepare(`DELETE FROM rotations WHERE slate_id = ?`).run(slateId);
     rawDb.prepare(`DELETE FROM slates WHERE id = ?`).run(slateId);
-    
+
     return NextResponse.json({ success: true });
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Slate DELETE failed");
