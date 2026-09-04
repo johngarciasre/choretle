@@ -53,3 +53,6 @@ QWEN.md
 
 # supabase CLI (local dev state, not actively used)
 supabase/
+
+# local SQLite databases (dev fallback)
+data/*.db
