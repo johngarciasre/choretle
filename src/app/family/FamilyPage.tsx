@@ -12,8 +12,6 @@ interface Family {
   logoUrl?: string;
   timezone: string;
   weekStartDay: number;
-  theme: string;
-  teamsEnabled: boolean;
   createdAt: string;
 }
 
@@ -24,21 +22,6 @@ interface Tag {
   color: string;
   taskCount?: number;
   createdAt: string;
-}
-
-interface Team {
-  id: string;
-  name: string;
-  logoUrl?: string;
-  createdAt: string;
-  members?: TeamMember[];
-}
-
-interface TeamMember {
-  id: string;
-  teamId: string;
-  userId: string;
-  joinedAt: string;
 }
 
 interface User {
@@ -61,7 +44,6 @@ export default function FamilyPage() {
   const [loading, setLoading] = useState(false);
   const [family, setFamily] = useState<Family | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
 
   // Create form state
   const [name, setName] = useState("");
@@ -77,19 +59,6 @@ export default function FamilyPage() {
   const [showGenerateCode, setShowGenerateCode] = useState(false);
   const [generatingPermanent, setGeneratingPermanent] = useState(false);
 
-  // Team management state
-  const [showTeamForm, setShowTeamForm] = useState(false);
-  const [newTeamName, setNewTeamName] = useState("");
-  const [newTeamLogoUrl, setNewTeamLogoUrl] = useState("");
-  const [selectedTeamForMembers, setSelectedTeamForMembers] = useState<string>("");
-
-  // User selection for team assignment
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-
-  // Toggle teams enabled state
-  const [showToggleModal, setShowToggleModal] = useState(false);
-  const [enableTeams, setEnableTeams] = useState(true);
-
   // Tag management state
   const [tags, setTags] = useState<Tag[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
@@ -104,9 +73,6 @@ export default function FamilyPage() {
   // Name editing state
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState("");
-
-  // Theme selection state
-  const [selectedTheme, setSelectedTheme] = useState(family?.theme || "coral");
 
   const checkAuth = async () => {
     // DEBUG: Skip auth, always return authenticated with familyId from URL
@@ -128,24 +94,20 @@ export default function FamilyPage() {
   const loadFamilyData = async (fid: string) => {
     setLoading(true);
     try {
-      const [familyRes, usersRes, teamsRes] = await Promise.all([
+      const [familyRes, usersRes] = await Promise.all([
         fetch(`/api/family?${new URLSearchParams({ id: fid })}`, { credentials: "include" }),
         fetch(`/api/users?familyId=${fid}`, { credentials: "include" }),
-        fetch(`/api/teams?familyId=${fid}`, { credentials: "include" }),
       ]);
 
       const familyData = await familyRes.json();
       const usersData = await usersRes.json();
-      const teamsData = await teamsRes.json();
 
       if (!familyRes.ok || !usersRes.ok) {
         throw new Error(`Failed to load family data: family=${familyRes.status}, users=${usersRes.status}`);
       }
 
       setFamily(familyData.family);
-      setSelectedTheme(familyData.family.theme || "coral");
       setUsers(usersData.users);
-      setTeams(teamsData.teams);
     } catch (err) {
       error("Failed to load family data", err);
     } finally {
@@ -232,78 +194,6 @@ export default function FamilyPage() {
     } catch (err) {
       error({ err: err }, "Failed to join family");
       alert("Failed to join family. Please try again.");
-    }
-  };
-
-  const handleCreateTeam = async () => {
-    if (!newTeamName || !familyId) return;
-
-    try {
-      const response = await fetch(`/api/family/${familyId}/teams`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newTeamName, logoUrl: newTeamLogoUrl || undefined }),
-        credentials: "include",
-      });
-
-      if (!response.ok) throw new Error("Failed to create team");
-
-      const data = await response.json();
-      setTeams([...teams, data.team]);
-      setShowTeamForm(false);
-      setNewTeamName("");
-      setNewTeamLogoUrl("");
-    } catch (err) {
-      error({ err: err }, "Failed to create team");
-      alert("Failed to create team.");
-    }
-  };
-
-  const handleAssignUserToTeam = async () => {
-    if (!selectedUser || !selectedTeamForMembers || !familyId) return;
-
-    try {
-      const response = await fetch(`/api/family/${familyId}/teams/${selectedTeamForMembers}/members`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: selectedUser.id }),
-        credentials: "include",
-      });
-
-      if (!response.ok) throw new Error("Failed to assign user to team");
-
-      // Refresh teams data
-      const teamsRes = await fetch(`/api/teams?familyId=${familyId}`);
-      const teamsData = await teamsRes.json();
-      setTeams(teamsData.teams);
-
-      setSelectedUser(null);
-      alert(`Successfully assigned ${selectedUser.name} to team!`);
-    } catch (err) {
-      error({ err: err }, "Failed to assign user");
-      alert("Failed to assign user to team.");
-    }
-  };
-
-  const handleToggleTeamsEnabled = async () => {
-    if (!familyId) return;
-
-    try {
-      const response = await fetch(`/api/family/${familyId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamsEnabled: enableTeams }),
-        credentials: "include",
-      });
-
-      if (!response.ok) throw new Error("Failed to update family settings");
-
-      const data = await response.json();
-      setFamily(data.family);
-      setShowToggleModal(false);
-    } catch (err) {
-      error({ err: err }, "Failed to toggle teams");
-      alert("Failed to update teams setting.");
     }
   };
 
@@ -412,28 +302,6 @@ export default function FamilyPage() {
     } catch (err) {
       error({ err: err }, "Failed to update family name");
       alert("Failed to update family name.");
-    }
-  };
-
-  const handleUpdateTheme = async () => {
-    if (!familyId) return;
-
-    try {
-      const response = await fetch(`/api/family/${familyId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: selectedTheme }),
-        credentials: "include",
-      });
-
-      if (!response.ok) throw new Error("Failed to update theme");
-
-      const data = await response.json();
-      setFamily(data.family);
-      setSelectedTheme(data.family.theme || selectedTheme);
-    } catch (err) {
-      error({ err: err }, "Failed to update theme");
-      alert("Failed to update theme.");
     }
   };
 
@@ -654,7 +522,7 @@ export default function FamilyPage() {
     <PageShell>
       <PageHeader 
         title={viewingFamily ? family?.name ?? "Family Settings" : "Family Settings"}
-        subtitle={viewingFamily ? `Welcome to ${family?.name}!` : "Manage your family settings, teams, and members."}
+        subtitle={viewingFamily ? `Welcome to ${family?.name}!` : "Manage your family settings and members."}
         actions={
           viewingFamily && (
             <Button variant="grape" href="/dashboard">
@@ -710,44 +578,6 @@ export default function FamilyPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-ink mb-1">Teams Enabled</label>
-                <Badge 
-                  status={family?.teamsEnabled ? "done" : "todo"}
-                >
-                  {family?.teamsEnabled ? "Yes ✓" : "No"}
-                </Badge>
-              </div>
-
-              {/* Theme Selector */}
-              {viewingFamily && (
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-bold text-ink mb-1 flex items-center gap-2">
-                    Family Theme
-                    {!editingName && (
-                      <button onClick={handleUpdateTheme} className="text-xs text-grape hover:text-grape/80 ml-auto">
-                        Save
-                      </button>
-                    )}
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { name: "coral", bg: "bg-coral" },
-                      { name: "teal", bg: "bg-teal" },
-                      { name: "sunny", bg: "bg-sunny" },
-                      { name: "grape", bg: "bg-grape" },
-                      { name: "bubblegum", bg: "bg-bubblegum" },
-                    ].map((t) => (
-                      <button
-                        key={t.name}
-                        onClick={() => setSelectedTheme(t.name)}
-                        className={`w-8 h-8 rounded-full ${t.bg} border-2 transition-all ${selectedTheme === t.name ? "border-ink scale-110" : "border-ink/15 hover:border-ink/30"}`}
-                        title={t.name}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {!viewingFamily && (
@@ -777,167 +607,6 @@ export default function FamilyPage() {
             )}
           </Card>
         </section>
-
-        {/* Teams Section */}
-        {family?.teamsEnabled && (
-          <section className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="font-display text-xl font-bold text-ink">Teams</h2>
-              {!viewingFamily && (
-                <Button onClick={() => setShowTeamForm(true)} variant="success" size="sm">
-                  <Plus size={16} className="inline mr-1" />
-                  Create Team
-                </Button>
-              )}
-            </div>
-
-            {teams.length === 0 ? (
-              <Card accent="bubblegum" className="p-8 text-center">
-                <EmptyState 
-                  icon={<Users size={32} />}
-                  title="No Teams Yet"
-                  message="Create your first team to organize your family members!"
-                />
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {teams.map((team, index) => (
-                  <Card 
-                    key={team.id} 
-                    accent={accentColors[index % accentColors.length].name as any}
-                    className="space-y-3"
-                  >
-                    <div className="flex justify-between items-start">
-                      <h3 className={`font-display text-xl font-bold ${accentColors[index % accentColors.length].border}`}>
-                        {team.name}
-                      </h3>
-                      <span className="text-xs text-ink/60">
-                        {new Date(team.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-
-                    {/* Team Members */}
-                    <div className="space-y-2">
-                      <p className="text-sm font-bold text-ink/60">Members:</p>
-                      {(team as any)?.members?.length > 0 ? (
-                        ((team as any).members as TeamMember[]).map((member: TeamMember) => {
-                          const user = users.find(u => u.id === member.userId);
-                          const accentIndex = index % accentColors.length;
-                          return (
-                            <div 
-                              key={member.id} 
-                              className={`flex items-center gap-2 ${accentColors[accentIndex].bg} rounded-full px-3 py-1.5 text-sm font-bold`}
-                            >
-                              <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs">
-                                {user?.name.charAt(0).toUpperCase()}
-                              </span>
-                              {user?.name || "Unknown User"}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-sm text-ink/60">No members yet</p>
-                      )}
-                    </div>
-
-                    {/* Add Member Form */}
-                    {(team as any)?.members?.length > 0 && !viewingFamily && (
-                      <div className="pt-3 border-t border-ink/10 space-y-2">
-                        <select
-                          value={selectedTeamForMembers || ""}
-                          onChange={(e) => setSelectedTeamForMembers(e.target.value)}
-                          className="text-sm rounded-xl border-2 border-ink/15 bg-white px-3 py-2 font-bold text-ink focus:border-grape focus:outline-none"
-                        >
-                          <option value="">Select team...</option>
-                          {teams.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
-
-                        <select
-                          value={selectedUser?.id || ""}
-                          onChange={(e) => setSelectedUser(users.find(u => u.id === e.target.value) || null)}
-                          className="text-sm rounded-xl border-2 border-ink/15 bg-white px-3 py-2 font-bold text-ink focus:border-grape focus:outline-none"
-                        >
-                          <option value="">Select user...</option>
-                          {users.map(u => (
-                            <option key={u.id} value={u.id}>{u.name}</option>
-                          ))}
-                        </select>
-
-                        <Button
-                          onClick={handleAssignUserToTeam}
-                          disabled={!selectedUser || !selectedTeamForMembers}
-                          variant="primary"
-                          size="sm"
-                          className="w-full"
-                        >
-                          Assign User
-                        </Button>
-                      </div>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {/* Create Team Modal */}
-            {showTeamForm && !viewingFamily && (
-              <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-[60] p-4">
-                <Card accent="sunny" className="max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-                  <h3 className="font-display text-2xl font-bold text-ink mb-6 flex items-center gap-2">
-                    <Plus size={24} />
-                    Create New Team
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-bold text-ink mb-1">Team Name</label>
-                      <input
-                        type="text"
-                        value={newTeamName}
-                        onChange={(e) => setNewTeamName(e.target.value)}
-                        placeholder="Enter team name"
-                        className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-sunny focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-bold text-ink mb-1">Logo URL (optional)</label>
-                      <input
-                        type="text"
-                        value={newTeamLogoUrl}
-                        onChange={(e) => setNewTeamLogoUrl(e.target.value)}
-                        placeholder="https://example.com/logo.png"
-                        className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-sunny focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="flex gap-2 pt-4">
-                      <Button
-                        onClick={handleCreateTeam}
-                        disabled={!newTeamName.trim()}
-                        variant="success"
-                        size="lg"
-                        className="flex-1"
-                      >
-                        Create Team
-                      </Button>
-                      <Button
-                        onClick={() => setShowTeamForm(false)}
-                        variant="ghost"
-                        size="lg"
-                        className="flex-1"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            )}
-          </section>
-        )}
 
         {/* Tags Section */}
         {viewingFamily && (
@@ -1225,24 +894,6 @@ export default function FamilyPage() {
                     </div>
                   </div>
 
-                  {family?.teamsEnabled && teams?.length > 0 && (
-                    <div className="pt-3 border-t border-ink/10">
-                      <p className="text-sm font-bold text-ink/60 mb-2">Teams:</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(teams as any[]).filter((t: Team) => {
-                          const teamWithMembers = (teams as any[]).find((tm: Team) =>
-                            tm.members?.some((m: TeamMember) => m.userId === user.id)
-                          );
-                          return teamWithMembers && teamWithMembers.name === t.name;
-                        }).map((team: Team) => (
-                          <Badge key={team.id} status="neutral">
-                            {team.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Delete member button */}
                   {viewingFamily && users.length > 1 && (
                     <div className="pt-3 border-t border-ink/10">
@@ -1278,46 +929,6 @@ export default function FamilyPage() {
         </section>
       </main>
 
-      {/* Teams Toggle Modal */}
-      {showToggleModal && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-[60] p-4">
-          <Card accent="grape" className="max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-            <h3 className="font-display text-2xl font-bold text-ink mb-6">Toggle Teams</h3>
-            
-            <div className="flex items-center gap-4 mb-6">
-              <input
-                type="checkbox"
-                id="teamsEnabled"
-                checked={enableTeams}
-                onChange={(e) => setEnableTeams(e.target.checked)}
-                className="w-5 h-5 text-grape rounded focus:ring-grape"
-              />
-              <label htmlFor="teamsEnabled" className="text-lg font-bold text-ink">
-                Enable team management
-              </label>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                onClick={handleToggleTeamsEnabled}
-                variant="grape"
-                size="lg"
-                className="flex-1"
-              >
-                Save Changes
-              </Button>
-              <Button
-                onClick={() => setShowToggleModal(false)}
-                variant="ghost"
-                size="lg"
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
     </PageShell>
   );
 }
