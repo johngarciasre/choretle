@@ -137,14 +137,14 @@ export default function TasksPage() {
                       <p className="text-sm text-ink/60 mt-2 line-clamp-2">{task.description}</p>
                     )}
 
-                    <div className="mt-2 flex items-center justify-between">
+                    <div className="mt-2 flex items-center gap-2">
                       <Badge status="points">{task.points} pts</Badge>
                       {task.tagIds && task.tagIds.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
                           {task.tagIds.map(tagId => {
                             const tag = tags.find(t => t.id === tagId);
                             return tag ? (
-                              <Badge key={tag.id} status="neutral" className="text-xs px-2 py-0.5">{tag.name}</Badge>
+                              <span key={tag.id} className="rounded-full px-3 py-1.5 text-sm font-bold bg-white text-ink border-2 border-ink/10">{tag.name}</span>
                             ) : null;
                           })}
                         </div>

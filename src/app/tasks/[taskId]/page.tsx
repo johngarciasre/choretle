@@ -130,7 +130,7 @@ export default function TaskPage() {
     if (!task) return;
     setFormData({
       name: task.name,
-      description: task.description,
+      description: task.description ?? "",
       points: task.points,
       verifyRequired: task.verifyRequired || false,
       tagIds: task.tagIds || [],
