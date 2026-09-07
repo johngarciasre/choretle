@@ -7,6 +7,8 @@ import { TagPill, Button } from "@/components/ui";
 import { Trash2, Plus, X } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Task {
   id: string;
@@ -65,6 +67,7 @@ const fetchTags = async () => {
 
 export default function SlatesPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [slates, setSlates] = useState<Slate[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -196,36 +199,39 @@ export default function SlatesPage() {
     }
   }
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
-  if (loading) return <PageShell><PageLoader label="Loading slates..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
+  if (loading) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Loading slates..." /></PageShell></ThemeProvider>;
 
   if (buildingSlateId) {
     return (
-      <PageShell>
-        <SlateBuilderPage
-          tasks={tasks}
-          tags={tags}
-          explicitTaskIds={buildingSlateExplicitTaskIds}
-          autoIncludeTagIds={buildingSlateAutoIncludeTagIds}
-          onToggleTask={(taskId) =>
-            setBuildingSlateExplicitTaskIds(prev =>
-              prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
-            )
-          }
-          onToggleTag={(tagId) =>
-            setBuildingSlateAutoIncludeTagIds(prev =>
-              prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
-            )
-          }
-          onSave={handleSaveSlate}
-          onCancel={() => setBuildingSlateId(null)}
-        />
-      </PageShell>
+      <ThemeProvider familyTheme={familyTheme}>
+        <PageShell>
+          <SlateBuilderPage
+            tasks={tasks}
+            tags={tags}
+            explicitTaskIds={buildingSlateExplicitTaskIds}
+            autoIncludeTagIds={buildingSlateAutoIncludeTagIds}
+            onToggleTask={(taskId) =>
+              setBuildingSlateExplicitTaskIds(prev =>
+                prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+              )
+            }
+            onToggleTag={(tagId) =>
+              setBuildingSlateAutoIncludeTagIds(prev =>
+                prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
+              )
+            }
+            onSave={handleSaveSlate}
+            onCancel={() => setBuildingSlateId(null)}
+          />
+        </PageShell>
+      </ThemeProvider>
     );
   }
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       {notAuthenticated ? (
         <main className="flex items-center justify-center min-h-[60vh]">
           <Card accent="coral" className="w-full max-w-md p-8 space-y-4">
@@ -348,6 +354,7 @@ export default function SlatesPage() {
           </>
         )}
     </PageShell>
+    </ThemeProvider>
   );
 }
 
@@ -372,6 +379,7 @@ function SlateBuilderPage({
 }) {
   const [selectedTasks, setSelectedTasks] = useState<Task[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const familyTheme = useFamilyTheme();
 
   useEffect(() => {
     setSelectedTasks(tasks.filter(t => explicitTaskIds.includes(t.id)));
@@ -423,31 +431,37 @@ function SlateBuilderPage({
 
   if (!tasks.length && !tags.length) {
     return (
-      <PageShell>
-        <div className="min-h-screen bg-cream flex items-center justify-center p-8">
-          <EmptyState icon={<span className="text-2xl">📋</span>} title="No tasks or tags available" message="Create some tasks and tags first before configuring slates." />
-        </div>
-      </PageShell>
+      <ThemeProvider familyTheme={familyTheme}>
+        <PageShell>
+          <div className="min-h-screen bg-cream flex items-center justify-center p-8">
+            <EmptyState icon={<span className="text-2xl">📋</span>} title="No tasks or tags available" message="Create some tasks and tags first before configuring slates." />
+          </div>
+        </PageShell>
+      </ThemeProvider>
     );
   }
 
   if (!tasks.length) {
     return (
-      <PageShell>
-        <div className="min-h-screen bg-cream flex items-center justify-center p-8">
-          <EmptyState icon={<span className="text-2xl">📋</span>} title="No tasks available" message="Create some tasks first before configuring slates. Go to the Tasks page to add tasks." />
-        </div>
-      </PageShell>
+      <ThemeProvider familyTheme={familyTheme}>
+        <PageShell>
+          <div className="min-h-screen bg-cream flex items-center justify-center p-8">
+            <EmptyState icon={<span className="text-2xl">📋</span>} title="No tasks available" message="Create some tasks first before configuring slates. Go to the Tasks page to add tasks." />
+          </div>
+        </PageShell>
+      </ThemeProvider>
     );
   }
 
   if (!tags.length) {
     return (
-      <PageShell>
-        <div className="min-h-screen bg-cream flex items-center justify-center p-8">
-          <EmptyState icon={<span className="text-2xl">🏷</span>} title="No tags available" message="Create some tags first to auto-include tasks by tag." />
-        </div>
-      </PageShell>
+      <ThemeProvider familyTheme={familyTheme}>
+        <PageShell>
+          <div className="min-h-screen bg-cream flex items-center justify-center p-8">
+            <EmptyState icon={<span className="text-2xl">🏷</span>} title="No tags available" message="Create some tags first to auto-include tasks by tag." />
+          </div>
+        </PageShell>
+      </ThemeProvider>
     );
   }
 

@@ -8,6 +8,8 @@ import PhotoCarousel from "@/components/PhotoCarousel";
 import PhotoUploadModal from "@/components/PhotoUploadModal";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Job {
   id: string;
@@ -109,6 +111,7 @@ interface JobPhoto {
 
 export default function JobPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [job, setJob] = useState<Job | null>(null);
   const [validNextStatuses, setValidNextStatuses] = useState<string[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -210,12 +213,13 @@ export default function JobPage() {
   const totalSubtasks = subtaskInstances.length;
   const allCompleted = totalSubtasks > 0 && completedSubtasks === totalSubtasks;
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
   if (loading) return <PageLoader label="Loading job..." />;
   if (!job) return <EmptyState icon={<span className="text-2xl">📝</span>} title="Job not found" message="The job you're looking for doesn't exist." />;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <Card accent="coral" className="space-y-6">
         {/* Job Details */}
         <section className="space-y-4">
@@ -423,6 +427,7 @@ export default function JobPage() {
           objectId={job.id}
         />
       )}
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

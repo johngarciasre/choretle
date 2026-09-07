@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Accent = "coral" | "teal" | "sunny" | "grape" | "bubblegum";
+type Accent = "coral" | "teal" | "sunny" | "grape" | "bubblegum" | "indigo";
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -12,10 +12,11 @@ interface StatCardProps {
 export function StatCard({ icon, label, value, accent = "coral" }: StatCardProps) {
   const accentColors = {
     coral: "bg-coral/15 text-coral",
-    teal: "bg-teal/15 text-teal",
     sunny: "bg-sunny/15 text-sunny",
+    teal: "bg-teal/15 text-teal",
     grape: "bg-grape/15 text-grape",
     bubblegum: "bg-bubblegum/15 text-bubblegum",
+    indigo: "bg-indigo/15 text-indigo",
   };
 
   return (

@@ -48,8 +48,17 @@ export async function PUT(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    // Verify user belongs to this family and is parent
-    if (auth.role !== "parent") return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    // Verify user belongs to this family and is parent (for admin fields)
+    if (auth.role !== "parent") {
+      // Non-parents can only update theme
+      const nonThemeFields = ["name", "slug", "timezone", "weekStartDay", "teamsEnabled"];
+      const hasNonThemeField = nonThemeFields.some((f) => body[f] !== undefined);
+      if (hasNonThemeField) return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
+    // Verify user actually belongs to this family
+    const dbUser = rawDb.prepare(`SELECT family_id FROM users WHERE id = ?`).get(auth.userId) as any;
+    if (!dbUser || dbUser.family_id !== familyId) return NextResponse.json({ error: "Access denied" }, { status: 403 });
 
     const updates: string[] = ["updated_at = ?"];
     const values: any[] = [new Date().toISOString()];

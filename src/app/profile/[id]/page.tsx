@@ -8,6 +8,8 @@ import { PageShell, StatCard, Loading, Badge, Button, Card, PageHeader } from "@
 import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface JobCompletion {
   id: string;
@@ -49,6 +51,7 @@ async function getFamilyId(): Promise<string> {
 
 export default function UserProfilePage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const params = useParams();
   const userId = typeof params.id === "string" ? params.id : "";
 
@@ -143,7 +146,7 @@ export default function UserProfilePage() {
 
   const maxDayPoints = useMemo(() => Math.max(...last7Days.map((d) => d.points), 1), [last7Days]);
 
-  if (!authChecked) return <PageShell><Loading label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><Loading label="Checking authentication..." /></PageShell></ThemeProvider>;
 
   if (loading) return <Loading label="Loading profile..." />;
 
@@ -151,16 +154,17 @@ export default function UserProfilePage() {
   const streakFlames = Array.from({ length: Math.min(stats.streakDays, 10) }, () => "\u{1F525}");
 
   return (
-    <PageShell>
-      <PageHeader 
-        title={user.name}
-        subtitle={`${user.role} \u00B7 Joined ${new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`}
-        actions={
-          <Link href="/dashboard">
-            <Button variant="ghost">Back to Dashboard</Button>
-          </Link>
-        }
-      />
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
+        <PageHeader
+          title={user.name}
+          subtitle={`${user.role} \u00B7 Joined ${new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`}
+          actions={
+            <Link href="/dashboard">
+              <Button variant="ghost">Back to Dashboard</Button>
+            </Link>
+          }
+        />
 
       <main className="space-y-6">
         {/* Profile Hero - Candy Gradient */}
@@ -397,6 +401,7 @@ export default function UserProfilePage() {
           </Card>
         </section>
       </main>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

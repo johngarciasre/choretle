@@ -6,6 +6,8 @@ import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui"
 import { Button } from "@/components/ui";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface ReviewItem {
   review: {
@@ -38,6 +40,7 @@ async function getFamilyId(): Promise<string> {
 
 export default function ReviewQueuePage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
@@ -91,12 +94,13 @@ export default function ReviewQueuePage() {
     }
   }
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
 
   if (loading) return <PageLoader label="Loading review queue..." />;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <Card accent="coral" className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-3xl font-bold text-ink">Review Queue</h1>
@@ -180,6 +184,7 @@ export default function ReviewQueuePage() {
           </div>
         )}
       </Card>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

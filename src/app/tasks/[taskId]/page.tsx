@@ -7,6 +7,8 @@ import { TagPill, Button } from "@/components/ui";
 import { X, Trash2, Edit } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Task {
   id: string;
@@ -94,6 +96,7 @@ const fetchSubtasks = async (taskId: string) => {
 
 export default function TaskPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const taskId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
 
   const [task, setTask] = useState<Task | null>(null);
@@ -245,13 +248,14 @@ export default function TaskPage() {
     }
   }
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
 
   if (loading) return <PageLoader label="Loading task..." />;
   if (!task) return <EmptyState icon={<span className="text-2xl">📋</span>} title="Task not found" message="The task you're looking for doesn't exist." />;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <Card accent="coral" className="space-y-6">
         {/* Task Header */}
         <section className="space-y-4">
@@ -455,5 +459,6 @@ export default function TaskPage() {
         </div>
       )}
     </PageShell>
+    </ThemeProvider>
   );
 }

@@ -4,6 +4,8 @@ import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from 
 import { Star, Users, Plus, X, Pencil, Trash2, Tag as TagIcon } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 import { error } from "@/lib/logger";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Family {
   id: string;
@@ -107,6 +109,7 @@ export default function FamilyPage() {
 
   // Theme selection state
   const [selectedTheme, setSelectedTheme] = useState(family?.theme || "coral");
+  const familyTheme = useFamilyTheme();
 
   const checkAuth = async () => {
     // DEBUG: Skip auth, always return authenticated with familyId from URL
@@ -420,17 +423,20 @@ export default function FamilyPage() {
 
     try {
       const response = await fetch(`/api/family/${familyId}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme: selectedTheme }),
         credentials: "include",
       });
 
-      if (!response.ok) throw new Error("Failed to update theme");
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`PUT /api/family/${familyId} returned ${response.status}: ${body}`);
+      }
 
       const data = await response.json();
-      setFamily(data.family);
-      setSelectedTheme(data.family.theme || selectedTheme);
+      setFamily({ ...family, theme: data.theme } as any);
+      setSelectedTheme(data.theme || selectedTheme);
     } catch (err) {
       error({ err: err }, "Failed to update theme");
       alert("Failed to update theme.");
@@ -552,9 +558,11 @@ export default function FamilyPage() {
   // DEBUG: No auth guard — render immediately
   if (loading) {
     return (
-      <PageShell>
-        <Loading label="Loading family..." />
-      </PageShell>
+      <ThemeProvider familyTheme={familyTheme}>
+        <PageShell>
+          <Loading label="Loading family..." />
+        </PageShell>
+      </ThemeProvider>
     );
   }
 
@@ -562,70 +570,72 @@ export default function FamilyPage() {
     // User is authenticated but has no family — show create/join forms
     if (isAuthenticated) {
       return (
-        <PageShell>
-          <PageHeader 
-            title="Welcome to Choretle!"
-            subtitle="Create a family or join an existing one to get started."
-          />
+        <ThemeProvider familyTheme={familyTheme}>
+          <PageShell>
+            <PageHeader
+              title="Welcome to Choretle!"
+              subtitle="Create a family or join an existing one to get started."
+            />
 
-          <main className="space-y-8">
-            <Card accent="coral" className="p-6 space-y-4">
-              <form onSubmit={handleCreateFamily} className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Enter family name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-coral focus:outline-none"
-                />
-                <Button 
-                  type="submit" 
-                  variant="primary" 
-                  size="lg"
-                  className="w-full"
-                  disabled={!name.trim()}
-                >
-                  Create Family
-                </Button>
-              </form>
-
-              <div className="pt-4 border-t border-ink/10">
-                <p className="text-sm text-ink/60 mb-3 text-center">or</p>
-                <button
-                  onClick={() => setShowJoin(true)}
-                  className="w-full py-2 font-bold text-grape hover:text-grape/80"
-                >
-                  Join an existing family
-                </button>
-              </div>
-            </Card>
-
-            {showJoin && (
-              <Card accent="grape" className="p-6 space-y-3">
-                <form onSubmit={handleJoinFamily} className="space-y-3">
+            <main className="space-y-8">
+              <Card accent="coral" className="p-6 space-y-4">
+                <form onSubmit={handleCreateFamily} className="space-y-3">
                   <input
                     type="text"
-                    placeholder="Enter family join code"
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value)}
+                    placeholder="Enter family name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     required
-                    className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+                    className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-coral focus:outline-none"
                   />
-                  <Button 
-                    type="submit" 
-                    variant="grape" 
+                  <Button
+                    type="submit"
+                    variant="primary"
                     size="lg"
                     className="w-full"
-                    disabled={!joinCode.trim()}
+                    disabled={!name.trim()}
                   >
-                    Join Family
+                    Create Family
                   </Button>
                 </form>
+
+                <div className="pt-4 border-t border-ink/10">
+                  <p className="text-sm text-ink/60 mb-3 text-center">or</p>
+                  <button
+                    onClick={() => setShowJoin(true)}
+                    className="w-full py-2 font-bold text-grape hover:text-grape/80"
+                  >
+                    Join an existing family
+                  </button>
+                </div>
               </Card>
-            )}
-          </main>
-        </PageShell>
+
+              {showJoin && (
+                <Card accent="grape" className="p-6 space-y-3">
+                  <form onSubmit={handleJoinFamily} className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Enter family join code"
+                      value={joinCode}
+                      onChange={(e) => setJoinCode(e.target.value)}
+                      required
+                      className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+                    />
+                    <Button
+                      type="submit"
+                      variant="grape"
+                      size="lg"
+                      className="w-full"
+                      disabled={!joinCode.trim()}
+                    >
+                      Join Family
+                    </Button>
+                  </form>
+                </Card>
+              )}
+            </main>
+          </PageShell>
+        </ThemeProvider>
       );
     }
 
@@ -644,17 +654,19 @@ export default function FamilyPage() {
 
   const accentColors = [
     { name: "coral", border: "border-coral", bg: "bg-coral/15" },
-    { name: "teal", border: "border-teal", bg: "bg-teal/15" },
     { name: "sunny", border: "border-sunny", bg: "bg-sunny/15" },
+    { name: "teal", border: "border-teal", bg: "bg-teal/15" },
     { name: "grape", border: "border-grape", bg: "bg-grape/15" },
     { name: "bubblegum", border: "border-bubblegum", bg: "bg-bubblegum/15" },
+    { name: "indigo", border: "border-indigo", bg: "bg-indigo/15" },
   ];
 
   return (
-    <PageShell>
-      <PageHeader 
-        title={viewingFamily ? family?.name ?? "Family Settings" : "Family Settings"}
-        subtitle={viewingFamily ? `Welcome to ${family?.name}!` : "Manage your family settings, teams, and members."}
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
+        <PageHeader
+          title={viewingFamily ? family?.name ?? "Family Settings" : "Family Settings"}
+          subtitle={viewingFamily ? `Welcome to ${family?.name}!` : "Manage your family settings, teams, and members."}
         actions={
           viewingFamily && (
             <Button variant="grape" href="/dashboard">
@@ -725,26 +737,45 @@ export default function FamilyPage() {
                   <label className="block text-sm font-bold text-ink mb-1 flex items-center gap-2">
                     Family Theme
                     {!editingName && (
-                      <button onClick={handleUpdateTheme} className="text-xs text-grape hover:text-grape/80 ml-auto">
+                      <button
+                        onClick={handleUpdateTheme}
+                        className="text-xs font-bold bg-grape/15 text-grape hover:bg-grape/25 rounded-md px-2 py-0.5 transition"
+                      >
                         Save
                       </button>
                     )}
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { name: "coral", bg: "bg-coral" },
-                      { name: "teal", bg: "bg-teal" },
-                      { name: "sunny", bg: "bg-sunny" },
-                      { name: "grape", bg: "bg-grape" },
-                      { name: "bubblegum", bg: "bg-bubblegum" },
-                    ].map((t) => (
-                      <button
-                        key={t.name}
-                        onClick={() => setSelectedTheme(t.name)}
-                        className={`w-8 h-8 rounded-full ${t.bg} border-2 transition-all ${selectedTheme === t.name ? "border-ink scale-110" : "border-ink/15 hover:border-ink/30"}`}
-                        title={t.name}
-                      />
-                    ))}
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-ink/50 mb-1">Warm palette</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { name: "coral", bg: "bg-coral" },
+                        { name: "sunny", bg: "bg-sunny" },
+                        { name: "teal", bg: "bg-teal" },
+                      ].map((t) => (
+                        <button
+                          key={t.name}
+                          onClick={() => setSelectedTheme(t.name)}
+                          className={`w-8 h-8 rounded-full ${t.bg} border-2 transition-all ${selectedTheme === t.name ? "border-ink scale-110" : "border-ink/15 hover:border-ink/30"}`}
+                          title={t.name}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs font-bold text-ink/50 mt-3 mb-1">Cool palette</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { name: "grape", bg: "bg-grape" },
+                        { name: "bubblegum", bg: "bg-bubblegum" },
+                        { name: "indigo", bg: "bg-indigo" },
+                      ].map((t) => (
+                        <button
+                          key={t.name}
+                          onClick={() => setSelectedTheme(t.name)}
+                          className={`w-8 h-8 rounded-full ${t.bg} border-2 transition-all ${selectedTheme === t.name ? "border-ink scale-110" : "border-ink/15 hover:border-ink/30"}`}
+                          title={t.name}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1033,20 +1064,17 @@ export default function FamilyPage() {
 
                     <div>
                       <label className="block text-sm font-bold text-ink mb-1">Color</label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={tagColor}
-                          onChange={(e) => setTagColor(e.target.value)}
-                          className="w-8 h-8 rounded-full border border-ink/15 cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={tagColor}
-                          onChange={(e) => setTagColor(e.target.value)}
-                          placeholder="#6366ee"
-                          className="flex-1 rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-sunny focus:outline-none font-mono"
-                        />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {["#6366ee","#e87353","#4a9fde","#e3ab59","#7cc366","#d96b8a","#8a6ed8","#c24a87","#5eb8c9","#9e9ea8"].map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setTagColor(c)}
+                            aria-label={c}
+                            className={`w-8 h-8 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 ${tagColor === c ? "border-ink shadow-md" : "border-white/30"}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
                       </div>
                     </div>
 
@@ -1319,5 +1347,6 @@ export default function FamilyPage() {
         </div>
       )}
     </PageShell>
+    </ThemeProvider>
   );
 }

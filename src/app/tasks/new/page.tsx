@@ -7,6 +7,8 @@ import { TagPill, Button } from "@/components/ui";
 import { X } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Tag {
   id: string;
@@ -32,6 +34,7 @@ const fetchTags = async () => {
 
 export default function NewTaskPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -76,11 +79,12 @@ export default function NewTaskPage() {
     }
   }
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
-  if (loading) return <PageShell><PageLoader label="Loading..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
+  if (loading) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Loading..." /></PageShell></ThemeProvider>;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <div className="max-w-md mx-auto space-y-6">
         <h1 className="font-display text-3xl font-bold text-ink">Create New Task</h1>
 
@@ -167,6 +171,7 @@ export default function NewTaskPage() {
           </Link>
         </section>
       </div>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

@@ -6,6 +6,8 @@ import RotationBoard from "@/components/RotationBoard";
 import type { UserRotation, SlateWithRotations, RotationAssignment } from "@/components/AssignmentCard";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Family {
   id: string;
@@ -14,6 +16,7 @@ interface Family {
 
 export default function RotationsPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [family, setFamily] = useState<Family | null>(null);
   const [users, setUsers] = useState<UserRotation[]>([]);
   const [slates, setSlates] = useState<SlateWithRotations[]>([]);
@@ -183,11 +186,12 @@ export default function RotationsPage() {
     }
   };
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
-  if (loading) return <PageShell><PageLoader label="Loading rotations..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
+  if (loading) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Loading rotations..." /></PageShell></ThemeProvider>;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <PageHeader
         title="Rotations"
         subtitle={`Family: ${family?.name || "No family"} · ${users.length + slates.reduce((acc, s) => acc + s.assignments.length, 0)} assignments`}
@@ -205,6 +209,7 @@ export default function RotationsPage() {
           onSlatesChange={setSlates}
         />
       </main>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

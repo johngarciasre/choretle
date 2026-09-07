@@ -5,6 +5,8 @@ import Link from "next/link";
 import { PageShell, PageLoader } from "@/components/ui";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface RotationAssignment {
   date: string;
@@ -52,6 +54,7 @@ export default function SwapMeetPage() {
   const authChecked = useAuthRedirect();
   const [schedule, setSchedule] = useState<SlateSchedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const familyTheme = useFamilyTheme();
   const [familyId, setFamilyId] = useState("");
   const [daysAhead, setDaysAhead] = useState(30);
 
@@ -239,24 +242,27 @@ export default function SwapMeetPage() {
     setSelectedSlateIdsForSharing([]);
   };
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
 
   if (!familyId) {
     return (
-      <PageShell>
-        <main className="max-w-xl mx-auto p-8 space-y-4">
-          <h2 className="text-xl font-semibold mb-4">Join a Family</h2>
-          <p className="text-ink/60 mb-4">You need to join a family before you can use Swap Meet. Go to the Family page to set one up.</p>
-          <Link href="/family" className="bg-grape text-white px-4 py-2 rounded inline-block">
-            Go to Family Settings
-          </Link>
-        </main>
-      </PageShell>
+      <ThemeProvider familyTheme={familyTheme}>
+        <PageShell>
+          <main className="max-w-xl mx-auto p-8 space-y-4">
+            <h2 className="text-xl font-semibold mb-4">Join a Family</h2>
+            <p className="text-ink/60 mb-4">You need to join a family before you can use Swap Meet. Go to the Family page to set one up.</p>
+            <Link href="/family" className="bg-grape text-white px-4 py-2 rounded inline-block">
+              Go to Family Settings
+            </Link>
+          </main>
+        </PageShell>
+      </ThemeProvider>
     );
   }
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <main className="max-w-7xl mx-auto p-8 space-y-8">
         {/* Schedule Section */}
         <section>
@@ -503,5 +509,6 @@ export default function SwapMeetPage() {
         )}
       </main>
     </PageShell>
+    </ThemeProvider>
   );
 }

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, Badge, PageLoader } from "@/components/ui";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Job {
   id: string;
@@ -45,6 +47,7 @@ async function fetchJobs() {
 
 export default function JobsPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -58,11 +61,12 @@ export default function JobsPage() {
     });
   }, []);
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
   if (loading) return <PageLoader label="Loading jobs..." />;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <PageHeader title="Jobs" subtitle="View and manage all jobs for your family" />
 
       <main className="space-y-6">
@@ -87,6 +91,7 @@ export default function JobsPage() {
           )}
         </section>
       </main>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

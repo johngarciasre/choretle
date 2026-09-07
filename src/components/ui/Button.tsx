@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "success" | "grape" | "ghost" | "danger" | "warning";
+type Variant = "primary" | "success" | "grape" | "indigo" | "ghost" | "danger" | "warning";
 type Size = "sm" | "md" | "lg";
 
 interface ButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "href"> {
@@ -49,6 +49,7 @@ export function Button({
     primary: "bg-coral text-white shadow-md shadow-coral/30 hover:-translate-y-0.5 hover:brightness-105",
     success: "bg-teal text-white shadow-md shadow-teal/30 hover:-translate-y-0.5 hover:brightness-105",
     grape: "bg-grape text-white shadow-md shadow-grape/30 hover:-translate-y-0.5 hover:brightness-105",
+    indigo: "bg-indigo text-white shadow-md shadow-indigo/30 hover:-translate-y-0.5 hover:brightness-105",
     ghost: "bg-white text-ink border-2 border-ink/15 hover:border-grape/40",
     danger: "bg-[#EF476F] text-white shadow-md shadow-red-300/30 hover:-translate-y-0.5 hover:brightness-105",
     warning: "bg-red text-white shadow-md shadow-red/30 hover:-translate-y-0.5 hover:brightness-105",

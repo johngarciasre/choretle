@@ -6,6 +6,8 @@ import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/co
 import { TagPill } from "@/components/ui";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface Task {
   id: string;
@@ -46,6 +48,7 @@ const fetchTags = async () => {
 
 export default function TasksPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,11 +73,12 @@ export default function TasksPage() {
     ? tasks
     : tasks.filter(t => t.tagIds && t.tagIds.some(tid => selectedTagIds.includes(tid)));
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
-  if (loading) return <PageShell><PageLoader label="Loading tasks..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
+  if (loading) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Loading tasks..." /></PageShell></ThemeProvider>;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <PageHeader
         title="Tasks"
         subtitle="Browse and manage all available tasks for your family"
@@ -164,6 +168,7 @@ export default function TasksPage() {
           </Link>
         </div>
       </div>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

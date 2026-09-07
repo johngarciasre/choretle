@@ -4,17 +4,21 @@ import { useEffect } from "react";
 import { PageShell, PageLoader } from "@/components/ui";
 import { Card } from "@/components/ui/Card";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 export default function RotationsPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   useEffect(() => {
     typeof window !== 'undefined' && (document.title = "Choretle - Rotations");
   }, []);
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <main className="flex items-center justify-center min-h-[60vh]">
         <Card accent="grape" className="w-full max-w-md p-8 text-center">
           <h1 className="font-display text-3xl font-bold text-ink mb-4">Chore Rotations</h1>
@@ -28,6 +32,7 @@ export default function RotationsPage() {
           </div>
         </Card>
       </main>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

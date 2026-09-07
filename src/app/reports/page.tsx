@@ -5,6 +5,8 @@ import Link from "next/link";
 import { PageShell, PageHeader, Card, Badge, StatCard, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { ThemeProvider } from "@/lib/theme";
+import { useFamilyTheme } from "@/lib/use-family-theme";
 
 interface ReportData {
   type: string;
@@ -21,6 +23,7 @@ type ReportType = "daily" | "done" | "task" | "member";
 
 export default function ReportsPage() {
   const authChecked = useAuthRedirect();
+  const familyTheme = useFamilyTheme();
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ReportType>("daily");
@@ -59,18 +62,19 @@ export default function ReportsPage() {
     fetchReport("daily").catch(() => setLoading(false));
   }, []);
 
-  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
+  if (!authChecked) return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Checking authentication..." /></PageShell></ThemeProvider>;
 
   if (loading) {
-    return <PageShell><PageLoader label="Loading reports..." /></PageShell>;
+    return <ThemeProvider familyTheme={familyTheme}><PageShell><PageLoader label="Loading reports..." /></PageShell></ThemeProvider>;
   }
 
   if (!reportData) {
-    return <PageShell><EmptyState icon={<span className="text-2xl">📊</span>} title="No data available" message="There are no reports to display." /></PageShell>;
+    return <ThemeProvider familyTheme={familyTheme}><PageShell><EmptyState icon={<span className="text-2xl">📊</span>} title="No data available" message="There are no reports to display." /></PageShell></ThemeProvider>;
   }
 
   return (
-    <PageShell>
+    <ThemeProvider familyTheme={familyTheme}>
+      <PageShell>
       <PageHeader title="Reports" subtitle="View your family's chore progress and achievements" />
 
       <main className="space-y-8">
@@ -182,6 +186,7 @@ export default function ReportsPage() {
           )}
         </section>
       </main>
-    </PageShell>
+      </PageShell>
+    </ThemeProvider>
   );
 }

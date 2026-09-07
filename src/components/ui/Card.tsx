@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Accent = "coral" | "teal" | "sunny" | "grape" | "bubblegum" | "success";
+type Accent = "coral" | "teal" | "sunny" | "grape" | "bubblegum" | "indigo" | "success";
 
 interface CardProps {
   accent?: Accent;
@@ -10,10 +10,11 @@ interface CardProps {
 
 const accentBorders: Record<Accent, string> = {
   coral: "border-t-4 border-coral",
-  teal: "border-t-4 border-teal",
   sunny: "border-t-4 border-sunny",
+  teal: "border-t-4 border-teal",
   grape: "border-t-4 border-grape",
   bubblegum: "border-t-4 border-bubblegum",
+  indigo: "border-t-4 border-indigo",
   success: "border-t-4 border-teal",
 };
 
