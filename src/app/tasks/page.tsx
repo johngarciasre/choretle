@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { PageShell, PageHeader, EmptyState, Badge, PageLoader, Card } from "@/components/ui";
-import { TagPill, Button } from "@/components/ui";
-import { Trash2, Plus, Edit, X } from "lucide-react";
+import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/components/ui";
+import { TagPill } from "@/components/ui";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
@@ -22,43 +21,27 @@ interface Tag {
   color?: string;
 }
 
-interface TaskFormData {
-  name: string;
-  description: string;
-  points: number;
-  tagIds: string[];
+async function getFamilyId(): Promise<string> {
+  const res = await fetch("/api/auth/me", { credentials: "include" });
+  if (!res.ok) throw new Error("Not authenticated");
+  const data = await res.json();
+  if (data.authenticated === false) throw new Error("Not authenticated");
+  if (!data.familyId) throw new Error(data.authenticated ? "No family ID" : "Not authenticated");
+  return data.familyId;
 }
 
 const fetchTasks = async () => {
-  try {
-    const authRes = await fetch("/api/auth/me", { credentials: "include" });
-    if (!authRes.ok) throw new Error("Not authenticated");
-    const authData = await authRes.json();
-    const familyId = authData.familyId;
-
-    const res = await fetch(`/api/tasks?familyId=${familyId}`, { credentials: "include" });
-    if (!res.ok) throw new Error("Failed to fetch tasks");
-    return await res.json();
-  } catch (err) {
-    error({ err: err }, "Fetch tasks failed");
-    return [];
-  }
+  const fid = await getFamilyId();
+  const res = await fetch(`/api/tasks?familyId=${fid}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch tasks");
+  return await res.json();
 };
 
 const fetchTags = async () => {
-  try {
-    const authRes = await fetch("/api/auth/me", { credentials: "include" });
-    if (!authRes.ok) throw new Error("Not authenticated");
-    const authData = await authRes.json();
-    const familyId = authData.familyId;
-
-    const res = await fetch(`/api/tags?familyId=${familyId}`, { credentials: "include" });
-    if (!res.ok) throw new Error("Failed to fetch tags");
-    return await res.json();
-  } catch (err) {
-    error({ err: err }, "Fetch tags failed");
-    return [];
-  }
+  const fid = await getFamilyId();
+  const res = await fetch(`/api/tags?familyId=${fid}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch tags");
+  return await res.json();
 };
 
 export default function TasksPage() {
@@ -67,126 +50,33 @@ export default function TasksPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  
-  // Modal state
-  const [showModal, setShowModal] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [formData, setFormData] = useState<TaskFormData>({
-    name: "",
-    description: "",
-    points: 10,
-    tagIds: [],
-  });
 
   useEffect(() => {
     typeof window !== "undefined" && (document.title = "Choretle - Tasks");
-    Promise.all([fetchTasks(), fetchTags()]).then(([tasks, tags]) => {
-      setTasks(tasks);
-      setTags(tags);
+    Promise.all([fetchTasks(), fetchTags()]).then(([tasksData, tagsData]) => {
+      setTasks(tasksData || []);
+      setTags(tagsData || []);
       setLoading(false);
     });
   }, []);
 
   function toggleTag(tagId: string) {
-    setSelectedTagIds(prev => 
+    setSelectedTagIds(prev =>
       prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
     );
   }
 
-  const openCreateModal = () => {
-    setEditingTask(null);
-    setFormData({ name: "", description: "", points: 10, tagIds: [] });
-    setShowModal(true);
-  };
-
-  const openEditModal = (task: Task) => {
-    setEditingTask(task);
-    setFormData({
-      name: task.name,
-      description: task.description || "",
-      points: task.points,
-      tagIds: task.tagIds || [],
-    });
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setEditingTask(null);
-  };
-
-  async function handleSaveTask() {
-    if (!formData.name.trim()) return;
-
-    try {
-      // Get familyId from auth endpoint
-      const authRes = await fetch("/api/auth/me", { credentials: "include" });
-      if (!authRes.ok) throw new Error("Not authenticated");
-      const authData = await authRes.json();
-      const familyId = authData.familyId;
-
-      const isEdit = editingTask !== null;
-      const res = await fetch(
-        isEdit ? `/api/tasks/${editingTask!.id}?familyId=${familyId}` : `/api/tasks?familyId=${familyId}`,
-        {
-          method: isEdit ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...formData,
-            ...(isEdit ? { id: editingTask!.id } : {}),
-          }),
-          credentials: "include",
-        }
-      );
-
-      if (!res.ok) throw new Error("Failed to save task");
-
-      const data = await res.json();
-      if (isEdit) {
-        setTasks(prev => prev.map(t => t.id === editingTask!.id ? data : t));
-      } else {
-        setTasks(prev => [...prev, data]);
-      }
-      closeModal();
-    } catch (err) {
-      error({ err: err }, "Save task failed");
-      alert("Failed to save task");
-    }
-  }
-
-  async function handleDeleteTask(taskId: string, taskName: string) {
-    if (!confirm(`Are you sure you want to delete "${taskName}"?`)) {
-      return;
-    }
-
-    try {
-      // Get familyId from auth endpoint
-      const authRes = await fetch("/api/auth/me", { credentials: "include" });
-      if (!authRes.ok) throw new Error("Not authenticated");
-      const authData = await authRes.json();
-      const familyId = authData.familyId;
-
-      const res = await fetch(`/api/tasks/${taskId}?familyId=${familyId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!res.ok) throw new Error("Failed to delete task");
-
-      setTasks(prev => prev.filter(t => t.id !== taskId));
-    } catch (err) {
-      error({ err: err }, "Delete task failed");
-      alert("Failed to delete task");
-    }
-  }
+  const filteredTasks = selectedTagIds.length === 0
+    ? tasks
+    : tasks.filter(t => t.tagIds && t.tagIds.some(tid => selectedTagIds.includes(tid)));
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageShell><PageLoader label="Loading tasks..." /></PageShell>;
 
   return (
     <PageShell>
-      <PageHeader 
-        title="Tasks" 
+      <PageHeader
+        title="Tasks"
         subtitle="Browse and manage all available tasks for your family"
       />
 
@@ -194,9 +84,7 @@ export default function TasksPage() {
         {/* Tag Filter */}
         <section>
           <Card accent="coral" className="p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="font-display text-lg font-bold text-ink">Filter by Tags</h3>
-            </div>
+            <h3 className="font-display text-lg font-bold text-ink mb-4">Filter by Tags</h3>
 
             {tags.length === 0 ? (
               <p className="text-sm text-ink/60">No tags available.</p>
@@ -214,10 +102,13 @@ export default function TasksPage() {
               </div>
             )}
 
-            {(selectedTagIds.length === 0 && tags.length > 0) && (
-              <p className="mt-2 text-sm text-ink/60">
-                Select one or more tags to filter tasks.
-              </p>
+            {selectedTagIds.length > 0 && (
+              <button
+                onClick={() => setSelectedTagIds([])}
+                className="mt-3 text-sm font-medium text-grape hover:underline"
+              >
+                Clear filter
+              </button>
             )}
           </Card>
         </section>
@@ -225,161 +116,54 @@ export default function TasksPage() {
         {/* Tasks Grid */}
         <section>
           <h2 className="font-display text-xl font-bold text-ink mb-4">
-            Tasks {selectedTagIds.length > 0 && `(filtered: ${selectedTagIds.length})`}
+            {selectedTagIds.length > 0
+              ? `Tasks (${filteredTasks.length} of ${tasks.length})`
+              : "All Tasks"}
           </h2>
-          {tasks.length === 0 ? (
-            <EmptyState icon={<span className="text-2xl">📋</span>} title="No tasks found" message="Create a task to get started!" />
+
+          {filteredTasks.length === 0 ? (
+            <EmptyState
+              icon={<span className="text-2xl">📋</span>}
+              title={selectedTagIds.length > 0 ? "No tasks match the selected tags" : "No tasks found"}
+              message={selectedTagIds.length > 0 ? "Try selecting different tags" : "Create a task to get started!"}
+            />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tasks.map((task) => (
-                <Card key={task.id} accent="teal" className="p-6 space-y-4 relative group">
-                  <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                    <button
-                      onClick={() => openEditModal(task)}
-                      className="text-ink/30 hover:text-grape transition"
-                      title={`Edit ${task.name}`}
-                      aria-label={`Edit task: ${task.name}`}
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTask(task.id, task.name)}
-                      className="text-ink/30 hover:text-coral transition"
-                      title={`Delete ${task.name}`}
-                      aria-label={`Delete task: ${task.name}`}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  
-                  <Link href={`/tasks/${task.id}`} className="block">
+              {filteredTasks.map((task) => (
+                <Link key={task.id} href={`/tasks/${task.id}`} className="block group">
+                  <Card accent="teal" className="p-6 space-y-4 hover:brightness-105 transition-all">
                     <h3 className="font-display text-lg font-bold text-ink pr-4">{task.name}</h3>
                     {task.description && (
-                      <p className="text-sm text-ink/60 mt-2">{task.description}</p>
+                      <p className="text-sm text-ink/60 mt-2 line-clamp-2">{task.description}</p>
                     )}
-                  </Link>
-                  
-                  <div className="mt-2 flex items-center justify-between">
-                    <Badge status="points">{task.points} pts</Badge>
-                    {task.tagIds && task.tagIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {task.tagIds.map(tagId => {
-                          const tag = tags.find(t => t.id === tagId);
-                          return tag ? (
-                            <Badge key={tag.id} status="neutral" className="text-xs px-2 py-0.5">{tag.name}</Badge>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </Card>
+
+                    <div className="mt-2 flex items-center justify-between">
+                      <Badge status="points">{task.points} pts</Badge>
+                      {task.tagIds && task.tagIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {task.tagIds.map(tagId => {
+                            const tag = tags.find(t => t.id === tagId);
+                            return tag ? (
+                              <Badge key={tag.id} status="neutral" className="text-xs px-2 py-0.5">{tag.name}</Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}
         </section>
-      </div>
 
-      {/* FAB: Create Task */}
-      <button
-        onClick={openCreateModal}
-        className="fixed right-4 sm:right-8 bottom-8 z-30 flex items-center justify-center w-9 h-9 rounded-full bg-coral text-white shadow-lg shadow-coral/30 hover:-translate-y-0.5 hover:brightness-105 transition-all active:translate-y-0"
-        aria-label="Create new task"
-      >
-        <Plus size={20} />
-      </button>
-
-      {/* Task Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-xl font-bold text-ink">
-                {editingTask ? "Edit Task" : "Create New Task"}
-              </h3>
-              <button onClick={closeModal} className="text-ink/40 hover:text-ink transition">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="task-name" className="block text-sm font-bold text-ink mb-1">
-                  Task Name *
-                </label>
-                <input
-                  id="task-name"
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Clean the kitchen"
-                  className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="task-desc" className="block text-sm font-bold text-ink mb-1">
-                  Description
-                </label>
-                <textarea
-                  id="task-desc"
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Describe what needs to be done..."
-                  rows={3}
-                  className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none resize-y"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="task-points" className="block text-sm font-bold text-ink mb-1">
-                  Points
-                </label>
-                <input
-                  id="task-points"
-                  type="number"
-                  min={0}
-                  value={formData.points}
-                  onChange={(e) => setFormData(prev => ({ ...prev, points: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-ink mb-2">Tags</label>
-                {tags.length === 0 ? (
-                  <p className="text-sm text-ink/60">No tags available.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map(tag => (
-                      <TagPill
-                        key={tag.id}
-                        active={formData.tagIds.includes(tag.id)}
-                        onClick={() => {
-                          const newTagIds = formData.tagIds.includes(tag.id)
-                            ? formData.tagIds.filter(id => id !== tag.id)
-                            : [...formData.tagIds, tag.id];
-                          setFormData(prev => ({ ...prev, tagIds: newTagIds }));
-                        }}
-                      >
-                        {tag.name}
-                      </TagPill>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button variant="primary" onClick={handleSaveTask} className="flex-1 justify-center">
-                {editingTask ? "Update Task" : "Create Task"}
-              </Button>
-              <Button variant="ghost" onClick={closeModal}>
-                Cancel
-              </Button>
-            </div>
-          </div>
+        {/* Create Task Button */}
+        <div className="flex justify-end">
+          <Link href="/tasks/new" className="px-6 py-2 rounded-full font-bold bg-coral text-white hover:brightness-105 transition-all shadow-md shadow-coral/30 inline-flex items-center gap-2">
+            <span>Create Task</span>
+          </Link>
         </div>
-      )}
+      </div>
     </PageShell>
   );
 }

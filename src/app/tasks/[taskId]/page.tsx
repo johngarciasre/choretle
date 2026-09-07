@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
-import { X } from "lucide-react";
+import { X, Trash2, Edit } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
@@ -100,7 +100,7 @@ export default function TaskPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [formData, setFormData] = useState<TaskFormData>({
     name: "",
     description: "",
@@ -116,12 +116,12 @@ export default function TaskPage() {
   useEffect(() => {
     if (!taskId) return;
     typeof window !== "undefined" && (document.title = "Choretle - Task Details");
-    Promise.all([fetchTask(taskId), fetchTags(), fetchSubtasks(taskId)]).then(([taskData, tags, subtasks]) => {
+    Promise.all([fetchTask(taskId), fetchTags(), fetchSubtasks(taskId)]).then(([taskData, tagsData, subtasksData]) => {
       if (taskData) {
         setTask(taskData);
       }
-      setTags(tags);
-      setSubtasks(subtasks || []);
+      setTags(tagsData || []);
+      setSubtasks(subtasksData || []);
       setLoading(false);
     });
   }, [taskId]);
@@ -135,14 +135,19 @@ export default function TaskPage() {
       verifyRequired: task.verifyRequired || false,
       tagIds: task.tagIds || [],
     });
-    setShowModal(true);
+    setShowEditModal(true);
   }
 
   async function handleUpdateTask() {
     if (!task || !taskId) return;
 
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
+      const res = await fetch(`/api/tasks/${taskId}?familyId=${familyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -159,10 +164,34 @@ export default function TaskPage() {
 
       const updated = await res.json();
       setTask(updated);
-      setShowModal(false);
+      setShowEditModal(false);
     } catch (err) {
       error({ err: err }, "Update task failed");
       alert("Failed to save changes");
+    }
+  }
+
+  async function handleDeleteTask() {
+    if (!task || !taskId) return;
+    if (!confirm(`Are you sure you want to delete "${task.name}"?`)) {
+      return;
+    }
+
+    try {
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
+      const res = await fetch(`/api/tasks/${taskId}?familyId=${familyId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Failed to delete task");
+      window.location.href = "/tasks";
+    } catch (err) {
+      error({ err: err }, "Delete task failed");
+      alert("Failed to delete task");
     }
   }
 
@@ -170,7 +199,12 @@ export default function TaskPage() {
     if (!taskId || !newSubtaskName.trim()) return;
 
     try {
-      const res = await fetch("/api/tasks/subtasks", {
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
+      const res = await fetch(`/api/tasks/subtasks?familyId=${familyId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -194,7 +228,12 @@ export default function TaskPage() {
 
   async function handleDeleteSubtask(subtaskId: string) {
     try {
-      const res = await fetch(`/api/tasks/subtasks/${subtaskId}`, {
+      const authRes = await fetch("/api/auth/me", { credentials: "include" });
+      if (!authRes.ok) throw new Error("Not authenticated");
+      const authData = await authRes.json();
+      const familyId = authData.familyId;
+
+      const res = await fetch(`/api/tasks/subtasks/${subtaskId}?familyId=${familyId}`, {
         method: "DELETE",
       });
 
@@ -214,13 +253,18 @@ export default function TaskPage() {
   return (
     <PageShell>
       <Card accent="coral" className="space-y-6">
-        {/* Task Details */}
+        {/* Task Header */}
         <section className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between">
             <h2 className="font-display text-3xl font-bold text-ink">{task.name}</h2>
-            <Button variant="ghost" onClick={openEditModal}>
-              Edit
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={openEditModal}>
+                <Edit size={16} /> Edit
+              </Button>
+              <Button variant="ghost" onClick={handleDeleteTask}>
+                <Trash2 size={16} /> Delete
+              </Button>
+            </div>
           </div>
 
           {task.description && (
@@ -231,6 +275,16 @@ export default function TaskPage() {
             <Badge status="points">{task.points} pts</Badge>
             {task.archtype && (
               <Badge status="neutral" className="text-xs px-2 py-0.5">{task.archtype}</Badge>
+            )}
+            {task.tagIds && task.tagIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {task.tagIds.map(tagId => {
+                  const tag = tags.find(t => t.id === tagId);
+                  return tag ? (
+                    <Badge key={tag.id} status="neutral" className="text-xs px-2 py-0.5">{tag.name}</Badge>
+                  ) : null;
+                })}
+              </div>
             )}
           </div>
         </section>
@@ -299,12 +353,12 @@ export default function TaskPage() {
       </Card>
 
       {/* Edit Task Modal */}
-      {showModal && (
+      {showEditModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-display text-xl font-bold text-ink">Edit Task</h3>
-              <button onClick={() => setShowModal(false)} className="text-ink/40 hover:text-ink transition">
+              <button onClick={() => setShowEditModal(false)} className="text-ink/40 hover:text-ink transition">
                 <X size={20} />
               </button>
             </div>
@@ -393,7 +447,7 @@ export default function TaskPage() {
               <Button variant="primary" onClick={handleUpdateTask} className="flex-1 justify-center">
                 Update Task
               </Button>
-              <Button variant="ghost" onClick={() => setShowModal(false)}>
+              <Button variant="ghost" onClick={() => setShowEditModal(false)}>
                 Cancel
               </Button>
             </div>
