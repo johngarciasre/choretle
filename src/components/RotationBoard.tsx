@@ -51,16 +51,13 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
     if (isDroppingOnUsersColumn) return;
 
     const newSlates = slates.map((slate) => {
-      // First, remove the user from their current slate if they're already assigned somewhere
-      let assignmentsAfterRemove = slate.assignments.filter((a) => a.userId !== userId);
-      
       if (slate.id === targetSlateId) {
-        // Add user to this slate at the end
+        // Add user to this slate at the end (keep existing assignments from other users)
         const newUserRotation: UserRotation = {
           id: undefined,
           userId,
           slateId: targetSlateId,
-          order: assignmentsAfterRemove.length + 1,
+          order: slate.assignments.length + 1,
           intervalDays: 7,
           isActive: true,
           userName: "",
@@ -75,11 +72,12 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
           newUserRotation.userPointsTotal = userData.userPointsTotal;
           newUserRotation.userRole = userData.userRole;
         }
-        assignmentsAfterRemove = [...assignmentsAfterRemove, newUserRotation];
+        const reordered = [...slate.assignments, newUserRotation].map((a, i) => ({ ...a, order: i + 1 }));
+        return { ...slate, assignments: reordered };
       }
 
       // Reorder all assignments in this slate
-      const reordered = assignmentsAfterRemove.map((a, i) => ({ ...a, order: i + 1 }));
+      const reordered = slate.assignments.map((a, i) => ({ ...a, order: i + 1 }));
       return { ...slate, assignments: reordered };
     });
 
