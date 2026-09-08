@@ -123,7 +123,7 @@ export async function generateJobsFromSlate(
       const job = await createJob({
         listId: list.id,
         slateTaskId: slateTask.taskId,
-        name: `Task ${slateTask.taskId}`,
+        name: slateTask.taskName || `Task ${slateTask.taskId.slice(-6)}`,
         points: slateTask.pointsOverride || 0,
         status: "todo",
         dueDate: targetDate,
@@ -152,7 +152,7 @@ export async function generateJobsFromSlate(
         listId: list.id,
         slateTaskId: slateTask.taskId,
         assignedTo: userId,
-        name: `Task ${slateTask.taskId}`,
+        name: slateTask.taskName || `Task ${slateTask.taskId.slice(-6)}`,
         points: slateTask.pointsOverride || 0,
         status: "todo",
         dueDate: targetDate,
