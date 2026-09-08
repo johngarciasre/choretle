@@ -22,10 +22,51 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
+  // Group users by role for sidebar display
+  const parentUsers = users.filter((u) => u.userRole === "parent");
+  const childUsers = users.filter((u) => u.userRole === "child");
+  const adminUsers = users.filter((u) => u.userRole === "admin");
+
   const handleDragStart = useCallback((e: React.DragEvent, userId: string) => {
     e.dataTransfer.setData("userId", userId);
     setDraggedUserId(userId);
   }, []);
+
+  const renderUser = (user: UserRotation) => (
+    <div
+      key={user.userId}
+      draggable
+      onDragStart={(e) => handleDragStart(e, user.userId)}
+      onDragEnd={() => setDraggedUserId(null)}
+      className="flex items-center gap-3 bg-white rounded-xl shadow-[0_8px_30px_rgba(59,47,99,0.08)] p-3 border-2 border-ink/10 cursor-grab active:cursor-grabbing hover:shadow-lg hover:border-grape/40 transition-all"
+    >
+      <span className="text-ink/30" aria-hidden="true">
+        <Users size={16} />
+      </span>
+
+      {user.userAvatarUrl ? (
+        <img src={user.userAvatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
+      ) : user.userId ? (() => {
+          const e = getAvatarEmoji(user.userId);
+          return (
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${e.bgClass}`}>
+              {e.emoji}
+            </div>
+          );
+        })() : null}
+
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-ink truncate">{user.userName}</p>
+        <p className="text-xs text-ink/60 capitalize">{user.userRole} &middot; {user.userPointsTotal} pts</p>
+      </div>
+
+      {user.id && (
+        <span className="font-bold px-2 py-0.5 rounded-full bg-grape/15 text-grape text-xs">
+          Active
+        </span>
+      )}
+    </div>
+  );
 
   const handleDragLeave = useCallback(() => {
     setDragOverSlate(null);
@@ -158,53 +199,36 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
       {/* Board */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
         {/* Users Column */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           <h3 className="text-sm font-bold text-ink/60 uppercase tracking-wider mb-2 flex items-center gap-2">
             <Users size={14} />
             Users
           </h3>
 
-          <div className="space-y-2">
-            {users.map((user) => (
-              <div
-                key={user.userId}
-                draggable
-                onDragStart={(e) => handleDragStart(e, user.userId)}
-                onDragEnd={() => setDraggedUserId(null)}
-                className="flex items-center gap-3 bg-white rounded-xl shadow-[0_8px_30px_rgba(59,47,99,0.08)] p-3 border-2 border-ink/10 cursor-grab active:cursor-grabbing hover:shadow-lg hover:border-grape/40 transition-all"
-              >
-                <span className="text-ink/30" aria-hidden="true">
-                  <Users size={16} />
-                </span>
+          {adminUsers.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-ink/40 uppercase tracking-wider mb-1">Admin</p>
+              {adminUsers.map((user) => renderUser(user))}
+            </div>
+          )}
 
-                {user.userAvatarUrl ? (
-                  <img src={user.userAvatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
-                ) : user.userId ? (() => {
-                    const e = getAvatarEmoji(user.userId);
-                    return (
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${e.bgClass}`}>
-                        {e.emoji}
-                      </div>
-                    );
-                  })() : null}
+          {parentUsers.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-ink/40 uppercase tracking-wider mb-1">Parents</p>
+              {parentUsers.map((user) => renderUser(user))}
+            </div>
+          )}
 
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-ink truncate">{user.userName}</p>
-                  <p className="text-xs text-ink/60 capitalize">{user.userRole} &middot; {user.userPointsTotal} pts</p>
-                </div>
+          {childUsers.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-ink/40 uppercase tracking-wider mb-1">Children</p>
+              {childUsers.map((user) => renderUser(user))}
+            </div>
+          )}
 
-                {user.id && (
-                  <span className="font-bold px-2 py-0.5 rounded-full bg-grape/15 text-grape text-xs">
-                    Active
-                  </span>
-                )}
-              </div>
-            ))}
-
-            {users.length === 0 && (
-              <p className="text-sm text-ink/60 italic p-3 text-center">No users to display</p>
-            )}
-          </div>
+          {users.length === 0 && (
+            <p className="text-sm text-ink/60 italic p-3 text-center">No users to display</p>
+          )}
         </div>
 
         {/* Slates Column */}
