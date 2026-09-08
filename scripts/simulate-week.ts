@@ -291,12 +291,12 @@ async function simulateWeek(weekData: Awaited<ReturnType<typeof setup>>) {
 
       // Mark as "doing" then "done"
       try {
-        await parent.put("/api/jobs", { id: job.id, status: "doing" });
+        await parent.put(`/api/jobs/${job.id}`, { status: "doing" });
       } catch {
         /* ignore */
       }
 
-      const doneRes = await parent.put("/api/jobs", { id: job.id, status: "done" });
+      const doneRes = await parent.put(`/api/jobs/${job.id}`, { status: "done" });
       allJobs.push({
         id: job.id,
         name: job.name,
@@ -318,7 +318,7 @@ async function simulateWeek(weekData: Awaited<ReturnType<typeof setup>>) {
   // Fetch final scores
   for (const child of children) {
     const profile = await parent.get(`/api/profile/${child.id}`);
-    const score = (profile as { totalPoints?: number }).totalPoints || 0;
+    const score = ((profile as { user?: { pointsTotal?: number } }).user?.pointsTotal ?? 0) || 0;
     console.log(`   ${child.email}: ${score} points`);
   }
 
