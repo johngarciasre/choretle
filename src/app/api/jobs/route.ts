@@ -31,11 +31,13 @@ export async function GET(request: NextRequest) {
 
     // Otherwise, fetch all jobs for the family using raw SQL
     const jobsRaw = rawDb.prepare(
-      `SELECT j.*, s.name as slate_name, t.name as task_name, t.points as task_points
+      `SELECT j.*, s.name as slate_name, t.name as task_name, t.points as task_points,
+              u.name as assignee_name
          FROM jobs j
          LEFT JOIN slate_tasks st ON j.slate_task_id = st.id
          LEFT JOIN slates s ON st.slate_id = s.id
          LEFT JOIN tasks t ON st.task_id = t.id
+         LEFT JOIN users u ON j.assigned_to = u.id
          WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
          ORDER BY j.created_at DESC`
     ).all(familyId);
