@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ jobs, count: jobs.length });
   } catch (err) {
-    error({ err: err }, "Auto-generation failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Auto-generation failed");
+    console.error("[generate] ERROR:", String(err));
     return NextResponse.json(
       { error: "Failed to generate jobs" },
       { status: 500 },

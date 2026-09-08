@@ -1,12 +1,17 @@
-import { initDb, rawInsert, rawDeleteWhere, rawUpdate } from "@/db/drizzle";
+import { initDb, rawInsert, rawDeleteWhere, rawUpdate, getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 
 let db: any = null;
 
 async function ensureDb(): Promise<any> {
   if (db) return db;
+  const raw = getRawDb();
+  if (raw) {
+    db = raw;
+    return raw;
+  }
   db = await initDb();
-  return db;
+  return getRawDb() || db;
 }
 
 function nowISO(): string { return new Date().toISOString(); }
@@ -269,7 +274,7 @@ export async function createList(data: any) {
   const id = `list-${Date.now()}`;
   rawDb.prepare(
     `INSERT INTO lists (id, slate_id, family_id, name, start_date, end_date, period, status, created_at) VALUES (?, ?, ?, ?, ?, NULL, 'day', 'active', ?)`
-  ).run(id, data.slate_id, data.family_id, data.name, data.start_date, now);
+  ).run(id, data.slateId, data.familyId, data.name, data.startDate?.toISOString() || new Date().toISOString(), now);
   const res = rawDb.prepare(`SELECT * FROM lists WHERE id = ?`).get(id) as any;
   return res || null;
 }
@@ -383,7 +388,18 @@ export async function getListBySlateAndDate(slateId: string, date: Date) {
   if (!rawDb) return null;
   const startStr = date.toISOString().split("T")[0];
   const res = rawDb.prepare(
-    `SELECT * FROM lists WHERE slate_id = ? AND start_date <= ? ORDER BY start_date DESC LIMIT 1`
+    `SELECT * FROM lists WHERE slate_id = ? AND date(start_date) <= ? ORDER BY start_date DESC LIMIT 1`
+  ).get(slateId, startStr) as any;
+  return res || null;
+}
+
+/** Check if a list exists for the exact calendar day of the target date. */
+export async function getListBySlateAndExactDate(slateId: string, date: Date) {
+  const rawDb = await ensureDb();
+  if (!rawDb) return null;
+  const startStr = date.toISOString().split("T")[0];
+  const res = rawDb.prepare(
+    `SELECT * FROM lists WHERE slate_id = ? AND date(start_date) = ? LIMIT 1`
   ).get(slateId, startStr) as any;
   return res || null;
 }
@@ -448,7 +464,13 @@ export async function resolveSlateTaskSet(slateId: string) {
   // Dedupe by taskId: explicit rows take priority over tag-matched
   const result = new Map<string, any>();
   for (const task of (explicitTasksResult || [])) {
-    result.set(task.task_id, { taskId: task.task_id, pointsOverride: task.points_override, order: task.order, isExplicit: true });
+    // If points_override is NULL, look up the task's default points
+    let pointsOverride = task.points_override;
+    if (pointsOverride === null || pointsOverride === undefined) {
+      const taskRow = rawDb.prepare(`SELECT points FROM tasks WHERE id = ?`).get(task.task_id) as any;
+      pointsOverride = taskRow?.points || 0;
+    }
+    result.set(task.task_id, { taskId: task.task_id, pointsOverride, order: task.order, isExplicit: true });
   }
   for (const task of tagMatchedTasks) {
     if (!result.has(task.taskId)) {

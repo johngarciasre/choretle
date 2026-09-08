@@ -60,7 +60,14 @@ export function shouldGenerateList(slate: Slate, targetDate: Date): boolean {
   if (!slate.isActive) return false;
 
   if (!slate.createdAt) return true; // No creation date — assume eligible
-  const created = new Date(slate.createdAt);
+  const raw = typeof slate.createdAt === "string" ? slate.createdAt : String(slate.createdAt);
+  // SQLite CURRENT_TIMESTAMP returns UTC in format "YYYY-MM-DD HH:MM:SS".
+  // JS Date constructor treats space-separated strings as local time, which is wrong.
+  // Normalize to ISO by replacing space with T and appending Z for UTC.
+  const iso = raw.indexOf("T") === -1 && raw.indexOf("Z") === -1
+    ? raw.replace(" ", "T") + "Z"
+    : raw;
+  const created = new Date(iso);
   if (isNaN(created.getTime())) return false;
 
   const diffMs = targetDate.getTime() - created.getTime();

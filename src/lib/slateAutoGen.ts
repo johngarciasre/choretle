@@ -56,17 +56,18 @@ export async function generateJobsFromSlate(
   familyId: string,
   targetDate: Date,
 ): Promise<GeneratedJob[]> {
+  // Skip if list already exists for this slate/date (exact calendar day match)
+  const { getListBySlateAndExactDate, ...rest } = await import("@/lib/db/service");
   const {
     getRotationsBySlate,
-    getListBySlateAndDate,
     createList,
     createListTask,
     createJob,
     resolveSlateTaskSet,
-  } = await import("@/lib/db/service");
+  } = rest;
 
-  // Skip if list already exists for this slate/date
-  const existingList = await getListBySlateAndDate(slateId, targetDate);
+  // Skip if list already exists for this slate/date (exact calendar day match)
+  const existingList = await getListBySlateAndExactDate(slateId, targetDate);
   if (existingList) return [];
 
   // Create the list
@@ -86,23 +87,43 @@ export async function generateJobsFromSlate(
   if (!list?.id) return [];
 
   // Get slate tasks WITH TAG AUTO-INCLUSION (explicit + tag-matched)
-  const slateTaskSet = await resolveSlateTaskSet(slateId);
-  if (!slateTaskSet || slateTaskSet.length === 0) return [];
+  const slateTasks = await resolveSlateTaskSet(slateId);
+  if (!slateTasks || slateTasks.length === 0) return [];
 
   const rotations = await getRotationsBySlate(slateId);
+
+  // Normalize rotation rows: DB returns snake_case (user_id, slate_id),
+  // but calculateRotationAssignment expects camelCase (userId, slateId).
+  const normalizedRotations = (rotations || []).map((r: any) => ({
+    id: r.id || r.id,
+    slateId: r.slate_id || r.slateId,
+    userId: r.user_id || r.userId,
+    order: r.order ?? r["order"] ?? 0,
+    intervalDays: r.interval_days ?? r.intervalDays ?? 7,
+    isActive: r.is_active ?? r.isActive !== false,
+    createdAt: r.created_at || r.createdAt,
+  }));
+
+  // Map resolveSlateTaskSet output to calculateRotationAssignment input shape.
+  // resolveSlateTaskSet returns { taskId, pointsOverride, order, isExplicit },
+  // but calculateRotationAssignment expects { id, slateId }.
+  const rotationTasks = slateTasks.map((st: any) => ({
+    id: st.taskId,
+    slateId,
+  }));
 
   // Determine assignments
   let assignments: Map<string, string[]> = new Map();
 
-  if (rotations && rotations.length > 0) {
-    assignments = calculateRotationAssignment(slateTaskSet, rotations, targetDate);
+  if (normalizedRotations && normalizedRotations.length > 0) {
+    assignments = calculateRotationAssignment(rotationTasks, normalizedRotations, targetDate);
   } else {
     // No rotations configured — assign all tasks without specific user
-    for (const slateTask of slateTaskSet) {
+    for (const slateTask of slateTasks) {
       const job = await createJob({
         listId: list.id,
         slateTaskId: slateTask.taskId,
-        name: slateTask.taskId + " (auto-included by tag)",
+        name: `Task ${slateTask.taskId}`,
         points: slateTask.pointsOverride || 0,
         status: "todo",
         dueDate: targetDate,
@@ -124,14 +145,14 @@ export async function generateJobsFromSlate(
 
   for (const [userId, taskIds] of assignments.entries()) {
     for (const slateTaskId of taskIds) {
-      const slateTask = slateTaskSet.find((st: any) => st.taskId === slateTaskId);
+      const slateTask = slateTasks.find((st: any) => st.taskId === slateTaskId);
       if (!slateTask) continue;
 
       const job = await createJob({
         listId: list.id,
         slateTaskId: slateTask.taskId,
         assignedTo: userId,
-        name: slateTask.taskId + " (auto-included by tag)",
+        name: `Task ${slateTask.taskId}`,
         points: slateTask.pointsOverride || 0,
         status: "todo",
         dueDate: targetDate,
@@ -161,17 +182,37 @@ export async function autoGenerateJobs(
   const { getSlatesByFamily } = await import("@/lib/db/service");
 
   const date = targetDate || new Date();
-  const slates = await getSlatesByFamily(familyId);
+  const rawSlates = await getSlatesByFamily(familyId);
 
-  if (!slates || slates.length === 0) return [];
+  if (!rawSlates || rawSlates.length === 0) return [];
+
+  console.log(`[autoGen] familyId=${familyId} date=${date.toISOString()} slates=${rawSlates.length}`);
+
+  // Normalize snake_case DB columns to camelCase for shouldGenerateList
+  const slates = rawSlates.map((s: any) => ({
+    ...s,
+    isActive: s.is_active ?? s.isActive,
+    createdAt: s.created_at || s.createdAt,
+    frequency: s.frequency,
+    interval: s.interval,
+  }));
 
   // Find active slates using pure functions from points.ts
   const activeSlates = slates.filter((s: any) => shouldGenerateList(s, date));
+  console.log(`[autoGen] activeSlates=${activeSlates.length}`);
+
   const allJobs: GeneratedJob[] = [];
 
   for (const slate of activeSlates) {
-    const jobs = await generateJobsFromSlate(slate.id, familyId, date);
-    allJobs.push(...jobs);
+    try {
+      console.log(`[autoGen] Generating for slate ${slate.id} (${slate.name})`);
+      const jobs = await generateJobsFromSlate(slate.id, familyId, date);
+      console.log(`[autoGen] Generated ${jobs.length} jobs for slate ${slate.id}`);
+      allJobs.push(...jobs);
+    } catch (err) {
+      console.error(`[autoGen] Error generating for slate ${slate.id}:`, String(err));
+      throw err; // Re-throw so the route handler catches it with full stack
+    }
   }
 
   return allJobs;

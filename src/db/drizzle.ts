@@ -151,6 +151,14 @@ let _rawDb: Database.Database | null = null;
 export const db: any = null;
 
 /**
+ * Get the raw SQLite database instance.
+ * This is needed by the service layer which uses raw SQL via .prepare().
+ */
+export function getRawDbSync(): Database.Database | null {
+  return _rawDb;
+}
+
+/**
  * Reset the database to a clean state. Used by integration tests.
  */
 export function resetDb(): void {
