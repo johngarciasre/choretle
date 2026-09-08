@@ -52,6 +52,15 @@ export default function RotationBoard({ familyName, users, slates, onSave, onSla
 
     const newSlates = slates.map((slate) => {
       if (slate.id === targetSlateId) {
+        // If user is already assigned to this slate, just move them to the end
+        const existingIndex = slate.assignments.findIndex((a) => a.userId === userId);
+        if (existingIndex >= 0) {
+          const assignments = [...slate.assignments];
+          const [assignment] = assignments.splice(existingIndex, 1);
+          assignments.push(assignment);
+          return { ...slate, assignments: assignments.map((a, i) => ({ ...a, order: i + 1 })) };
+        }
+
         // Add user to this slate at the end (keep existing assignments from other users)
         const newUserRotation: UserRotation = {
           id: undefined,

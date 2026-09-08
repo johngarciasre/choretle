@@ -40,10 +40,18 @@ export async function GET(request: NextRequest) {
         userPointsTotal: user?.points_total || user?.pointsTotal || 0, userRole: user?.role || "child" };
     });
 
-    // Group rotations by slate
+    // Group rotations by slate (deduplicate by user_id to handle edge cases)
     const slatesWithRotations = (familySlates || []).map((slate: any) => {
       const slateRotations = enrichedRotations.filter((r: any) => r.slate_id === slate.id || r.slateId === slate.id);
-      return { ...slate, assignments: slateRotations };
+      // Deduplicate: keep only the first assignment per userId
+      const seen = new Set<string>();
+      const uniqueAssignments = slateRotations.filter((r: any) => {
+        const uid = r.user_id || r.userId;
+        if (seen.has(uid)) return false;
+        seen.add(uid);
+        return true;
+      });
+      return { ...slate, assignments: uniqueAssignments };
     });
 
     // Get users not yet assigned to any rotation
