@@ -54,14 +54,13 @@ export async function GET(request: NextRequest) {
       return { ...slate, assignments: uniqueAssignments };
     });
 
-    // Get users not yet assigned to any rotation
-    const assignedUserIds = new Set(enrichedRotations.map((r: any) => r.user_id || r.userId));
-    const unassignedUsers = (users as any[]).filter((u: any) => !assignedUserIds.has(u.id)).map((u: any) => ({
+    // Get all users in the family with normalized field names
+    const allUsers = (users as any[]).map((u: any) => ({
       ...u, userId: u.id, userName: u.name, userAvatarUrl: u.avatar_url || u.avatarUrl,
       userPointsTotal: u.points_total || u.pointsTotal || 0, userRole: u.role || "child",
     }));
 
-    return NextResponse.json({ family, users: unassignedUsers, slates: slatesWithRotations });
+    return NextResponse.json({ family, users: allUsers, slates: slatesWithRotations });
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Rotations GET failed");
     return NextResponse.json({ error: "Failed to fetch rotations" }, { status: 500 });
