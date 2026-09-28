@@ -1,5 +1,7 @@
 // ─── Pure Functions: Point Calculation & Slate Generation ─────────────
 
+import { shouldGenerateOnDate } from "./schedule";
+
 interface Subtask {
   completedAt?: string | Date | null;
   pointsAwarded?: number;
@@ -16,6 +18,7 @@ interface Slate {
   createdAt?: string | Date;
   frequency?: string;
   interval?: number;
+  schedule?: string | null;
 }
 
 /**
@@ -74,6 +77,16 @@ export function shouldGenerateList(slate: Slate, targetDate: Date): boolean {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays < 0) return false;
+
+  // If slate has a schedule field, use the new shouldGenerateOnDate logic
+  if (slate.schedule) {
+    try {
+      const schedule = JSON.parse(slate.schedule);
+      return shouldGenerateOnDate(schedule, targetDate);
+    } catch {
+      // Fall through to legacy logic
+    }
+  }
 
   const frequencyDays = getFrequencyDays(slate.frequency || "weekly", slate.interval || 1);
 

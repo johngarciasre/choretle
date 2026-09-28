@@ -90,6 +90,20 @@ export async function generateJobsFromSlate(
   const slateTasks = await resolveSlateTaskSet(slateId);
   if (!slateTasks || slateTasks.length === 0) return [];
 
+  // Filter tasks by their individual schedules (task schedule overrides slate schedule)
+  const { shouldGenerateOnDate } = await import("./schedule");
+  const filteredTasks = slateTasks.filter((st: any) => {
+    if (!st.taskSchedule) return true; // No task schedule — use slate's filter
+    try {
+      const taskSchedule = JSON.parse(st.taskSchedule);
+      return shouldGenerateOnDate(taskSchedule, targetDate);
+    } catch {
+      return true; // Invalid schedule — fall through to slate
+    }
+  });
+
+  if (filteredTasks.length === 0) return [];
+
   const rotations = await getRotationsBySlate(slateId);
 
   // Normalize rotation rows: DB returns snake_case (user_id, slate_id),
@@ -107,19 +121,18 @@ export async function generateJobsFromSlate(
   // Map resolveSlateTaskSet output to calculateRotationAssignment input shape.
   // resolveSlateTaskSet returns { taskId, pointsOverride, order, isExplicit },
   // but calculateRotationAssignment expects { id, slateId }.
-  const rotationTasks = slateTasks.map((st: any) => ({
-    id: st.taskId,
-    slateId,
-  }));
 
-  // Determine assignments
+  // Determine assignments using filtered tasks
   let assignments: Map<string, string[]> = new Map();
 
   if (normalizedRotations && normalizedRotations.length > 0) {
-    assignments = calculateRotationAssignment(rotationTasks, normalizedRotations, targetDate);
+    assignments = calculateRotationAssignment(filteredTasks.map((st: any) => ({
+      id: st.taskId,
+      slateId,
+    })), normalizedRotations, targetDate);
   } else {
     // No rotations configured — assign all tasks without specific user
-    for (const slateTask of slateTasks) {
+    for (const slateTask of filteredTasks) {
       const job = await createJob({
         listId: list.id,
         slateTaskId: slateTask.taskId,
@@ -140,12 +153,12 @@ export async function generateJobsFromSlate(
     return []; // Return empty since jobs aren't assigned to users in this case
   }
 
-  // Create jobs for each rotation assignment
+  // Create jobs for each rotation assignment using filtered tasks
   const result: GeneratedJob[] = [];
 
   for (const [userId, taskIds] of assignments.entries()) {
     for (const slateTaskId of taskIds) {
-      const slateTask = slateTasks.find((st: any) => st.taskId === slateTaskId);
+      const slateTask = filteredTasks.find((st: any) => st.taskId === slateTaskId);
       if (!slateTask) continue;
 
       const job = await createJob({

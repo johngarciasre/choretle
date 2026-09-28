@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, Card, Badge, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import { ScheduleEditor } from "@/components/ScheduleEditor";
 import { X, Trash2, Edit } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
@@ -17,7 +18,17 @@ interface Task {
   archtype?: string;
   isActive?: boolean;
   verifyRequired?: boolean;
+  schedule?: string | null;
   tagIds?: string[];
+}
+
+interface Schedule {
+  type: "weekly" | "monthly-day" | "monthly-week-pattern";
+  daysOfWeek?: number[];
+  interval?: number;
+  monthDays?: number[];
+  weekOfMonth?: number;
+  dayOfWeek?: number;
 }
 
 interface Tag {
@@ -39,6 +50,7 @@ interface TaskFormData {
   points: number;
   verifyRequired: boolean;
   tagIds: string[];
+  schedule: Schedule | null;
 }
 
 const fetchTask = async (id: string) => {
@@ -107,6 +119,7 @@ export default function TaskPage() {
     points: 10,
     verifyRequired: false,
     tagIds: [],
+    schedule: null,
   });
 
   // New subtask form state
@@ -128,12 +141,21 @@ export default function TaskPage() {
 
   function openEditModal() {
     if (!task) return;
+    let parsedSchedule: Schedule | null = null;
+    if (task.schedule) {
+      try {
+        parsedSchedule = JSON.parse(task.schedule);
+      } catch {
+        // ignore parse errors
+      }
+    }
     setFormData({
       name: task.name,
       description: task.description ?? "",
       points: task.points,
       verifyRequired: task.verifyRequired || false,
       tagIds: task.tagIds || [],
+      schedule: parsedSchedule,
     });
     setShowEditModal(true);
   }
@@ -157,6 +179,7 @@ export default function TaskPage() {
           points: formData.points,
           verifyRequired: formData.verifyRequired,
           tags: formData.tagIds,
+          schedule: formData.schedule,
         }),
       });
 
@@ -441,6 +464,11 @@ export default function TaskPage() {
                   Require verification on completion
                 </label>
               </div>
+
+              <ScheduleEditor
+                value={formData.schedule}
+                onChange={(schedule) => setFormData(prev => ({ ...prev, schedule }))}
+              />
             </div>
 
             <div className="flex gap-3 pt-2">

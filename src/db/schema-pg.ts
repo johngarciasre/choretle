@@ -58,6 +58,7 @@ export const tasks = pgTable("tasks", {
   archtype: text("archtype").default("job").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   verifyRequired: boolean("verify_required").default(false).notNull(),
+  schedule: text("schedule"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
@@ -80,6 +81,7 @@ export const slates = pgTable("slates", {
   roomLocation: text("room_location"),
   frequency: text("frequency").default("weekly").notNull(),
   interval: integer("interval").default(1).notNull(),
+  schedule: text("schedule"),
   defaultDueDateOffset: integer("default_due_date_offset").default(0).notNull(),
   subtaskMinRequired: integer("subtask_min_required"),
   isActive: boolean("is_active").default(true).notNull(),

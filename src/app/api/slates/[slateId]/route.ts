@@ -30,6 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       roomLocation: slate.room_location,
       frequency: slate.frequency,
       interval: slate.interval,
+      schedule: slate.schedule,
       isActive: slate.is_active === 1 || slate.is_active === true,
     });
   } catch (err) {
@@ -52,11 +53,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const slateId = (await params).slateId;
     const body = await request.json();
-    const { name, description, roomLocation, frequency, interval, defaultDueDateOffset, isActive } = body;
+    const { name, description, roomLocation, frequency, interval, schedule, defaultDueDateOffset, isActive } = body;
+
+    const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
 
     rawDb.prepare(
-      `UPDATE slates SET name = ?, description = ?, room_location = ?, frequency = ?, interval = ?, default_due_date_offset = ?, is_active = ? WHERE id = ?`
-    ).run(name, description || null, roomLocation || null, frequency, interval, defaultDueDateOffset, (isActive !== false) ? 1 : 0, slateId);
+      `UPDATE slates SET name = ?, description = ?, room_location = ?, frequency = ?, interval = ?, schedule = ?, default_due_date_offset = ?, is_active = ? WHERE id = ?`
+    ).run(name, description || null, roomLocation || null, frequency, interval, scheduleStr || null, defaultDueDateOffset, (isActive !== false) ? 1 : 0, slateId);
 
     const updated = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(slateId) as any;
 
@@ -71,6 +74,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       roomLocation: updated.room_location,
       frequency: updated.frequency,
       interval: updated.interval,
+      schedule: updated.schedule,
       isActive: updated.is_active === 1 || updated.is_active === true,
     });
   } catch (err) {

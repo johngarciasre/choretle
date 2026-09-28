@@ -39,7 +39,7 @@ function createTables(db: Database.Database): void {
       id TEXT PRIMARY KEY, family_id TEXT NOT NULL, name TEXT NOT NULL,
       description TEXT, points INTEGER DEFAULT 0 NOT NULL, icon TEXT,
       archtype TEXT DEFAULT 'job' NOT NULL, is_active INTEGER DEFAULT 1 NOT NULL,
-      verify_required INTEGER DEFAULT 0 NOT NULL,
+      verify_required INTEGER DEFAULT 0 NOT NULL, schedule TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
@@ -52,7 +52,8 @@ function createTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS slates (
       id TEXT PRIMARY KEY, family_id TEXT NOT NULL, name TEXT NOT NULL,
       description TEXT, room_location TEXT, frequency TEXT DEFAULT 'weekly' NOT NULL,
-      interval INTEGER DEFAULT 1 NOT NULL, default_due_date_offset INTEGER DEFAULT 0 NOT NULL,
+      interval INTEGER DEFAULT 1 NOT NULL, schedule TEXT,
+      default_due_date_offset INTEGER DEFAULT 0 NOT NULL,
       subtask_min_required INTEGER, is_active INTEGER DEFAULT 1 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -180,6 +181,33 @@ export function resetDb(): void {
 }
 
 /**
+ * Run schema migrations — adds missing columns from the current source of truth.
+ * This is necessary because in-memory SQLite persists across HMR updates,
+ * so tables created by old code won't have new columns added after a hot reload.
+ */
+function migrateTables(db: Database.Database): void {
+  const checks = [
+    // tasks table — schedule column
+    { table: "tasks", col: "schedule", sql: "ALTER TABLE tasks ADD COLUMN schedule TEXT" },
+    // slates table — schedule column  
+    { table: "slates", col: "schedule", sql: "ALTER TABLE slates ADD COLUMN schedule TEXT" },
+  ];
+
+  for (const check of checks) {
+    try {
+      const hasCol = db.prepare(`PRAGMA table_info(${check.table})`).all() as any[];
+      if (!hasCol.some((c: any) => c.name === check.col)) {
+        db.exec(check.sql);
+        info({ table: check.table, column: check.col }, "[DB] Migrated: added missing column");
+      }
+    } catch (e) {
+      // Column might already exist or table doesn't exist — ignore
+      error({ err: String(e), table: check.table }, "[DB] Migration skip");
+    }
+  }
+}
+
+/**
  * Ensure DB is initialized. Uses in-memory SQLite for tests, file-based for dev/prod.
  */
 export async function initDb(): Promise<any> {
@@ -203,6 +231,7 @@ export async function initDb(): Promise<any> {
     const Database = require("better-sqlite3");
     _rawDb = new Database(dbPath);
     createTables(_rawDb!);
+    migrateTables(_rawDb!); // Run migrations for any columns added after initial table creation
     _db = construct(_rawDb!, schema as any);
     info({ path: dbPath === ":memory:" ? "in-memory" : dbPath }, "[DB] Initialized SQLite database");
   } catch (err) {
@@ -220,6 +249,7 @@ export function getRawDb(): Database.Database | null {
       const Database = require("better-sqlite3");
       _rawDb = new Database(dbPath);
       createTables(_rawDb!);
+      migrateTables(_rawDb!);
       _db = construct(_rawDb!, schema as any);
     } catch (err) {
       error({ err: String(err) }, "[DB] Failed to initialize SQLite in getRawDb");

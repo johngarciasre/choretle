@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, name, description, points, icon, archtype, tagIds, verifyRequired } = body;
+    const { title, name, description, points, icon, archtype, tagIds, verifyRequired, schedule } = body;
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
@@ -75,8 +75,9 @@ export async function POST(request: NextRequest) {
 
     // Create task
     const taskId = `task-${Date.now()}`;
+    const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
     rawDb.prepare(
-      `INSERT INTO tasks (id, family_id, name, description, points, icon, archtype, is_active, verify_required, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tasks (id, family_id, name, description, points, icon, archtype, is_active, verify_required, schedule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       taskId,
       familyId,
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
       archtype || "job",
       1,
       verifyRequired ? 1 : 0,
+      scheduleStr || null,
       new Date().toISOString(),
       new Date().toISOString(),
     );
@@ -121,7 +123,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, title, name, description, points, icon, archtype, isActive, tagIds, verifyRequired } = body;
+    const { id, title, name, description, points, icon, archtype, isActive, tagIds, verifyRequired, schedule } = body;
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
@@ -137,8 +139,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update task fields
+    const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
     rawDb.prepare(
-      `UPDATE tasks SET name = ?, description = ?, points = ?, icon = ?, archtype = ?, is_active = ?, verify_required = ? WHERE id = ?`
+      `UPDATE tasks SET name = ?, description = ?, points = ?, icon = ?, archtype = ?, is_active = ?, verify_required = ?, schedule = ? WHERE id = ?`
     ).run(
       title || name,
       description || null,
@@ -147,6 +150,7 @@ export async function PUT(request: NextRequest) {
       archtype,
       isActive !== false ? 1 : 0,
       verifyRequired ? 1 : 0,
+      scheduleStr || null,
       id,
     );
 

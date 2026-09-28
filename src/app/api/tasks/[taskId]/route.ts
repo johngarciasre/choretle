@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({
       id: taskWithTags.id, name: taskWithTags.name, description: taskWithTags.description,
       points: taskWithTags.points || 0, icon: taskWithTags.icon, archtype: taskWithTags.archtype,
-      verifyRequired: !!taskWithTags.verify_required, tagIds: tags,
+      verifyRequired: !!taskWithTags.verify_required, tagIds: tags, schedule: taskWithTags.schedule,
       tags: (tagDetails || []).map((t: any) => ({ id: t.id, name: t.name, color: t.color })),
       subtasks: (subtasks || []).map((s: any) => ({
         id: s.id, name: s.name, points: s.points || 0, order: s.order,
@@ -51,7 +51,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
     const body = await request.json();
-    const { name, description, points, icon, tags, verifyRequired } = body;
+    const { name, description, points, icon, tags, verifyRequired, schedule } = body;
     const taskId = (await params).taskId;
 
     const rawDb = getRawDb();
@@ -61,8 +61,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const resolvedTags = tags ?? body.tagIds;
 
     // Update task
-    const updates: string[] = ["name = ?", "description = ?", "points = ?", "icon = ?", "verify_required = ?", "updated_at = ?"];
-    const values: any[] = [name || "", description || null, points || 0, icon || null, verifyRequired ? 1 : 0, new Date().toISOString()];
+    const updates: string[] = ["name = ?", "description = ?", "points = ?", "icon = ?", "verify_required = ?", "schedule = ?", "updated_at = ?"];
+    const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
+    const values: any[] = [name || "", description || null, points || 0, icon || null, verifyRequired ? 1 : 0, scheduleStr || null, new Date().toISOString()];
     values.push(taskId);
     rawDb.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ?`).run(...values);
 
@@ -85,7 +86,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({
       id: updatedTaskWithTags.id, name: updatedTaskWithTags.name, description: updatedTaskWithTags.description,
       points: updatedTaskWithTags.points || 0, icon: updatedTaskWithTags.icon,
-      verifyRequired: !!updatedTaskWithTags.verify_required, tagIds: tagIds,
+      verifyRequired: !!updatedTaskWithTags.verify_required, tagIds: tagIds, schedule: updatedTaskWithTags.schedule,
       tags: (tagDetails || []).map((t: any) => ({ id: t.id, name: t.name, color: t.color })),
     });
   } catch (err) {

@@ -58,6 +58,7 @@ export const tasks = sqliteTable("tasks", {
   archtype: text("archtype").default("job").notNull(),
   isActive: integer("is_active").default(1).notNull(),
   verifyRequired: integer("verify_required").default(0).notNull(),
+  schedule: text("schedule"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -80,6 +81,7 @@ export const slates = sqliteTable("slates", {
   roomLocation: text("room_location"),
   frequency: text("frequency").default("weekly").notNull(),
   interval: integer("interval").default(1).notNull(),
+  schedule: text("schedule"),
   defaultDueDateOffset: integer("default_due_date_offset").default(0).notNull(),
   subtaskMinRequired: integer("subtask_min_required"),
   isActive: integer("is_active").default(1).notNull(),

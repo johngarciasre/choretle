@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, Card, Badge, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import { ScheduleEditor } from "@/components/ScheduleEditor";
 import { X } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
@@ -12,6 +13,15 @@ interface Tag {
   id: string;
   name: string;
   color?: string;
+}
+
+interface Schedule {
+  type: "weekly" | "monthly-day" | "monthly-week-pattern";
+  daysOfWeek?: number[];
+  interval?: number;
+  monthDays?: number[];
+  weekOfMonth?: number;
+  dayOfWeek?: number;
 }
 
 async function getFamilyId(): Promise<string> {
@@ -39,6 +49,7 @@ export default function NewTaskPage() {
     description: "",
     points: 10,
     tagIds: [] as string[],
+    schedule: null as Schedule | null,
   });
 
   useEffect(() => {
@@ -63,6 +74,7 @@ export default function NewTaskPage() {
           description: formData.description,
           points: formData.points,
           tags: formData.tagIds,
+          schedule: formData.schedule,
         }),
       });
 
@@ -150,6 +162,11 @@ export default function NewTaskPage() {
               </div>
             )}
           </div>
+
+          <ScheduleEditor
+            value={formData.schedule}
+            onChange={(schedule) => setFormData(prev => ({ ...prev, schedule }))}
+          />
 
           <div className="flex gap-3 pt-2">
             <Button variant="primary" onClick={handleCreateTask} className="flex-1 justify-center">

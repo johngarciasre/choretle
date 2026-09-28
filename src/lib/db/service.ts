@@ -439,9 +439,9 @@ export async function resolveSlateTaskSet(slateId: string) {
   const rawDb = await ensureDb();
   if (!rawDb) return [];
 
-  // Fetch explicit slate tasks (join to get task name)
+  // Fetch explicit slate tasks (join to get task name and schedule)
   const explicitTasksResult = rawDb.prepare(
-    `SELECT st.task_id, st.points_override, st."order", t.name as task_name FROM slate_tasks st LEFT JOIN tasks t ON st.task_id = t.id WHERE st.slate_id = ?`
+    `SELECT st.task_id, st.points_override, st."order", t.name as task_name, t.schedule as task_schedule FROM slate_tasks st LEFT JOIN tasks t ON st.task_id = t.id WHERE st.slate_id = ?`
   ).all(slateId) as any[];
 
   // Fetch slate's tags
@@ -470,11 +470,11 @@ export async function resolveSlateTaskSet(slateId: string) {
       const taskRow = rawDb.prepare(`SELECT points FROM tasks WHERE id = ?`).get(task.task_id) as any;
       pointsOverride = taskRow?.points || 0;
     }
-    result.set(task.task_id, { taskId: task.task_id, taskName: task.task_name, pointsOverride, order: task.order, isExplicit: true });
+    result.set(task.task_id, { taskId: task.task_id, taskName: task.task_name, pointsOverride, order: task.order, isExplicit: true, taskSchedule: task.task_schedule });
   }
   for (const task of tagMatchedTasks) {
     if (!result.has(task.taskId)) {
-      result.set(task.taskId, { taskId: task.taskId, taskName: undefined, pointsOverride: task.points, order: 0, isExplicit: false });
+      result.set(task.taskId, { taskId: task.taskId, taskName: undefined, pointsOverride: task.points, order: 0, isExplicit: false, taskSchedule: null });
     }
   }
 

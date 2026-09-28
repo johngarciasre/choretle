@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
+import { ScheduleEditor } from "@/components/ScheduleEditor";
 import { Trash2, Plus, X } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
@@ -20,6 +21,15 @@ interface Tag {
   id: string;
   name: string;
   color?: string;
+}
+
+interface Schedule {
+  type: "weekly" | "monthly-day" | "monthly-week-pattern";
+  daysOfWeek?: number[];
+  interval?: number;
+  monthDays?: number[];
+  weekOfMonth?: number;
+  dayOfWeek?: number;
 }
 
 interface Slate {
@@ -72,6 +82,7 @@ export default function SlatesPage() {
   const [notAuthenticated, setNotAuthenticated] = useState(false);
 
   const [newSlateName, setNewSlateName] = useState("");
+  const [newSlateSchedule, setNewSlateSchedule] = useState<Schedule | null>(null);
 
   const [buildingSlateId, setBuildingSlateId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -113,7 +124,7 @@ export default function SlatesPage() {
       const res = await fetch(`/api/slates?familyId=${fid}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newSlateName }),
+        body: JSON.stringify({ name: newSlateName, schedule: newSlateSchedule }),
         credentials: "include",
       });
 
@@ -333,6 +344,12 @@ export default function SlatesPage() {
                 autoFocus
               />
             </div>
+
+            <ScheduleEditor
+              value={newSlateSchedule}
+              onChange={(schedule) => setNewSlateSchedule(schedule)}
+              className="pt-2"
+            />
 
             <div className="flex gap-3 pt-2">
               <Button variant="primary" onClick={() => { handleCreateSlate(); setShowCreateModal(false); }} className="flex-1 justify-center">

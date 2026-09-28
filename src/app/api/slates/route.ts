@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
       roomLocation: s.room_location,
       frequency: s.frequency,
       interval: s.interval,
+      schedule: s.schedule,
       isActive: s.is_active === 1 || s.is_active === true,
       taskCount: s.taskCount || 0,
     }));
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, roomLocation, frequency, interval, defaultDueDateOffset, isActive } = body;
+    const { name, description, roomLocation, frequency, interval, schedule, defaultDueDateOffset, isActive } = body;
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
@@ -79,8 +80,9 @@ export async function POST(request: NextRequest) {
     const slateId = crypto.randomUUID();
 
     // Use raw SQL to avoid Drizzle ORM issues with boolean/int conversion
+    const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
     const stmt = rawDb.prepare(
-      `INSERT INTO slates (id, name, family_id, description, room_location, frequency, interval, default_due_date_offset, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO slates (id, name, family_id, description, room_location, frequency, interval, schedule, default_due_date_offset, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     stmt.run(
@@ -91,6 +93,7 @@ export async function POST(request: NextRequest) {
       roomLocation || null,
       frequency || "weekly",
       interval || 1,
+      scheduleStr || null,
       defaultDueDateOffset || 0,
       (isActive !== false) ? 1 : 0,
     );
