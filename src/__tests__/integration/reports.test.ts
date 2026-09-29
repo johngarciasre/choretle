@@ -89,10 +89,44 @@ describe("Reports API Integration", () => {
     resetDb();
     await harness.signIn("admin@choretle.dev");
 
-    for (const type of ["daily", "done", "task"]) {
+    for (const type of ["daily", "done", "task", "task_completion"]) {
       const res = await harness.invokeHandler(`/api/reports?type=${type}`, "GET");
       // Should not return 404 (route exists)
       expect(res.status).not.toBe(404);
     }
+  });
+
+  it("task_completion returns stats and jobs shape", async () => {
+    const harness = new TestHarness();
+    resetDb();
+    await harness.signIn("admin@choretle.dev");
+
+    const res = await harness.invokeHandler("/api/reports?type=task_completion", "GET");
+    expect(res.status).not.toBe(404);
+
+    const body = res.body;
+    expect(body.type).toBe("task_completion");
+    expect(Array.isArray(body.stats)).toBe(true);
+    expect(Array.isArray(body.jobs)).toBe(true);
+    if (body.startDate && body.endDate) {
+      expect(typeof body.startDate).toBe("string");
+      expect(typeof body.endDate).toBe("string");
+    }
+  });
+
+  it("task_completion respects date range params", async () => {
+    const harness = new TestHarness();
+    resetDb();
+    await harness.signIn("admin@choretle.dev");
+
+    const res = await harness.invokeHandler(
+      "/api/reports?type=task_completion&startDate=2026-01-01&endDate=2026-01-31",
+      "GET"
+    );
+    expect(res.status).not.toBe(404);
+
+    const body = res.body;
+    expect(body.startDate).toBe("2026-01-01");
+    expect(body.endDate).toBe("2026-01-31");
   });
 });
