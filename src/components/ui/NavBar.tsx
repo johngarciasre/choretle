@@ -10,6 +10,7 @@ import { error } from "@/lib/logger";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/my-jobs", label: "My Chores" },
   { href: "/tasks", label: "Tasks" },
   { href: "/jobs", label: "Jobs" },
   { href: "/slates", label: "Slates" },
