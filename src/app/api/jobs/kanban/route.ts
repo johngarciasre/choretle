@@ -61,12 +61,35 @@ export async function GET(request: NextRequest) {
       FROM users WHERE id = ?
     `).get(userId, userId) as any;
 
+    // Upcoming jobs for this kid (next 3, ordered by due_date then created_at)
+    const upcomingJobs = rawDb.prepare(`
+      SELECT j.id, j.name, j.description, j.points, j.status, j.due_date,
+        s.name as slate_name
+      FROM jobs j
+      LEFT JOIN slate_tasks st ON j.slate_task_id = st.id
+      LEFT JOIN slates s ON st.slate_id = s.id
+      WHERE j.assigned_to = ?
+        AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+        AND j.status IN ('todo', 'doing')
+      ORDER BY j.due_date ASC, j.created_at ASC
+      LIMIT 3
+    `).all(userId, familyId) as any[];
+
     return NextResponse.json({
       jobs: kanbanJobs || [],
       recentCompletions: (recentCompletions || []).map((j: any) => ({
         name: j.name,
         points: j.points,
         completedAt: j.completed_at,
+      })),
+      upcoming: (upcomingJobs || []).map((j: any) => ({
+        id: j.id,
+        name: j.name,
+        description: j.description,
+        points: j.points,
+        status: j.status,
+        dueDate: j.due_date,
+        slateName: j.slate_name,
       })),
       stats: userStats || { points_total: 0, weekly_done: 0 },
     });
