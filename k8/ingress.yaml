@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: choretle
+  namespace: choretle
+spec:
+  # ─── Change to your domain ──────────────────────────────────────
+  host: choretle.example.com
+  tls:
+    enabled: true
+    secretName: choretle-tls
+  rules:
+    - path: /
+      service:
+        name: choretle
+        port: 3000
