@@ -45,6 +45,7 @@ src/db/drizzle/
 next-env.d.ts
 
 # agent workspace artifacts
+.qwen/
 .plans/
 opencode.json
 .choretle*.sqlite
