@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui";
 import {
   Schedule,
-  defaultSchedule,
   scheduleLabel,
 } from "@/lib/schedule";
 
@@ -50,17 +48,6 @@ export function ScheduleEditor({ value, onChange, className }: ScheduleEditorPro
     if (value.dayOfWeek !== undefined) setDayOfWeek(value.dayOfWeek);
   }, [value]);
 
-  const emit = () => {
-    const schedule: Schedule = {
-      type,
-      daysOfWeek,
-      interval,
-      monthDays,
-      weekOfMonth,
-      dayOfWeek,
-    };
-    onChange(schedule);
-  };
 
   const toggleDay = (day: number) => {
     const next = daysOfWeek.includes(day)

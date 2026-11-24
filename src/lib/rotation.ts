@@ -118,9 +118,6 @@ export function getRotationSchedule(
 
   if (activeRotations.length === 0) return [];
 
-  const sorted = [...activeRotations].sort((a, b) => a.order - b.order);
-  const intervalDays = sorted[0].intervalDays || 7;
-
   const schedule: Array<{ date: Date; userId: string }> = [];
   const current = new Date(startDate);
   const end = new Date(endDate);

@@ -19,12 +19,6 @@ export default function RotationsPage() {
   const [slates, setSlates] = useState<SlateWithRotations[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!authChecked) return;
-    typeof window !== "undefined" && (document.title = "Choretle - Rotations");
-    loadRotationData();
-  }, [authChecked]);
-
   async function loadRotationData() {
     try {
       // Get family ID from auth endpoint
@@ -154,6 +148,12 @@ export default function RotationsPage() {
     setSlates(mockSlates);
     setLoading(false);
   }
+
+  useEffect(() => {
+    if (!authChecked) return;
+    if (typeof window !== "undefined") document.title = "Choretle - Rotations";
+    loadRotationData();
+  }, [authChecked]);
 
   const handleSave = async (assignments: RotationAssignment[]) => {
     try {

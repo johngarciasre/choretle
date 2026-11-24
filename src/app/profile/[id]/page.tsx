@@ -8,35 +8,12 @@ import { PageShell, StatCard, Loading, Badge, Button, Card, PageHeader } from "@
 import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
-
-interface JobCompletion {
-  id: string;
-  name: string;
-  points: number;
-  completedAt: string;
-  category: string;
-  taskName?: string | null;
-}
-
-interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  avatarUrl?: string;
-  role: string;
-  pointsTotal: number;
-  createdAt: string;
-}
-
-interface UserStats {
-  totalPoints: number;
-  pointsThisWeek: number;
-  pointsLastWeek: number;
-  jobsCompleted: number;
-  averagePointsPerJob: number;
-  streakDays: number;
-  longestStreak: number;
-}
+import {
+  buildProfileView,
+  type ProfileCompletion as JobCompletion,
+  type ProfileStats as UserStats,
+  type ProfileUser as UserProfile,
+} from "@/lib/profile-view";
 
 async function getFamilyId(): Promise<string> {
   const authRes = await fetch("/api/auth/me", { credentials: "include" });
@@ -71,50 +48,31 @@ export default function UserProfilePage() {
   });
   const [completions, setCompletions] = useState<JobCompletion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  // Captured once when the data arrives so the 7-day chart stays stable across
+  // re-renders (reading Date.now() during render is impure).
+  const [nowMs, setNowMs] = useState(0);
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - User Profile");
-    getFamilyId().then((familyId) => {
-      return fetch(`/api/profile/${userId}?familyId=${familyId}`, { credentials: "include" });
-    })
-      .then((res) => res.json())
+    if (typeof window !== "undefined") document.title = "Choretle - User Profile";
+    getFamilyId()
+      .then((familyId) => fetch(`/api/profile/${userId}?familyId=${familyId}`, { credentials: "include" }))
+      .then((res) => {
+        if (!res.ok) throw new Error(`Profile request failed: ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
-        setUser(data.user || {});
-        setStats(data.stats || stats);
-        setCompletions(data.completions || []);
+        const now = Date.now();
+        const view = buildProfileView(data, now);
+        setUser(view.user);
+        setStats(view.stats);
+        setCompletions(view.completions);
+        setNowMs(now);
+        setLoadError(false);
         setLoading(false);
       })
       .catch(() => {
-        const mockUser: UserProfile = {
-          id: "1",
-          name: "Alice",
-          email: "alice@choretle.app",
-          avatarUrl: "",
-          role: "child",
-          pointsTotal: 248,
-          createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        };
-
-        const mockStats: UserStats = {
-          totalPoints: 248,
-          pointsThisWeek: 42,
-          pointsLastWeek: 38,
-          jobsCompleted: 12,
-          averagePointsPerJob: 20.67,
-          streakDays: 5,
-          longestStreak: 12,
-        };
-
-        const mockCompletions: JobCompletion[] = [
-          { id: "1", name: "Clean the kitchen", points: 10, completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), category: "Kitchen" },
-          { id: "2", name: "Vacuum living room", points: 15, completedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), category: "Cleaning" },
-          { id: "3", name: "Do dishes", points: 8, completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), category: "Kitchen" },
-          { id: "4", name: "Take out trash", points: 5, completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), category: "Chores" },
-        ];
-
-        setUser(mockUser);
-        setStats(mockStats);
-        setCompletions(mockCompletions);
+        setLoadError(true);
         setLoading(false);
       });
   }, [userId]);
@@ -130,8 +88,9 @@ export default function UserProfilePage() {
 
   const last7Days = useMemo(() => {
     const days: { date: string; points: number }[] = [];
+    if (!nowMs) return days;
     for (let i = 6; i >= 0; i--) {
-      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const date = new Date(nowMs - i * 24 * 60 * 60 * 1000);
       const dayStr = date.toISOString().split("T")[0];
       const pts = completions
         .filter((c) => c.completedAt.startsWith(dayStr))
@@ -139,13 +98,27 @@ export default function UserProfilePage() {
       days.push({ date: dayStr, points: pts });
     }
     return days;
-  }, [completions]);
+  }, [completions, nowMs]);
 
   const maxDayPoints = useMemo(() => Math.max(...last7Days.map((d) => d.points), 1), [last7Days]);
 
   if (!authChecked) return <PageShell><Loading label="Checking authentication..." /></PageShell>;
 
   if (loading) return <Loading label="Loading profile..." />;
+
+  if (loadError || !user.id) {
+    return (
+      <PageShell>
+        <Card accent="coral" className="mx-auto max-w-md p-8 text-center space-y-4">
+          <h2 className="font-display text-2xl font-bold text-ink">Couldn&apos;t load this profile</h2>
+          <p className="text-ink/60">The member may have been removed, or you may be offline.</p>
+          <Link href="/dashboard">
+            <Button variant="ghost">Back to Dashboard</Button>
+          </Link>
+        </Card>
+      </PageShell>
+    );
+  }
 
   const weekTrend = stats.pointsThisWeek - stats.pointsLastWeek;
   const streakFlames = Array.from({ length: Math.min(stats.streakDays, 10) }, () => "\u{1F525}");

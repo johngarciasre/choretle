@@ -8,7 +8,7 @@
  */
 
 import { createServerClient, createBrowserClient } from "@supabase/ssr";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 /**
  * Gets a Supabase client instance configured for use in API routes and middleware.

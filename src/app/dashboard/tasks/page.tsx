@@ -8,7 +8,7 @@ import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 export default function TasksPage() {
   const authChecked = useAuthRedirect();
   useEffect(() => {
-    typeof window !== 'undefined' && (document.title = "Choretle - Tasks");
+    if (typeof window !== "undefined") document.title = "Choretle - Tasks";
   }, []);
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;

@@ -5,12 +5,15 @@ metadata:
   namespace: choretle
 data:
   NODE_ENV: "production"
-  AUTH_MODE: "dev"
   PORT: "3000"
-  # ─── Supabase (required in production) ──────────────────────────────
+  # ─── Auth ───────────────────────────────────────────────────────────
+  # Supabase is required in production. AUTH_MODE=dev exists for local
+  # development only and must never be set on a deployment: it lets anyone
+  # holding a signed dev cookie act as a family member.
   NEXT_PUBLIC_SUPABASE_URL: "https://your-project.supabase.co"
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "replace-with-anon-key"
-  # ─── Database (set POSTGRES_URL for PostgreSQL, omit for SQLite) ───
-  # POSTGRES_URL: "postgresql://user:pass@postgres-svc:5432/choretle"
-  # ─── Optional secrets (filled from Secret below) ────────────────────
-  WEBSUDO_SECRET: ""
+  # ─── Database ───────────────────────────────────────────────────────
+  # SQLite file on the persistent volume mounted by the Deployment.
+  SQLITE_PATH: /data/choretle.db
+  # ─── Secrets ────────────────────────────────────────────────────────
+  # WEBSUDO_SECRET is intentionally not defaulted; put it in choretle-secrets.

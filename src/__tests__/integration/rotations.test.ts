@@ -1,239 +1,93 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
 import { resetDb } from "@/db/drizzle";
+import { signInAndGetFamily, addFamilyMember } from "./fixtures";
+
+async function createSlate(harness: TestHarness, name = "Rotation Slate"): Promise<string> {
+  const res = await harness.invokeHandler("/api/slates", "POST", { name });
+  expect(res.status).toBe(201);
+  return res.body.id;
+}
 
 describe("Rotations API Integration", () => {
   beforeEach(() => {
     resetDb();
   });
 
-  it("POST /api/rotations creates a new rotation", async () => {
+  it("POST /api/rotations creates a rotation for a family slate and member", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    const { familyId, userId } = await signInAndGetFamily(harness);
+    const slateId = await createSlate(harness);
+    const childId = addFamilyMember(familyId);
 
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Rotation Slate",
-    });
-    expect(slateRes.status).toBe(201);
-
-    // Create a rotation
-    const res = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-    });
-
+    const res = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId: childId });
     expect(res.status).toBe(201);
+    expect(res.body.slate_id).toBe(slateId);
+    expect(res.body.user_id).toBe(childId);
+
+    // and the parent themselves is a valid assignee
+    const own = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId, order: 1 });
+    expect(own.status).toBe(201);
   });
 
-  it("POST /api/rotations returns 400 when slateId or userId missing", async () => {
+  it("POST /api/rotations returns 400 when slateId or userId is missing", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
+    await signInAndGetFamily(harness);
 
     const res = await harness.invokeHandler("/api/rotations", "POST", {});
     expect(res.status).toBe(400);
   });
 
+  it("POST /api/rotations rejects a slate from another family", async () => {
+    const other = new TestHarness();
+    await signInAndGetFamily(other, "other@choretle.dev");
+    const foreignSlate = await createSlate(other, "Foreign Slate");
+
+    const harness = new TestHarness();
+    const { userId } = await signInAndGetFamily(harness);
+
+    const res = await harness.invokeHandler("/api/rotations", "POST", { slateId: foreignSlate, userId });
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /api/rotations rejects a user from another family", async () => {
+    const harness = new TestHarness();
+    const { userId: ownUserId } = await signInAndGetFamily(harness);
+    const slateId = await createSlate(harness);
+
+    const other = new TestHarness();
+    const otherIdentity = await signInAndGetFamily(other, "other@choretle.dev");
+
+    const res = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId: otherIdentity.userId });
+    expect(res.status).toBe(404);
+    expect(ownUserId).toBeTruthy();
+  });
+
   it("PUT /api/rotations updates an existing rotation", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    const { familyId, userId } = await signInAndGetFamily(harness);
+    const slateId = await createSlate(harness);
+    const childId = addFamilyMember(familyId);
+    const created = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId });
 
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Update Slate",
+    const res = await harness.invokeHandler("/api/rotations?familyId=x", "PUT", {
+      id: created.body.id, slateId, userId: childId, intervalDays: 14,
     });
-    expect(slateRes.status).toBe(201);
-
-    // Create a rotation
-    const createRes = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-    });
-    expect(createRes.status).toBe(201);
-
-    // Update the rotation (PUT delegates to POST with id)
-    const updateRes = await harness.invokeHandler("/api/rotations", "PUT", {
-      id: createRes.body.id,
-      slateId: slateRes.body.id,
-      userId: "dev-user-child-001",
-    });
-    expect(updateRes.status).toBe(200);
+    expect(res.status).toBe(200);
+    expect(res.body.user_id).toBe(childId);
+    expect(res.body.interval_days).toBe(14);
   });
 
-  it("DELETE /api/rotations deletes a rotation", async () => {
+  it("DELETE /api/rotations/[rotationId] removes the rotation once", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    const { userId } = await signInAndGetFamily(harness);
+    const slateId = await createSlate(harness);
+    const created = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId });
 
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Delete Slate",
-    });
-    expect(slateRes.status).toBe(201);
+    const first = await harness.invokeHandler("/api/rotations/[rotationId]", "DELETE", undefined, { rotationId: created.body.id });
+    expect(first.status).toBe(200);
 
-    // Create a rotation
-    const createRes = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-    });
-    expect(createRes.status).toBe(201);
-
-    // Delete the rotation
-    const deleteRes = await harness.invokeHandler("/api/rotations", "DELETE", {
-      id: createRes.body.id,
-    });
-
-    expect(deleteRes.status).toBe(200);
-  });
-
-  it("Multi-step: create rotation, update, verify assignment", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Multi-step Slate",
-    });
-    expect(slateRes.status).toBe(201);
-
-    // Create a rotation
-    const createRes = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-    });
-    expect(createRes.status).toBe(201);
-
-    // Update the rotation
-    const updateRes = await harness.invokeHandler("/api/rotations", "PUT", {
-      id: createRes.body.id,
-      slateId: slateRes.body.id,
-      userId: "dev-user-child-001",
-    });
-    expect(updateRes.status).toBe(200);
-
-    // Get rotations for the family
-    const getRes = await harness.invokeHandler("/api/rotations?familyId=dev-family-001", "GET");
-    expect(getRes.status).toBe(200);
-  });
-
-  it("Multiple rotations can be created for same slate", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Multi-Assign Slate",
-    });
-    expect(slateRes.status).toBe(201);
-
-    // Create rotation for parent
-    const res1 = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-    });
-    expect(res1.status).toBe(201);
-
-    // Create rotation for child (same slate)
-    await harness.signIn("child@choretle.dev");
-    const res2 = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-child-001",
-    });
-    expect(res2.status).toBe(201);
-  });
-
-  it("Rotations persist across requests in same session", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Persist Slate",
-    });
-    expect(slateRes.status).toBe(201);
-
-    // Create two rotations in same session
-    const res1 = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-    });
-    expect(res1.status).toBe(201);
-
-    const res2 = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-child-001",
-    });
-    expect(res2.status).toBe(201);
-  });
-
-  it("Child user can create and update own rotations", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("child@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Child Slate",
-    });
-    expect(slateRes.status).toBe(201);
-
-    // Create rotation
-    const createRes = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-child-001",
-    });
-    expect(createRes.status).toBe(201);
-
-    // Update the rotation
-    const updateRes = await harness.invokeHandler("/api/rotations", "PUT", {
-      id: createRes.body.id,
-      slateId: slateRes.body.id,
-      userId: "dev-user-child-001",
-    });
-    expect(updateRes.status).toBe(200);
-  });
-
-  it("Rotations with default intervalDays use 7 days", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Default Interval Slate",
-    });
-    expect(slateRes.status).toBe(201);
-
-    const res = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-    });
-
-    expect(res.status).toBe(201);
-  });
-
-  it("Rotation with custom intervalDays is preserved", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create a slate first
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Custom Interval Slate",
-    });
-    expect(slateRes.status).toBe(201);
-
-    const res = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: "dev-user-admin-001",
-      intervalDays: 30,
-    });
-
-    expect(res.status).toBe(201);
+    const second = await harness.invokeHandler("/api/rotations/[rotationId]", "DELETE", undefined, { rotationId: created.body.id });
+    expect(second.status).toBe(404);
   });
 });

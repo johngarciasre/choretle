@@ -55,6 +55,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { title, name, description, points, icon, archtype, tagIds, verifyRequired, schedule } = body;
 
@@ -74,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create task
-    const taskId = `task-${Date.now()}`;
+    const taskId = `task-${crypto.randomUUID()}`;
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
     rawDb.prepare(
       `INSERT INTO tasks (id, family_id, name, description, points, icon, archtype, is_active, verify_required, schedule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -95,13 +99,13 @@ export async function POST(request: NextRequest) {
 
     // Handle tags if provided
     if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
-      for (let i = 0; i < tagIds.length; i++) {
+      for (const tagId of tagIds) {
         rawDb.prepare(
           `INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`
         ).run(
-          `tt-${Date.now()}-${i}`,
+          `tt-${crypto.randomUUID()}`,
           taskId,
-          tagIds[i],
+          tagId,
         );
       }
     }
@@ -122,6 +126,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { id, title, name, description, points, icon, archtype, isActive, tagIds, verifyRequired, schedule } = body;
 
@@ -138,10 +146,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
+    const owned = rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(id, familyId);
+    if (!owned) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+
     // Update task fields
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
     rawDb.prepare(
-      `UPDATE tasks SET name = ?, description = ?, points = ?, icon = ?, archtype = ?, is_active = ?, verify_required = ?, schedule = ? WHERE id = ?`
+      `UPDATE tasks SET name = ?, description = ?, points = ?, icon = ?, archtype = ?, is_active = ?, verify_required = ?, schedule = ? WHERE id = ? AND family_id = ?`
     ).run(
       title || name,
       description || null,
@@ -152,6 +163,7 @@ export async function PUT(request: NextRequest) {
       verifyRequired ? 1 : 0,
       scheduleStr || null,
       id,
+      familyId,
     );
 
     // Handle tags if provided
@@ -163,7 +175,7 @@ export async function PUT(request: NextRequest) {
           rawDb.prepare(
             `INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`
           ).run(
-            `tt-${Date.now()}-${i}`,
+            `tt-${crypto.randomUUID()}`,
             id,
             tagIds[i],
           );
@@ -172,7 +184,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Fetch updated task
-    const updatedTask = rawDb.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id) as any;
+    const updatedTask = rawDb.prepare(`SELECT * FROM tasks WHERE id = ? AND family_id = ?`).get(id, familyId) as any;
 
     return NextResponse.json(updatedTask);
   } catch (err) {
@@ -186,6 +198,10 @@ export async function DELETE(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)

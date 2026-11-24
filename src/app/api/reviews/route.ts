@@ -43,8 +43,18 @@ export async function POST(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
+    const job = rawDb.prepare(
+      `SELECT j.id FROM jobs j JOIN lists l ON j.list_id = l.id WHERE j.id = ? AND l.family_id = ?`
+    ).get(jobId, familyId);
+    if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+
+    // Reviewer, when supplied, must be a member of this family.
+    if (reviewerId && !rawDb.prepare(`SELECT id FROM users WHERE id = ? AND family_id = ?`).get(reviewerId, familyId)) {
+      return NextResponse.json({ error: "Reviewer not found" }, { status: 404 });
+    }
+
     const now = new Date().toISOString();
-    const reviewId = `rev-${Date.now()}`;
+    const reviewId = `rev-${crypto.randomUUID()}`;
     rawDb.prepare(
       `INSERT INTO reviews (id, family_id, job_id, reviewer_id, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(reviewId, familyId, jobId, reviewerId || null, notes || null, status || "pending", now, now);

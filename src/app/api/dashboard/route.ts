@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRawDb } from "@/db/drizzle";
 import { verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
+import { currentStreakFromDays } from "@/lib/streak";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,9 +11,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    const userId = request.headers.get("x-user-id") || "";
-    const role = request.headers.get("x-role") || "child";
+    const familyId = auth.familyId;
+    const userId = auth.userId;
+    const role = auth.role || "child";
 
     if (!familyId) {
       return NextResponse.json({ error: "Family ID required" }, { status: 400 });
@@ -77,10 +78,11 @@ export async function GET(request: NextRequest) {
         LEFT JOIN slates s ON st.slate_id = s.id
         WHERE j.assigned_to = ?
           AND j.status IN ('todo', 'doing')
+          AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
         ORDER BY j.due_date ASC, j.created_at ASC
-      `).all(userId) as any[];
+      `).all(userId, familyId) as any[];
 
-      // Jobs requiring verification (not yet done, verify_required on parent task)
+      // Jobs requiring verification: verify_required lives on tasks, not slates.
       const pendingVerification = rawDb.prepare(`
         SELECT j.id, j.name, j.points, j.updated_at,
           CASE WHEN EXISTS (
@@ -88,14 +90,12 @@ export async function GET(request: NextRequest) {
             WHERE h.job_id = j.id AND h.action = 'verify_request'
           ) THEN 1 ELSE 0 END as verification_requested
         FROM jobs j
+        JOIN slate_tasks st ON st.id = j.slate_task_id
+        JOIN tasks t ON t.id = st.task_id
         WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
           AND j.assigned_to = ?
           AND j.status != 'done'
-          AND EXISTS (
-            SELECT 1 FROM slate_tasks st
-            JOIN slates s ON s.id = st.slate_id
-            WHERE st.id = j.slate_task_id AND s.verify_required = 1
-          )
+          AND t.verify_required = 1
         ORDER BY j.updated_at DESC
       `).all(familyId, userId) as any[];
 
@@ -119,33 +119,18 @@ export async function GET(request: NextRequest) {
           (SELECT COUNT(*) FROM jobs j3
            WHERE j3.assigned_to = ? AND j3.status = 'done' AND j3.completed_at IS NOT NULL
              AND j3.completed_at >= datetime('now', '-30 days')) as monthly_done
-        FROM users WHERE id = ?
-      `).get(userId, userId, userId) as any;
+        FROM users WHERE id = ? AND family_id = ?
+      `).get(userId, userId, userId, familyId) as any;
 
-      // Streak calculation: consecutive days with at least one done job
-      const streakCount = rawDb.prepare(`
-        SELECT COUNT(*) as streak FROM (
-          SELECT DATE(j.completed_at) as day
-          FROM jobs j
-          WHERE j.assigned_to = ? AND j.status = 'done'
-            AND j.completed_at IS NOT NULL
-          GROUP BY day
-          ORDER BY day DESC
-          LIMIT 7
-        )
-      `).get(userId) as any;
-
-      // Nearest-to-complete: longest streak currently on
-      const currentStreak = rawDb.prepare(`
-        SELECT COUNT(*) as streak FROM (
-          SELECT DATE(j.completed_at) as day
-          FROM jobs j
-          WHERE j.assigned_to = ? AND j.status = 'done'
-            AND j.completed_at IS NOT NULL
-          ORDER BY day DESC
-          LIMIT 30
-        )
-      `).get(userId) as any;
+      // Current streak: consecutive days with at least one done job.
+      const dayRows = rawDb.prepare(`
+        SELECT DISTINCT DATE(j.completed_at) as day
+        FROM jobs j
+        WHERE j.assigned_to = ? AND j.status = 'done' AND j.completed_at IS NOT NULL
+          AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+        ORDER BY day DESC
+      `).all(userId, familyId) as any[];
+      const streak = currentStreakFromDays((dayRows || []).map((r: any) => String(r.day)));
 
       // Recent wins (badges from recently completed jobs)
       const recentWins = recentlyCompleted.slice(0, 5).map((j: any) => ({
@@ -166,8 +151,8 @@ export async function GET(request: NextRequest) {
           pendingVerification,
           recentWins,
           stats: userStats || null,
-          streakCount: streakCount?.streak || 0,
-          currentStreak: currentStreak?.streak || 0,
+          streakCount: streak,
+          currentStreak: streak,
         },
       });
     }

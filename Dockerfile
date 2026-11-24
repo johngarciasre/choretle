@@ -15,9 +15,11 @@ RUN npm run build 2>&1
 # ─── Runtime stage ────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
+# AUTH_MODE is deliberately unset: dev auth must never ship. Configure
+# Supabase credentials (or set a signed dev session only on your own machine).
 ENV NODE_ENV=production \
-    AUTH_MODE=dev \
-    PORT=3000
+    PORT=3000 \
+    SQLITE_PATH=/data/choretle.db
 
 WORKDIR /app
 

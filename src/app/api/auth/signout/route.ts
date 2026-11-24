@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { clearDevSessionCookie, parseDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
+import { verifyDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import { error } from "@/lib/logger.server";
 
 /**
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
       }
 
       const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
-      const user = parseDevSession(value);
+      const user = await verifyDevSession(value);
 
       if (user) {
         return NextResponse.json({

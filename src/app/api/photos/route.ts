@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (!objectType || !objectId || !url) return NextResponse.json({ error: "objectType, objectId, and url are required" }, { status: 400 });
 
     const now = new Date().toISOString();
-    const photoId = `photo-${Date.now()}`;
+    const photoId = `photo-${crypto.randomUUID()}`;
     rawDb.prepare(
       `INSERT INTO photos (id, family_id, object_type, object_id, url, title, type, is_probative, "order", created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(photoId, familyId, objectType, objectId, url, title || null, type || "probative", (isProbative ?? false) ? 1 : 0, order ?? 0, now);

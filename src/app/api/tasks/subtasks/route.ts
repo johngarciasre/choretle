@@ -33,6 +33,11 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
@@ -43,8 +48,11 @@ export async function POST(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
+    const owned = rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(taskId, familyId);
+    if (!owned) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+
     const now = new Date().toISOString();
-    const subtaskId = `subtask-${Date.now()}`;
+    const subtaskId = `subtask-${crypto.randomUUID()}`;
     rawDb.prepare(
       `INSERT INTO subtasks (id, family_id, task_id, name, points, "order", created_at) VALUES (?, ?, ?, ?, ?, 0, ?)`
     ).run(subtaskId, familyId, taskId, name, points || 0, now);
@@ -62,6 +70,10 @@ export async function PUT(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { subtaskId, name, points } = body;
     if (!subtaskId) return NextResponse.json({ error: "subtaskId is required" }, { status: 400 });
@@ -73,12 +85,12 @@ export async function PUT(request: NextRequest) {
     const values: any[] = [];
     if (name !== undefined) { updates.push("name = ?"); values.push(name); }
     if (points !== undefined) { updates.push("points = ?"); values.push(points); }
-    updates.push("updated_at = ?");
-    values.push(new Date().toISOString());
-    values.push(subtaskId);
+    if (updates.length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+    values.push(subtaskId, auth.familyId);
 
-    rawDb.prepare(`UPDATE subtasks SET ${updates.join(", ")} WHERE id = ?`).run(...values);
-    const result = rawDb.prepare(`SELECT * FROM subtasks WHERE id = ?`).get(subtaskId) as any;
+    rawDb.prepare(`UPDATE subtasks SET ${updates.join(", ")} WHERE id = ? AND family_id = ?`).run(...values);
+    const result = rawDb.prepare(`SELECT * FROM subtasks WHERE id = ? AND family_id = ?`).get(subtaskId, auth.familyId) as any;
+    if (!result) return NextResponse.json({ error: "Subtask not found" }, { status: 404 });
     return NextResponse.json(result);
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Subtask PUT failed");
@@ -88,6 +100,13 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { id } = body;
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
@@ -95,7 +114,8 @@ export async function DELETE(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    rawDb.prepare(`DELETE FROM subtasks WHERE id = ?`).run(id);
+    const result = rawDb.prepare(`DELETE FROM subtasks WHERE id = ? AND family_id = ?`).run(id, auth.familyId);
+    if (result.changes === 0) return NextResponse.json({ error: "Subtask not found" }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Subtask DELETE failed");

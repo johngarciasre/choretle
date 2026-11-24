@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRawDb } from "@/db/drizzle";
 import { slugify } from "@/lib/slugify";
 import { error } from "@/lib/logger.server";
-import { rawInsert } from "@/db/drizzle";
-import { createDevSession, setDevSessionCookie } from "@/lib/dev-auth";
+import { createDevSession, setDevSessionCookie, verifyDevSession } from "@/lib/dev-auth";
 import { verifyAuth, extractUserId } from "@/lib/auth";
 
 /**
@@ -12,11 +11,15 @@ import { verifyAuth, extractUserId } from "@/lib/auth";
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await verifyAuth(request);
     const url = new URL(request.url);
     const familyId = url.searchParams.get("id");
 
     if (!familyId) {
       return NextResponse.json({ error: "Family ID is required" }, { status: 400 });
+    }
+    if (!auth || auth.familyId !== familyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     const rawDb = getRawDb();
@@ -31,17 +34,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Family not found" }, { status: 404 });
     }
 
-    // Fetch users in this family (only if authenticated and they belong to it)
-    const userId = request.headers.get("x-user-id");
-    let users: any[] = [];
-    if (userId) {
-      const userRecordRow = rawDb.prepare(`SELECT * FROM users WHERE id = ? LIMIT 1`).get(userId) as any;
-
-      // Only return users if the requesting user belongs to this family
-      if (userRecordRow && (userRecordRow.family_id === familyId || !userRecordRow.family_id)) {
-        users = rawDb.prepare(`SELECT * FROM users WHERE family_id = ?`).all(familyId) as any[];
-      }
-    }
+    const users = rawDb.prepare(`SELECT * FROM users WHERE family_id = ?`).all(familyId) as any[];
 
     return NextResponse.json({ ok: true, family: familyRow, users });
   } catch (e) {
@@ -61,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Fallback: user may be authenticated but have no family yet (e.g., first-time create)
     if (!userId) {
-      userId = extractUserId(request);
+      userId = await extractUserId(request);
     }
 
     if (!userId) {
@@ -104,10 +97,9 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString();
-    const ts = Date.now();
 
     // Create the family
-    const familyId = `family-${ts}`;
+    const familyId = `family-${crypto.randomUUID()}`;
     rawDb.prepare(
       `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(familyId, body.name, slug, body.weekStartDay ?? 0, 0, now, now);
@@ -130,12 +122,14 @@ export async function POST(request: NextRequest) {
       const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
       if (setCookie) {
         const value = setCookie.replace("dev-session=", "").trim();
-        const user = JSON.parse(decodeURIComponent(value));
-        const u = user.user || user;
-        if (u.id) {
-          const session = createDevSession({ userId: u.id });
+        const user = await verifyDevSession(value);
+        if (user) {
+          const session = createDevSession({ userId: user.id });
+          session.user.email = user.email;
+          session.user.name = user.name;
+          session.user.role = user.role;
           session.user.familyId = newFamily.id;
-          setDevSessionCookie(response.headers, session);
+          await setDevSessionCookie(response.headers, session);
         }
       }
     }

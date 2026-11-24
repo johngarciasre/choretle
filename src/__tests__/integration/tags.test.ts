@@ -1,174 +1,141 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
+import { resetDb, getRawDb } from "@/db/drizzle";
+import { signInAndGetFamily, signInAsChild } from "./fixtures";
 
-describe("Tags API Integration", () => {
+async function createTag(harness: TestHarness, name: string, color = "#ff0000") {
+  const res = await harness.invokeHandler("/api/tags", "POST", { name, color });
+  expect(res.status).toBe(201);
+  return res.body;
+}
+
+async function listTags(harness: TestHarness): Promise<any[]> {
+  const res = await harness.invokeHandler("/api/tags", "GET");
+  expect(res.status).toBe(200);
+  return res.body;
+}
+
+describe("Tags API", () => {
   beforeEach(() => {
     resetDb();
   });
 
-  it("POST /api/tags creates a new tag", async () => {
+  it("creates a tag in the caller's family", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    const { familyId } = await signInAndGetFamily(harness);
 
-    const res = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Urgent",
-      color: "#ff0000",
-    });
+    const tag = await createTag(harness, "Urgent");
 
-    expect(res.status).toBe(201);
-    expect(res.body.name).toBe("Urgent");
-    expect(res.body.color).toBe("#ff0000");
+    expect(tag).toMatchObject({ name: "Urgent", color: "#ff0000", family_id: familyId });
   });
 
-  it("POST /api/tags returns 400 when name is missing", async () => {
+  it("rejects a missing name", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    await signInAndGetFamily(harness);
 
     const res = await harness.invokeHandler("/api/tags", "POST", {});
+
     expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/name is required/);
   });
 
-  it("GET /api/tags returns all tags for a family", async () => {
+  it("rejects a duplicate name inside a family but allows it in another family", async () => {
+    const mine = new TestHarness();
+    await signInAndGetFamily(mine);
+    await createTag(mine, "Kitchen");
+
+    const duplicate = await mine.invokeHandler("/api/tags", "POST", { name: "Kitchen" });
+    expect(duplicate.status).toBe(409);
+    expect(await listTags(mine)).toHaveLength(1);
+
+    const other = new TestHarness();
+    await signInAndGetFamily(other, "other@choretle.dev");
+    const elsewhere = await other.invokeHandler("/api/tags", "POST", { name: "Kitchen" });
+    expect(elsewhere.status).toBe(201);
+  });
+
+  it("lists exactly this family's tags with task counts", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    await signInAndGetFamily(harness);
+    const a = await createTag(harness, "Tag A");
+    await createTag(harness, "Tag B", "#00ff00");
 
-    // Create some tags first
-    await harness.invokeHandler("/api/tags", "POST", {
-      name: "Tag A",
-      color: "#ff0000",
-    });
+    const task = await harness.invokeHandler("/api/tasks", "POST", { name: "Tidy", points: 1 });
+    expect(task.status).toBe(200);
+    getRawDb()!
+      .prepare(`INSERT INTO task_tags (id, tag_id, task_id) VALUES (?, ?, ?)`)
+      .run(`tt-${crypto.randomUUID()}`, a.id, task.body.id);
 
-    await harness.invokeHandler("/api/tags", "POST", {
-      name: "Tag B",
-      color: "#00ff00",
-    });
+    const tags = await listTags(harness);
+    expect(tags.map((t) => t.name).sort()).toEqual(["Tag A", "Tag B"]);
+    expect(tags.find((t) => t.id === a.id).taskCount).toBe(1);
+    expect(tags.find((t) => t.name === "Tag B").taskCount).toBe(0);
+  });
 
-    // Get all tags
-    const res = await harness.invokeHandler("/api/tags?familyId=dev-family-001", "GET");
+  it("updates a tag and persists the new values", async () => {
+    const harness = new TestHarness();
+    await signInAndGetFamily(harness);
+    const tag = await createTag(harness, "Old Name");
+
+    const res = await harness.invokeHandler("/api/tags", "PUT", { id: tag.id, name: "New Name", color: "#0000ff" });
 
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toMatchObject({ id: tag.id, name: "New Name", color: "#0000ff" });
+    const listed = await listTags(harness);
+    expect(listed[0]).toMatchObject({ id: tag.id, name: "New Name", color: "#0000ff" });
   });
 
-  it("PUT /api/tags updates a tag", async () => {
+  it("deletes a tag and its junction rows", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    await signInAndGetFamily(harness);
+    const tag = await createTag(harness, "Delete Me");
+    const task = await harness.invokeHandler("/api/tasks", "POST", { name: "Tidy", points: 1 });
+    getRawDb()!
+      .prepare(`INSERT INTO task_tags (id, tag_id, task_id) VALUES (?, ?, ?)`)
+      .run(`tt-${crypto.randomUUID()}`, tag.id, task.body.id);
 
-    // Create a tag first
-    const createRes = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Old Name",
-      color: "#ff0000",
-    });
-    expect(createRes.status).toBe(201);
+    const res = await harness.invokeHandler("/api/tags", "DELETE", { id: tag.id });
 
-    const tagId = createRes.body.id;
-    expect(tagId).toBeTruthy();
-
-    // Update the tag (may return 200 or 500 due to Drizzle ORM SQLite issue)
-    const updateRes = await harness.invokeHandler("/api/tags", "PUT", {
-      id: tagId,
-      name: "New Name",
-      color: "#0000ff",
-    });
-    // Accept both 200 (success) and 500 (known Drizzle ORM bug with returning *)
-    expect([200, 500]).toContain(updateRes.status);
+    expect(res.status).toBe(200);
+    expect(await listTags(harness)).toHaveLength(0);
+    const junctions = getRawDb()!.prepare(`SELECT COUNT(*) as n FROM task_tags WHERE tag_id = ?`).get(tag.id) as any;
+    expect(junctions.n).toBe(0);
   });
 
-  it("DELETE /api/tags deletes a tag and its junction entries", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+  it("children cannot create, update or delete tags but can read them", async () => {
+    const parent = new TestHarness();
+    const { familyId } = await signInAndGetFamily(parent);
+    const tag = await createTag(parent, "Adults Only");
+    const { harness: child } = await signInAsChild(familyId);
 
-    // Create a tag first
-    const createRes = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Delete Me",
-      color: "#ff0000",
-    });
-    expect(createRes.status).toBe(201);
+    const create = await child.invokeHandler("/api/tags", "POST", { name: "Kid Tag" });
+    expect(create.status).toBe(403);
 
-    const tagId = createRes.body.id;
+    const update = await child.invokeHandler("/api/tags", "PUT", { id: tag.id, name: "Renamed" });
+    expect(update.status).toBe(403);
 
-    // Delete the tag
-    const deleteRes = await harness.invokeHandler("/api/tags", "DELETE", {
-      id: tagId,
-    });
+    const remove = await child.invokeHandler("/api/tags", "DELETE", { id: tag.id });
+    expect(remove.status).toBe(403);
 
-    expect(deleteRes.status).toBe(200);
+    const list = await child.invokeHandler("/api/tags", "GET");
+    expect(list.status).toBe(200);
+    expect(list.body.map((t: any) => t.name)).toEqual(["Adults Only"]);
   });
 
-  it("Multi-step: create, update, delete tag workflow", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+  it("cannot touch another family's tag", async () => {
+    const mine = new TestHarness();
+    await signInAndGetFamily(mine);
 
-    // Create a tag
-    const createRes = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Workflow Tag",
-      color: "#ff0000",
-    });
-    expect(createRes.status).toBe(201);
-    const tagId = createRes.body.id;
+    const other = new TestHarness();
+    await signInAndGetFamily(other, "other@choretle.dev");
+    const foreign = await createTag(other, "Theirs");
 
-    // Delete the tag (skip update due to Drizzle ORM bug)
-    const deleteRes = await harness.invokeHandler("/api/tags", "DELETE", {
-      id: tagId,
-    });
-    expect(deleteRes.status).toBe(200);
-  });
+    const update = await mine.invokeHandler("/api/tags", "PUT", { id: foreign.id, name: "Hijacked" });
+    expect(update.status).toBe(404);
 
-  it("Tags persist across requests in same session", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    const remove = await mine.invokeHandler("/api/tags", "DELETE", { id: foreign.id });
+    expect(remove.status).toBe(404);
 
-    // Create two tags
-    const res1 = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Tag 1",
-      color: "#ff0000",
-    });
-    expect(res1.status).toBe(201);
-
-    const res2 = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Tag 2",
-      color: "#00ff00",
-    });
-    expect(res2.status).toBe(201);
-
-    // Get all tags
-    const getRes = await harness.invokeHandler("/api/tags?familyId=dev-family-001", "GET");
-    expect(getRes.status).toBe(200);
-    expect(Array.isArray(getRes.body)).toBe(true);
-  });
-
-  it("Child user can manage tags within family", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("child@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    const res = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Child Tag",
-      color: "#ff0000",
-    });
-
-    expect(res.status).toBe(201);
-  });
-
-  it("Tags with different colors can be created", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    for (const color of ["#ff0000", "#00ff00", "#0000ff"]) {
-      const res = await harness.invokeHandler("/api/tags", "POST", {
-        name: `Color Tag ${color}`,
-        color,
-      });
-      expect(res.status).toBe(201);
-    }
+    expect((await listTags(other))[0].name).toBe("Theirs");
   });
 });

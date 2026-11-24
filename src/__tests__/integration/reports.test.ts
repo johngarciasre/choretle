@@ -1,132 +1,150 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
+import { resetDb, getRawDb } from "@/db/drizzle";
+import { signInAndGetFamily, createListFixture, addFamilyMember } from "./fixtures";
 
-describe("Reports API Integration", () => {
+const DAY = 24 * 60 * 60 * 1000;
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** A task wired to a slate so jobs can point at a real slate_tasks row. */
+async function seedTask(harness: TestHarness, name: string, points = 5): Promise<{ taskId: string; slateTaskId: string }> {
+  const task = await harness.invokeHandler("/api/tasks", "POST", { name, points });
+  expect(task.status).toBe(200);
+  const slate = await harness.invokeHandler("/api/slates", "POST", { name: `${name} slate` });
+  expect(slate.status).toBe(201);
+  const setTasks = await harness.invokeHandler(
+    "/api/slates/[slateId]/tasks", "PUT", { explicitTaskIds: [task.body.id] }, { slateId: slate.body.id },
+  );
+  expect(setTasks.status).toBe(200);
+  const row = getRawDb()!.prepare(`SELECT id FROM slate_tasks WHERE slate_id = ?`).get(slate.body.id) as any;
+  return { taskId: task.body.id, slateTaskId: row.id };
+}
+
+/** A finished job whose completion time is pinned to `daysAgo`. */
+async function seedDoneJob(
+  harness: TestHarness,
+  opts: { familyId: string; assignedTo: string; name: string; points: number; daysAgo: number; slateTaskId?: string },
+): Promise<string> {
+  const listId = createListFixture(opts.familyId, new Date(Date.now() - opts.daysAgo * DAY));
+  const created = await harness.invokeHandler("/api/jobs", "POST", {
+    listId, name: opts.name, points: opts.points, assignedTo: opts.assignedTo, slateTaskId: opts.slateTaskId,
+  });
+  expect(created.status).toBe(200);
+  const done = await harness.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "done" }, { jobId: created.body.id });
+  expect(done.status).toBe(200);
+  getRawDb()!
+    .prepare(`UPDATE jobs SET completed_at = ? WHERE id = ?`)
+    .run(new Date(Date.now() - opts.daysAgo * DAY).toISOString(), created.body.id);
+  return created.body.id;
+}
+
+describe("Reports API", () => {
   beforeEach(() => {
     resetDb();
   });
 
-  it("GET /api/reports returns 400 when type is missing", async () => {
+  it("rejects an unknown report type", async () => {
     const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
+    await signInAndGetFamily(harness);
 
-    const res = await harness.invokeHandler("/api/reports?type=daily", "GET");
+    const res = await harness.invokeHandler("/api/reports?type=nope", "GET");
 
-    // Route exists and user is authenticated via dev session cookie
-    expect(res.status).not.toBe(404);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Unknown report type/);
   });
 
-  it("GET /api/reports returns error for invalid report type", async () => {
+  it("daily defaults to today and echoes an explicit date", async () => {
     const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
+    await signInAndGetFamily(harness);
 
-    const res = await harness.invokeHandler("/api/reports?type=invalid", "GET");
-    // Route exists and user is authenticated; returns 400 for invalid type
-    expect(res.status).not.toBe(404);
+    const todayRes = await harness.invokeHandler("/api/reports?type=daily", "GET");
+    expect(todayRes.status).toBe(200);
+    expect(todayRes.body).toMatchObject({ type: "daily", date: today() });
+
+    const explicit = await harness.invokeHandler("/api/reports?type=daily&date=2026-01-15", "GET");
+    expect(explicit.body.date).toBe("2026-01-15");
   });
 
-  it("GET /api/reports returns valid report types", async () => {
+  it("done includes completions inside the window and excludes older ones", async () => {
     const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
+    const { familyId, userId } = await signInAndGetFamily(harness);
+    const old = await seedDoneJob(harness, { familyId, assignedTo: userId, name: "Old", points: 3, daysAgo: 10 });
 
-    const res = await harness.invokeHandler("/api/reports?type=daily", "GET");
-    // Route exists and user is authenticated
-    expect(res.status).not.toBe(404);
+    const wide = await harness.invokeHandler("/api/reports?type=done&days=30", "GET");
+    expect(wide.body.type).toBe("done");
+    expect(wide.body.jobs.map((j: any) => j.id)).toContain(old);
+
+    const narrow = await harness.invokeHandler("/api/reports?type=done&days=3", "GET");
+    expect(narrow.body.jobs.map((j: any) => j.id)).not.toContain(old);
+    expect(narrow.body.jobs).toHaveLength(0);
   });
 
-  it("Multi-step: create family, get family, verify association", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
+  it("done does not leak another family's completions", async () => {
+    const mine = new TestHarness();
+    const myIdentity = await signInAndGetFamily(mine);
 
-    // Get the family that was auto-created during signin
-    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
-    expect(meRes.status).toBe(200);
-    expect(meRes.body.familyId).toBeTruthy();
+    const other = new TestHarness();
+    const otherIdentity = await signInAndGetFamily(other, "other@choretle.dev");
+    await seedDoneJob(other, { familyId: otherIdentity.familyId, assignedTo: otherIdentity.userId, name: "Theirs", points: 9, daysAgo: 0 });
 
-    // Get the family by ID
-    const getRes = await harness.invokeHandler(`/api/family?id=${meRes.body.familyId}`, "GET");
-    expect(getRes.status).toBe(200);
+    const res = await mine.invokeHandler("/api/reports?type=done&days=30", "GET");
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toHaveLength(0);
+    expect(myIdentity.familyId).toBeTruthy();
   });
 
-  it("Report types are validated on server side", async () => {
+  it("task_completion counts scheduled vs finished jobs and the completion rate", async () => {
     const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
+    const { familyId, userId } = await signInAndGetFamily(harness);
+    const { taskId, slateTaskId } = await seedTask(harness, "Dishes", 4);
 
-    const res = await harness.invokeHandler("/api/reports?type=invalid", "GET");
-    // Route exists and user is authenticated
-    expect(res.status).not.toBe(404);
+    // Two jobs scheduled today from that task: one finished, one not.
+    await seedDoneJob(harness, { familyId, assignedTo: userId, name: "Dishes", points: 4, daysAgo: 0, slateTaskId });
+    const listId = createListFixture(familyId);
+    const pending = await harness.invokeHandler("/api/jobs", "POST", {
+      listId, name: "Dishes", points: 4, assignedTo: userId, slateTaskId,
+    });
+    expect(pending.status).toBe(200);
+
+    const start = today();
+    const res = await harness.invokeHandler(`/api/reports?type=task_completion&startDate=${start}&endDate=${start}`, "GET");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ type: "task_completion", startDate: start, endDate: start });
+    expect(res.body.stats).toEqual([
+      expect.objectContaining({ taskId, taskName: "Dishes", totalJobs: 2, completedJobs: 1, completionRate: 50 }),
+    ]);
+    expect(res.body.jobs).toHaveLength(1);
+    expect(res.body.jobs[0]).toMatchObject({ name: "Dishes", assignedTo: expect.any(String), points: 4 });
   });
 
-  it("Report endpoint exists and responds", async () => {
+  it("task_completion rejects an invalid date range", async () => {
     const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
+    await signInAndGetFamily(harness);
 
-    const res = await harness.invokeHandler("/api/reports?type=daily", "GET");
+    const res = await harness.invokeHandler("/api/reports?type=task_completion&startDate=not-a-date", "GET");
 
-    // Should not return 404 (route exists)
-    expect(res.status).not.toBe(404);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Invalid date range/);
   });
 
-  it("Reports are family-scoped when authenticated", async () => {
+  it("member counts each member's jobs and points", async () => {
     const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
+    const { familyId, userId } = await signInAndGetFamily(harness);
+    const kidId = addFamilyMember(familyId);
+    // Completing the job awards its 7 points to the assignee.
+    await seedDoneJob(harness, { familyId, assignedTo: userId, name: "Bins", points: 7, daysAgo: 0 });
 
-    // Get the family that was auto-created during signin
-    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
-    expect(meRes.status).toBe(200);
-    expect(meRes.body.familyId).toBeTruthy();
-  });
+    const res = await harness.invokeHandler("/api/reports?type=member", "GET");
 
-  it("Multiple report types are supported", async () => {
-    const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
-
-    for (const type of ["daily", "done", "task", "task_completion"]) {
-      const res = await harness.invokeHandler(`/api/reports?type=${type}`, "GET");
-      // Should not return 404 (route exists)
-      expect(res.status).not.toBe(404);
-    }
-  });
-
-  it("task_completion returns stats and jobs shape", async () => {
-    const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
-
-    const res = await harness.invokeHandler("/api/reports?type=task_completion", "GET");
-    expect(res.status).not.toBe(404);
-
-    const body = res.body;
-    expect(body.type).toBe("task_completion");
-    expect(Array.isArray(body.stats)).toBe(true);
-    expect(Array.isArray(body.jobs)).toBe(true);
-    if (body.startDate && body.endDate) {
-      expect(typeof body.startDate).toBe("string");
-      expect(typeof body.endDate).toBe("string");
-    }
-  });
-
-  it("task_completion respects date range params", async () => {
-    const harness = new TestHarness();
-    resetDb();
-    await harness.signIn("admin@choretle.dev");
-
-    const res = await harness.invokeHandler(
-      "/api/reports?type=task_completion&startDate=2026-01-01&endDate=2026-01-31",
-      "GET"
-    );
-    expect(res.status).not.toBe(404);
-
-    const body = res.body;
-    expect(body.startDate).toBe("2026-01-01");
-    expect(body.endDate).toBe("2026-01-31");
+    expect(res.status).toBe(200);
+    expect(res.body.type).toBe("member");
+    const me = res.body.stats.find((s: any) => s.userId === userId);
+    expect(me).toMatchObject({ totalPoints: 7, totalJobs: 1, doneJobs: 1 });
+    const kid = res.body.stats.find((s: any) => s.userId === kidId);
+    expect(kid).toMatchObject({ totalPoints: 0, totalJobs: 0, doneJobs: 0 });
   });
 });

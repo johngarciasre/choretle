@@ -4,9 +4,9 @@ A chore and habit tracking app for families — set tasks, assign to kids, track
 
 ## Tech Stack
 
-- **Framework:** Next.js (App Router) + Vercel
-- **Database:** Supabase (PostgreSQL)
-- **Auth:** Supabase Auth
+- **Framework:** Next.js (App Router)
+- **Database:** SQLite (`better-sqlite3`, single file at `SQLITE_PATH`)
+- **Auth:** Supabase Auth in production, signed dev cookie locally
 - **Styling:** Tailwind CSS
 
 ## Getting Started
@@ -16,13 +16,19 @@ A chore and habit tracking app for families — set tasks, assign to kids, track
    npm install
    ```
 
-2. Set up your Supabase project:
-   - Create a new project at https://supabase.com
-   - Copy the connection string and API keys
-   - Add them to `.env.local` (see below)
-   - Run the migrations from `src/db/schema.ts` on your Supabase SQL editor
+2. Local development (no external services):
+   ```
+   AUTH_MODE=dev
+   SQLITE_PATH=./data/choretle.db
+   ```
+   In dev mode you sign in with any email that already exists in the local
+   database (`npm run dev`, then create one via the signup screen).
 
-3. Start the dev server:
+3. Or production mode: set `NEXT_PUBLIC_SUPABASE_URL` and
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and **do not** set `AUTH_MODE`. `WEBSUDO_SECRET`
+   is required for websudo elevation.
+
+4. Start the dev server:
    ```bash
    npm run dev
    ```
@@ -31,62 +37,34 @@ A chore and habit tracking app for families — set tasks, assign to kids, track
 
 ```
 ├── src/app/          # Next.js App Router pages + API routes
-│   ├── api/          # Server-side API endpoints (stubbed)
+│   ├── api/          # Server-side API endpoints
 │   ├── auth/         # Authentication pages
 │   └── ...           # Feature pages (dashboard, tasks, jobs, etc.)
-├── src/db/           # Drizzle ORM schema and client
-├── src/lib/          # Utilities and server actions
-├── public/           # Static assets
-└── PROJECT_PLAN.md   # Full project spec
+├── src/db/           # SQLite client, schema and runtime migrations
+├── src/lib/          # Utilities and domain logic
+└── k8/               # Kubernetes manifests (SQLite on a PVC, one replica)
 ```
 
-## Supabase Setup (Coming Soon)
+## Database
 
-Once you've created your Supabase project:
-
-1. Update `.env.local`:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
-    POSTGRES_URL=postgresql://your-supabase-postgres-url
-   ```
-
-2. Run `schema.sql` in the Supabase SQL editor to create all tables and indexes.
-
-3. (Optional) Run `schema-policies.sql` to enable Row-Level Security (RLS). This restricts every table so users can only see/edit data belonging to their family. The `get_current_family_id()` function reads the family ID from JWT claims set in Supabase Project → Settings → API → JWT Secret.
-
-### RLS Overview
-- **Families/Users/Teams** — restricted by family membership via JWT
-- **Tasks/Subtasks/Slates/Jobs** — users can only access data within their family
-- **Comments/History** — users can only comment on jobs in their family
-- **Reports/Invites** — restricted to family members
+The runtime database is SQLite. Tables and indexes are created at startup by
+`src/db/drizzle.ts`, which also applies small `ALTER TABLE` migrations for
+columns added over time. Every deployment needs a persistent volume for
+`SQLITE_PATH`; an in-memory database (the fallback) loses everything on restart.
+SQLite serves one process, so keep `replicas: 1` until a shared database replaces it.
 
 ## Current Status
 
-The app is scaffolded with all major pages and API routes. All data operations are stubbed with mock data until Supabase integration is completed. Once you set up your Supabase project, the service layer (`src/lib/db/service.ts`) will automatically connect to the database.
+All core flows are implemented: families and invites, tasks and subtasks,
+slates with tag auto-inclusion, rotation assignment, schedule generation,
+scoring, medals, reports, and the Swap Meet share/swap endpoints.
 
-### Completed Features (Phase 1 & 2)
-- ✅ Next.js project setup with TypeScript + Tailwind CSS
-- ✅ Drizzle ORM schema for all data models
-- ✅ Supabase SQL schema (`schema.sql`) — 15 tables with indexes
-- ✅ Row-Level Security policies (`schema-policies.sql`) — per-family isolation
-- ✅ Auth pages (sign in, sign up)
-- ✅ Dashboard with outstanding jobs, recent completions, leaderboard
-- ✅ Task and Job detail pages with status management
-- ✅ Family creation and join flow
-- ✅ Reports page with tab navigation and wallboard
-- ✅ Swap Meet marketplace placeholder
-- ✅ API routes for all endpoints (stubbed with fallbacks)
-- ✅ Service layer (`src/lib/db/service.ts`) — automatically activates when POSTGRES_URL is set
-
-### Remaining Work
-- [ ] Implement job assignment and rotation logic (auto-generate lists from slates)
-- [ ] Add real-time wallboard updates (WebSocket or SSE)
-- [ ] Complete Swap Meet marketplace functionality (accept/reject flows)
-- [ ] Responsive design polish
-- [ ] Deployment configuration
+### Known gaps
+- Supabase-mode sign-in has not been exercised against a live Supabase project.
+- The Swap Meet accept/reject flow is not implemented (requests are recorded).
+- RLS policies in `schema-policies.sql` apply only if you move to Postgres.
 
 ## License
 
 Open source.
+

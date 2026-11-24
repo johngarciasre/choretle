@@ -71,6 +71,11 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
@@ -81,16 +86,26 @@ export async function POST(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
+    // Both the slate and the assignee must belong to the caller's family.
+    if (!rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, familyId)) {
+      return NextResponse.json({ error: "Slate not found" }, { status: 404 });
+    }
+    if (!rawDb.prepare(`SELECT id FROM users WHERE id = ? AND family_id = ?`).get(userId, familyId)) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     if (id) {
       // Update existing rotation
-      rawDb.prepare(
-        `UPDATE rotations SET slate_id = ?, user_id = ?, "order" = ?, interval_days = ?, is_active = ? WHERE id = ?`
-      ).run(slateId, userId, order || 0, intervalDays || 7, (isActive !== false) ? 1 : 0, id);
+      const changed = rawDb.prepare(
+        `UPDATE rotations SET slate_id = ?, user_id = ?, "order" = ?, interval_days = ?, is_active = ?
+         WHERE id = ? AND slate_id IN (SELECT id FROM slates WHERE family_id = ?)`
+      ).run(slateId, userId, order || 0, intervalDays || 7, (isActive !== false) ? 1 : 0, id, familyId);
+      if (changed.changes === 0) return NextResponse.json({ error: "Rotation not found" }, { status: 404 });
       const result = rawDb.prepare(`SELECT * FROM rotations WHERE id = ?`).get(id) as any;
       return NextResponse.json(result, { status: 200 });
     } else {
       // Create new rotation
-      const rotId = `rot-${Date.now()}`;
+      const rotId = `rot-${crypto.randomUUID()}`;
       rawDb.prepare(
         `INSERT INTO rotations (id, slate_id, user_id, "order", interval_days, is_active) VALUES (?, ?, ?, ?, ?, ?)`
       ).run(rotId, slateId, userId, order || 0, intervalDays || 7, (isActive !== false) ? 1 : 0);
@@ -107,6 +122,11 @@ export async function DELETE(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
@@ -117,7 +137,10 @@ export async function DELETE(request: NextRequest) {
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    rawDb.prepare(`DELETE FROM rotations WHERE id = ?`).run(id);
+    const result = rawDb.prepare(
+      `DELETE FROM rotations WHERE id = ? AND slate_id IN (SELECT id FROM slates WHERE family_id = ?)`
+    ).run(id, familyId);
+    if (result.changes === 0) return NextResponse.json({ error: "Rotation not found" }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Rotations DELETE failed");

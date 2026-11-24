@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     // All jobs for this kid across all statuses
     const kanbanJobs = rawDb.prepare(`
-      SELECT j.id, j.name, j.description, j.points, j.status, j.due_date,
+      SELECT j.id, j.name, j.description, j.points, j.status, j.due_date, j.verify_required,
         s.name as slate_name
       FROM jobs j
       LEFT JOIN slate_tasks st ON j.slate_task_id = st.id
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       WHERE j.assigned_to = ?
         AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
       ORDER BY
-        CASE j.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'done' THEN 2 END,
+        CASE j.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'under_review' THEN 2 WHEN 'done' THEN 3 END,
         j.due_date ASC, j.created_at ASC
     `).all(userId, familyId) as any[];
 
@@ -75,8 +75,22 @@ export async function GET(request: NextRequest) {
       LIMIT 3
     `).all(userId, familyId) as any[];
 
+    // Chores nobody owns yet — the grab pool for this family.
+    const availableJobs = rawDb.prepare(`
+      SELECT j.id, j.name, j.description, j.points, j.due_date,
+        s.name as slate_name
+      FROM jobs j
+      LEFT JOIN slate_tasks st ON j.slate_task_id = st.id
+      LEFT JOIN slates s ON st.slate_id = s.id
+      WHERE j.assigned_to IS NULL
+        AND j.status = 'todo'
+        AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+      ORDER BY j.due_date ASC, j.created_at ASC
+    `).all(familyId) as any[];
+
     return NextResponse.json({
       jobs: kanbanJobs || [],
+      available: availableJobs || [],
       recentCompletions: (recentCompletions || []).map((j: any) => ({
         name: j.name,
         points: j.points,

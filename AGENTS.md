@@ -10,7 +10,7 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 
 ## Important Details
 - Next.js 16.3.1 with App Router, Turbopack (default), TypeScript, Tailwind CSS, Drizzle ORM, and Vitest.
-- Hybrid database strategy: uses `POSTGRES_URL` env var for PostgreSQL (`postgres-js`) or falls back to SQLite via `better-sqlite3`.
+- Database strategy: SQLite (`better-sqlite3`) is the only runtime driver. `SQLITE_PATH` points at a file that must live on persistent storage; tests use an in-memory database.
 - Native addon resolution issue resolved: `better-sqlite3` native bindings are now properly excluded from client-side bundling by using dynamic imports and API-only server code paths.
 - All database initialization logic moved into `src/db/drizzle.ts` with lazy `initDb()` export to prevent top-level module evaluation in client components.
 - **Supabase Auth** is now the primary authentication system (migrated from custom JWT).
@@ -18,7 +18,7 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 ## Work State
 
 ### Completed ✅
-- **Unit Testing Suite**: 628 passing tests across 31 files covering API routes (rotations, tasks, tags, reports, swap-meet, teams, family), database service layer, dev auth module, middleware, scoring logic, and job completion workflows.
+- **Test Suite**: 170 passing tests across 16 files. Integration tests invoke the real route handlers; unit tests cover the pure logic (schedule, rotation, scoring, transitions, streaks).
 - **Slate-to-List Auto-Generation**: `slateAutoGen.ts`, `rotation.ts`, `points.ts` with interval-based list generation.
 - **Task Workflow Enforcement**: `jobStatus.ts` and `subtask.ts` enforce state transitions (`todo → doing → done`), history tracking, and point awarding.
 - **Rotation UI**: Drag-and-drop assignment board (`RotationBoard.tsx`, `AssignmentCard.tsx`) with HTML5 drag API, responsive layout, and removal support (X button + drop zone).
@@ -53,12 +53,12 @@ Complete Choretle's core workflow, auto-generation, and scoring logic while enab
 - None at this time — all previous HANDOFF.md next steps are complete.
 
 ## Next Steps (Future)
-1. **Supabase Deployment**: Set up Supabase project with real PostgreSQL database and configure `.env.local` credentials.
+1. **Supabase Deployment**: Set up a Supabase project for auth and configure the credentials (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). The data layer stays SQLite until a shared database replaces it.
 2. **Email Verification & Magic Links**: Enable email confirmation flows in Supabase dashboard as desired.
 3. **Feature Expansion**: Add more views/reports or integrations based on user feedback.
 
 ## Relevant Files
-- `src/db/drizzle.ts`: Lazy DB initialization with PostgreSQL/SQLite drivers and schema creation
+- `src/db/drizzle.ts`: Lazy SQLite initialization, schema creation and runtime migrations
 - `next.config.ts`: Minimal config ensuring native modules are not bundled for client components
 - `src/lib/db/service.ts`: Server-only service layer (only used via API routes)
 - `src/lib/supabase.ts`: Supabase Auth setup with Edge-compatible middleware client

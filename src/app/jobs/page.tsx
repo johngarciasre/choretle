@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, Loading } from "@/components/ui";
-import { getAvatarEmoji } from "@/lib/avatar";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 import { Star, CheckCircle2, Clock3, ArrowRight, Trophy, Flame, Sparkles } from "lucide-react";
 
@@ -71,7 +70,7 @@ async function fetchKanban(): Promise<KanbanData> {
     const profileRes = await fetch(`/api/profile/${userId}?familyId=${familyId}`, { credentials: "include" });
     if (profileRes.ok) {
       const profileData = await profileRes.json();
-      streakDays = profileData?.stats?.streakDays || 0;
+      streakDays = profileData?.user?.streakCount || 0;
     }
   } catch {
     // streak days is bonus info, don't fail hard
@@ -94,7 +93,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - My Chores");
+    if (typeof window !== "undefined") document.title = "Choretle - My Chores";
     fetchKanban()
       .then(setData)
       .catch(() => {})
@@ -125,6 +124,12 @@ export default function JobsPage() {
                 <span className="flex items-center gap-1"><Trophy size={16} /> {stats.points_total.toLocaleString()} pts</span>
                 <span className="flex items-center gap-1"><Flame size={16} /> {streakDays} day streak</span>
               </div>
+              <Link
+                href="/my-jobs"
+                className="inline-flex items-center gap-1 rounded-full bg-white/20 px-4 py-2 text-sm font-bold transition hover:bg-white/30"
+              >
+                Open my board <ArrowRight size={14} />
+              </Link>
             </div>
             {/* Quick stats pill */}
             <div className="hidden sm:flex flex-col items-center gap-2 rounded-2xl bg-white/20 backdrop-blur-sm p-5">

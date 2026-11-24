@@ -12,6 +12,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const familyId = (await params).familyId;
+    if (familyId !== auth.familyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
 
     const familyRows = rawDb.prepare(`SELECT * FROM families WHERE id = ?`).get(familyId) as any;
     if (!familyRows) return NextResponse.json({ error: "Family not found" }, { status: 404 });

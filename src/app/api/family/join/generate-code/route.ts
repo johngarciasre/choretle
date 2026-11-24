@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const expiresAt = false ? null : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString();
     const now = new Date().toISOString();
-    const inviteId = `invite-${Date.now()}`;
+    const inviteId = `invite-${crypto.randomUUID()}`;
 
     rawDb.prepare(
       `INSERT INTO invites (id, family_id, code, role, expires_at, used, created_at, updated_at) VALUES (?, ?, ?, 'child', ?, 0, ?, ?)`

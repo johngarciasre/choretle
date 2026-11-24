@@ -1,9 +1,26 @@
 import { drizzle as construct } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
+import fs from "node:fs";
+import path from "node:path";
 import * as schema from "@/db/schema-sqlite";
 import { info, error } from "@/lib/logger.server";
 
-const DB_PATH = process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:";
+/**
+ * Where the SQLite file lives. Tests get a throwaway in-memory database; every
+ * other environment must persist to a file, otherwise all data is lost on the
+ * next restart and each replica sees a different database.
+ */
+export function resolveDbPath(): string {
+  if (process.env.NODE_ENV === "test") return ":memory:";
+  return process.env.SQLITE_PATH || process.env.SQLITE_DB || "./data/choretle.db";
+}
+
+function openDatabase(dbPath: string): Database.Database {
+  if (dbPath !== ":memory:") {
+    fs.mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
+  }
+  return new Database(dbPath);
+}
 
 function createTables(db: Database.Database): void {
   db.exec(`
@@ -106,7 +123,8 @@ function createTables(db: Database.Database): void {
     );
     CREATE TABLE IF NOT EXISTS swap_meet (
       id TEXT PRIMARY KEY, slate_id TEXT NOT NULL, sharing_family_id TEXT NOT NULL,
-      requested_by TEXT, status TEXT DEFAULT 'pending' NOT NULL,
+      requesting_family_id TEXT, requested_by TEXT, message TEXT,
+      status TEXT DEFAULT 'pending' NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
     CREATE TABLE IF NOT EXISTS tags (
@@ -189,8 +207,11 @@ function migrateTables(db: Database.Database): void {
   const checks = [
     // tasks table — schedule column
     { table: "tasks", col: "schedule", sql: "ALTER TABLE tasks ADD COLUMN schedule TEXT" },
-    // slates table — schedule column  
+    // slates table — schedule column
     { table: "slates", col: "schedule", sql: "ALTER TABLE slates ADD COLUMN schedule TEXT" },
+    // swap_meet — columns the share flow writes
+    { table: "swap_meet", col: "requesting_family_id", sql: "ALTER TABLE swap_meet ADD COLUMN requesting_family_id TEXT" },
+    { table: "swap_meet", col: "message", sql: "ALTER TABLE swap_meet ADD COLUMN message TEXT" },
   ];
 
   for (const check of checks) {
@@ -204,6 +225,15 @@ function migrateTables(db: Database.Database): void {
       // Column might already exist or table doesn't exist — ignore
       error({ err: String(e), table: check.table }, "[DB] Migration skip");
     }
+  }
+
+  // One list per slate per day. Guards the check-then-create race in generation.
+  // Older dev databases may already contain duplicates, in which case the index
+  // is skipped and generation still guards by query.
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_lists_slate_start ON lists(slate_id, date(start_date))`);
+  } catch (e) {
+    error({ err: String(e) }, "[DB] Could not create unique list index (existing duplicates?)");
   }
 }
 
@@ -224,12 +254,10 @@ export async function initDb(): Promise<any> {
     }
   }
 
-  // Use in-memory database in test mode to avoid cross-file interference
-  const dbPath = process.env.NODE_ENV === "test" ? ":memory:" : (process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:");
+  const dbPath = resolveDbPath();
 
   try {
-    const Database = require("better-sqlite3");
-    _rawDb = new Database(dbPath);
+    _rawDb = openDatabase(dbPath);
     createTables(_rawDb!);
     migrateTables(_rawDb!); // Run migrations for any columns added after initial table creation
     _db = construct(_rawDb!, schema as any);
@@ -244,10 +272,9 @@ export async function initDb(): Promise<any> {
 export function getRawDb(): Database.Database | null {
   if (!_rawDb) {
     // Synchronous init — better-sqlite3 is sync, so we can safely inline it here
-    const dbPath = process.env.NODE_ENV === "test" ? ":memory:" : (process.env.SQLITE_PATH || process.env.SQLITE_DB || ":memory:");
+    const dbPath = resolveDbPath();
     try {
-      const Database = require("better-sqlite3");
-      _rawDb = new Database(dbPath);
+      _rawDb = openDatabase(dbPath);
       createTables(_rawDb!);
       migrateTables(_rawDb!);
       _db = construct(_rawDb!, schema as any);
@@ -282,7 +309,6 @@ export async function drizzleInsert(db: any, table: any, data: Record<string, an
     const id = data.id;
     if (!id) return data;
     const tableName = (table as any)._?.name || String(table);
-    const selectSql = `SELECT * FROM ${tableName} WHERE id = ?`;
     // Use raw SQL to fetch the inserted row
     const raw = getRawDb();
     if (raw) {

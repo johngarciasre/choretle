@@ -3,11 +3,19 @@ import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
+/** Jobs joined to their slate task and task. jobs.slate_task_id is a slate_tasks id. */
+const JOB_SELECT = `
+  SELECT j.*, u.name as assigned_name, t.name as task_name
+  FROM jobs j
+  LEFT JOIN users u ON j.assigned_to = u.id
+  LEFT JOIN slate_tasks st ON j.slate_task_id = st.id
+  LEFT JOIN tasks t ON st.task_id = t.id`;
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
+    const familyId = auth.familyId;
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
     const rawDb = getRawDb();
@@ -16,14 +24,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || "daily";
     const date = searchParams.get("date");
-    const memberId = searchParams.get("memberId");
     const days = parseInt(searchParams.get("days") || "7", 10);
 
     switch (type) {
       case "daily": {
         const targetDate = date || new Date().toISOString().split("T")[0];
         const jobs = rawDb.prepare(
-          `SELECT j.*, u.name as assigned_name, t.name as task_name FROM jobs j LEFT JOIN users u ON j.assigned_to = u.id LEFT JOIN tasks t ON j.slate_task_id = t.id WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ? AND start_date <= ? AND end_date >= ?) ORDER BY j.created_at DESC`
+          `${JOB_SELECT} WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ? AND start_date <= ? AND end_date >= ?) ORDER BY j.created_at DESC`
         ).all(familyId, targetDate, targetDate) as any[];
 
         const users = rawDb.prepare(`SELECT id, name FROM users WHERE family_id = ?`).all(familyId) as any[];
@@ -31,11 +38,12 @@ export async function GET(request: NextRequest) {
       }
 
       case "done": {
+        // Filter by when the job was finished, not by when its list started.
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
         const doneJobs = rawDb.prepare(
-          `SELECT j.*, u.name as assigned_name, t.name as task_name FROM jobs j LEFT JOIN users u ON j.assigned_to = u.id LEFT JOIN tasks t ON j.slate_task_id = t.id WHERE j.status = 'done' AND j.list_id IN (SELECT id FROM lists WHERE family_id = ? AND start_date >= ?) ORDER BY j.completed_at DESC`
-        ).all(familyId, startDate.toISOString()) as any[];
+          `${JOB_SELECT} WHERE j.status = 'done' AND j.completed_at IS NOT NULL AND j.completed_at >= ? AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?) ORDER BY j.completed_at DESC`
+        ).all(startDate.toISOString(), familyId) as any[];
         return NextResponse.json({ type: "done", days, jobs: doneJobs || [] });
       }
 
@@ -44,8 +52,11 @@ export async function GET(request: NextRequest) {
         const taskStats: any[] = [];
         for (const task of (tasks || [])) {
           const stats = rawDb.prepare(
-            `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done FROM jobs WHERE slate_task_id = ?`
-          ).get(task.id) as any;
+            `SELECT COUNT(*) as total, SUM(CASE WHEN j.status = 'done' THEN 1 ELSE 0 END) as done
+             FROM jobs j
+             WHERE j.slate_task_id IN (SELECT id FROM slate_tasks WHERE task_id = ?)
+               AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)`
+          ).get(task.id, familyId) as any;
           taskStats.push({ taskId: task.id, name: task.name, total: stats?.total || 0, done: stats?.done || 0 });
         }
         return NextResponse.json({ type: "task", stats: taskStats });
@@ -56,8 +67,16 @@ export async function GET(request: NextRequest) {
         const endParam = searchParams.get("endDate");
         const rangeStart = startParam ? new Date(startParam) : (() => { const d = new Date(); d.setDate(d.getDate() - 7); return d; })();
         const rangeEnd = endParam ? new Date(endParam) : new Date();
+        // Include the whole end day. Date-only params parse as UTC midnight, so
+        // close the day in UTC too — setHours would use the host's local zone
+        // and cut the window short on any non-UTC server.
+        rangeEnd.setUTCHours(23, 59, 59, 999);
+        if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime())) {
+          return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+        }
 
-        // Completion stats per task in the date range
+        // Completion stats per task in the date range. The denominator is the
+        // jobs scheduled in that range; the numerator counts finished ones.
         const tasks = rawDb.prepare(
           `SELECT t.id, t.name FROM tasks t WHERE t.family_id = ? AND t.is_active = 1`
         ).all(familyId) as any[];
@@ -65,7 +84,12 @@ export async function GET(request: NextRequest) {
         const stats: any[] = [];
         for (const task of (tasks || [])) {
           const s = rawDb.prepare(
-            `SELECT COUNT(*) as total, SUM(CASE WHEN j.status = 'done' THEN 1 ELSE 0 END) as done FROM jobs j JOIN lists l ON j.list_id = l.id WHERE l.family_id = ? AND j.slate_task_id IN (SELECT id FROM slate_tasks WHERE task_id = ?) AND l.start_date >= ? AND l.start_date <= ?`
+            `SELECT COUNT(*) as total, SUM(CASE WHEN j.status = 'done' THEN 1 ELSE 0 END) as done
+             FROM jobs j
+             JOIN lists l ON j.list_id = l.id
+             WHERE l.family_id = ?
+               AND j.slate_task_id IN (SELECT id FROM slate_tasks WHERE task_id = ?)
+               AND l.start_date >= ? AND l.start_date <= ?`
           ).get(familyId, task.id, rangeStart.toISOString(), rangeEnd.toISOString()) as any;
           const total = s?.total || 0;
           const done = s?.done || 0;
@@ -78,10 +102,14 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // Completed jobs list in the date range
+        // Jobs actually finished inside the range.
         const jobsList = rawDb.prepare(
-          `SELECT j.*, u.name as assigned_name, t.name as task_name FROM jobs j LEFT JOIN users u ON j.assigned_to = u.id LEFT JOIN tasks t ON j.slate_task_id = t.id JOIN lists l ON j.list_id = l.id WHERE j.status = 'done' AND l.family_id = ? AND l.start_date >= ? AND l.start_date <= ? ORDER BY j.completed_at DESC`
-        ).all(familyId, rangeStart.toISOString(), rangeEnd.toISOString()) as any[];
+          `${JOB_SELECT}
+           WHERE j.status = 'done' AND j.completed_at IS NOT NULL
+             AND j.completed_at >= ? AND j.completed_at <= ?
+             AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+           ORDER BY j.completed_at DESC`
+        ).all(rangeStart.toISOString(), rangeEnd.toISOString(), familyId) as any[];
 
         return NextResponse.json({
           type: "task_completion",
@@ -103,8 +131,9 @@ export async function GET(request: NextRequest) {
         const memberStats: any[] = [];
         for (const member of (members || [])) {
           const stats = rawDb.prepare(
-            `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done FROM jobs WHERE assigned_to = ?`
-          ).get(member.id) as any;
+            `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done
+             FROM jobs WHERE assigned_to = ? AND list_id IN (SELECT id FROM lists WHERE family_id = ?)`
+          ).get(member.id, familyId) as any;
           memberStats.push({ userId: member.id, name: member.name, totalPoints: member.points_total || 0,
             totalJobs: stats?.total || 0, doneJobs: stats?.done || 0 });
         }

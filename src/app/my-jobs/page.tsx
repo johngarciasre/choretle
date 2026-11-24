@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
-import { PageShell, Badge, Card, EmptyState, PageLoader } from "@/components/ui";
+import { PageShell, Badge, Card, EmptyState, PageLoader, Button } from "@/components/ui";
 import KanbanBoard from "@/components/KanbanBoard";
-import { Flame, Star, Trophy, CheckCircle2, Medal } from "lucide-react";
+import { Flame, Star, Trophy, CheckCircle2, Medal, Hand } from "lucide-react";
 import { MEDAL_DEFINITIONS } from "@/types/scoring";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface KanbanJob {
   id: string;
@@ -23,8 +23,17 @@ interface RecentCompletion {
   completedAt: string;
 }
 
+interface GrabJob {
+  id: string;
+  name: string;
+  description: string | null;
+  points: number;
+  due_date: string | null;
+}
+
 interface KanbanData {
   jobs: KanbanJob[];
+  available?: GrabJob[];
   recentCompletions: RecentCompletion[];
   stats: { points_total: number; weekly_done: number };
 }
@@ -47,13 +56,14 @@ function formatRelative(iso: string): string {
 }
 
 export default function MyJobsPage() {
+  const authChecked = useAuthRedirect();
   const [data, setData] = useState<KanbanData | null>(null);
   const [medals, setMedals] = useState<EarnedMedal[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "My Chores - Choretle");
+    if (typeof window !== "undefined") document.title = "My Chores - Choretle";
   }, []);
 
   const fetchKanban = useCallback(async () => {
@@ -73,7 +83,7 @@ export default function MyJobsPage() {
     } finally {
       setLoading(false);
     }
-  }, [refreshKey]);
+  }, []);
 
   useEffect(() => {
     fetch("/api/medals", { credentials: "include" })
@@ -84,18 +94,39 @@ export default function MyJobsPage() {
 
   useEffect(() => {
     fetchKanban();
-  }, [fetchKanban]);
+  }, [fetchKanban, refreshKey]);
 
   const handleStatusChange = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  const handleGrab = useCallback(async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ claim: true }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "This chore is no longer available.");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to grab chore");
+    } finally {
+      // Refetch either way so the pool matches the server after a lost race.
+      setRefreshKey((k) => k + 1);
+    }
+  }, []);
+
+  if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageShell><PageLoader label="Loading your chores..." /></PageShell>;
   if (!data) return <PageShell><EmptyState icon={<span className="text-2xl">📝</span>} title="Couldn't load chores" message="Try refreshing the page." /></PageShell>;
 
   const completedCount = data.jobs.filter((j) => j.status === "done").length;
   const todoCount = data.jobs.filter((j) => j.status === "todo").length;
   const doingCount = data.jobs.filter((j) => j.status === "doing").length;
+  const available = data.available ?? [];
 
   // Badge achievements
   const badges = [
@@ -137,6 +168,43 @@ export default function MyJobsPage() {
             </div>
           </div>
         </div>
+
+        {/* Open to grab */}
+        {available.length > 0 && (
+          <section className="space-y-4">
+            <h2 className="font-display text-xl font-bold text-ink flex items-center gap-2">
+              <Hand size={18} className="text-sunny" />
+              Open to Grab
+              <Badge status="neutral" className="text-xs px-2 py-0.5">
+                {available.length}
+              </Badge>
+            </h2>
+            <p className="text-sm text-ink/60">
+              These chores have nobody assigned yet. Grab one and it&apos;s yours.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {available.map((job) => (
+                <Card key={job.id} accent="sunny" className="p-5 space-y-3">
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-ink">{job.name}</h3>
+                    {job.description && (
+                      <p className="text-sm text-ink/60 mt-1 line-clamp-2">{job.description}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge status="points">
+                      <Star size={10} fill="currentColor" /> {job.points} pts
+                    </Badge>
+                    <Button variant="success" size="sm" onClick={() => handleGrab(job.id)}>
+                      Grab It
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Kanban Board */}
         <section>

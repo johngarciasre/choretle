@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { PageShell, PageHeader, EmptyState, Loading, Badge, Button, Card } from "@/components/ui";
-import { Star, Users, Plus, X, Pencil, Trash2, Tag as TagIcon } from "lucide-react";
+import { Star, Users, Plus, Pencil, Trash2, Tag as TagIcon } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 import { error } from "@/lib/logger";
 
@@ -36,7 +36,7 @@ interface User {
 
 export default function FamilyPage() {
   // Create/Join family state
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthenticated] = useState(true);
   const [familyId, setFamilyId] = useState("");
   const [viewingFamily, setViewingFamily] = useState<string | null>(null);
 
@@ -47,7 +47,7 @@ export default function FamilyPage() {
 
   // Create form state
   const [name, setName] = useState("");
-  const [weekStartDay, setWeekStartDay] = useState(0);
+  const [weekStartDay] = useState(0);
 
   // Join form state
   const [showJoin, setShowJoin] = useState(false);
@@ -115,14 +115,45 @@ export default function FamilyPage() {
     }
   };
 
-  // Track auth completion to defer data loading and avoid infinite loops
-  const [authReady, setAuthReady] = useState(false);
+  const loadTags = async (fid: string) => {
+    setLoadingTags(true);
+    try {
+      const response = await fetch("/api/tags", {
+        headers: { "x-family-id": fid },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTags(data);
+      }
+    } catch (err) {
+      error({ err: err }, "Failed to load tags");
+    } finally {
+      setLoadingTags(false);
+    }
+  };
+
+  const loadInvites = async (fid?: string) => {
+    const id = fid || familyId;
+    if (!id) return;
+    setLoadingInvites(true);
+    try {
+      const response = await fetch(`/api/family/join?familyId=${id}`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setInvites(data.invites || []);
+      }
+    } catch (err) {
+      error({ err }, "Failed to load invites");
+    } finally {
+      setLoadingInvites(false);
+    }
+  };
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - Family");
+    if (typeof window !== "undefined") document.title = "Choretle - Family";
 
     // Check auth first — if user has a family, redirect to viewing it
-    checkAuth().finally(() => setAuthReady(true));
+    checkAuth();
 
     // Load family data from the last segment of the URL
     const segments = typeof window !== "undefined" ? window.location.pathname.split("/").filter(Boolean) : [];
@@ -133,6 +164,9 @@ export default function FamilyPage() {
       loadTags(id);
       loadInvites(id);
     }
+    // The loaders are component-scoped and would re-run the effect on every
+    // render if listed here; ids are passed explicitly instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // When checkAuth sets viewingFamily, load the data
@@ -142,6 +176,8 @@ export default function FamilyPage() {
       loadTags(viewingFamily);
       loadInvites(viewingFamily);
     }
+    // Guarded by !family, so re-running when `family` arrives is a no-op.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingFamily]);
 
   const handleCreateFamily = async (e: React.FormEvent) => {
@@ -188,29 +224,13 @@ export default function FamilyPage() {
 
       const data = await response.json();
       setFamilyId(data.family.id);
+      setViewingFamily(data.family.id);
       localStorage.setItem("familyId", data.family.id);
 
       // No router needed — component re-renders on familyId change
     } catch (err) {
       error({ err: err }, "Failed to join family");
       alert("Failed to join family. Please try again.");
-    }
-  };
-
-  const loadTags = async (fid: string) => {
-    setLoadingTags(true);
-    try {
-      const response = await fetch("/api/tags", {
-        headers: { "x-family-id": fid },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTags(data);
-      }
-    } catch (err) {
-      error({ err: err }, "Failed to load tags");
-    } finally {
-      setLoadingTags(false);
     }
   };
 
@@ -288,7 +308,7 @@ export default function FamilyPage() {
 
     try {
       const response = await fetch(`/api/family/${familyId}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: tempName.trim() }),
         credentials: "include",
@@ -297,7 +317,7 @@ export default function FamilyPage() {
       if (!response.ok) throw new Error("Failed to update family name");
 
       const data = await response.json();
-      setFamily(data.family);
+      setFamily((prev) => (prev ? { ...prev, name: data.name } : prev));
       setEditingName(false);
     } catch (err) {
       error({ err: err }, "Failed to update family name");
@@ -343,23 +363,6 @@ export default function FamilyPage() {
     } catch (err) {
       error({ err }, "Failed to delete member");
       alert("Failed to remove member.");
-    }
-  };
-
-  const loadInvites = async (fid?: string) => {
-    const id = fid || familyId;
-    if (!id) return;
-    setLoadingInvites(true);
-    try {
-      const response = await fetch(`/api/family/join?familyId=${id}`, { credentials: "include" });
-      if (response.ok) {
-        const data = await response.json();
-        setInvites(data.invites || []);
-      }
-    } catch (err) {
-      error({ err }, "Failed to load invites");
-    } finally {
-      setLoadingInvites(false);
     }
   };
 
@@ -509,14 +512,6 @@ export default function FamilyPage() {
       </PageShell>
     );
   }
-
-  const accentColors = [
-    { name: "coral", border: "border-coral", bg: "bg-coral/15" },
-    { name: "teal", border: "border-teal", bg: "bg-teal/15" },
-    { name: "sunny", border: "border-sunny", bg: "bg-sunny/15" },
-    { name: "grape", border: "border-grape", bg: "bg-grape/15" },
-    { name: "bubblegum", border: "border-bubblegum", bg: "bg-bubblegum/15" },
-  ];
 
   return (
     <PageShell>

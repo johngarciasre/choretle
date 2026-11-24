@@ -1,5 +1,4 @@
-import { initDb, rawInsert, rawDeleteWhere, rawUpdate, getRawDb } from "@/db/drizzle";
-import { error } from "@/lib/logger.server";
+import { initDb, getRawDb } from "@/db/drizzle";
 
 let db: any = null;
 
@@ -42,11 +41,6 @@ export async function calculateJobPoints(jobData: any): Promise<number> {
   return Math.round(basePoints * multiplier);
 }
 
-async function safeQuery<T>(query: Promise<Awaited<T>>): Promise<Awaited<T> | null> {
-  try { return await query; }
-  catch (err) { error({ err: String(err) }, "safeQuery failed"); return null; }
-}
-
 // ─── Families ────────────────────────────────────────────────────────
 export async function getFamilyById(id: string) {
   const rawDb = await ensureDb();
@@ -66,7 +60,7 @@ export async function createFamily(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
   const now = nowISO();
-  const id = `family-${Date.now()}`;
+  const id = `family-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO families (id, name, slug, logo_url, timezone, week_start_day, theme, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, 'America/New_York', 0, 'coral', 0, ?, ?)`
   ).run(id, data.name, data.slug, null, now, now);
@@ -159,7 +153,7 @@ export async function createTask(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
   const now = nowISO();
-  const taskId = `task-${Date.now()}`;
+  const taskId = `task-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO tasks (id, family_id, name, description, points, icon, archtype, is_active, verify_required, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, 'job', 1, 0, ?, ?)`
   ).run(taskId, data.family_id, data.name, data.description || null, data.points || 0, now, now);
@@ -201,7 +195,7 @@ export async function createSubtask(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
   const now = nowISO();
-  const id = `subtask-${Date.now()}`;
+  const id = `subtask-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO subtasks (id, family_id, task_id, name, points, "order", created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(id, data.family_id, data.task_id, data.name, data.points || 0, data.order || 0, now);
@@ -228,7 +222,7 @@ export async function createSlate(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
   const now = nowISO();
-  const id = `slate-${Date.now()}`;
+  const id = `slate-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO slates (id, family_id, name, description, room_location, frequency, interval, default_due_date_offset, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 'weekly', 1, 0, 1, ?, ?)`
   ).run(id, data.family_id, data.name, data.description || null, now, now);
@@ -271,10 +265,20 @@ export async function createList(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
   const now = nowISO();
-  const id = `list-${Date.now()}`;
-  rawDb.prepare(
-    `INSERT INTO lists (id, slate_id, family_id, name, start_date, end_date, period, status, created_at) VALUES (?, ?, ?, ?, ?, NULL, 'day', 'active', ?)`
-  ).run(id, data.slateId, data.familyId, data.name, data.startDate?.toISOString() || new Date().toISOString(), now);
+  const id = `list-${crypto.randomUUID()}`;
+  try {
+    rawDb.prepare(
+      `INSERT INTO lists (id, slate_id, family_id, name, start_date, end_date, period, status, created_at) VALUES (?, ?, ?, ?, ?, NULL, 'day', 'active', ?)`
+    ).run(id, data.slateId, data.familyId, data.name, data.startDate?.toISOString() || new Date().toISOString(), now);
+  } catch (err) {
+    // A concurrent generation may have created the same slate/day list first;
+    // the unique index rejects the duplicate, so return the existing row.
+    const existing = rawDb.prepare(
+      `SELECT * FROM lists WHERE slate_id = ? AND date(start_date) = date(?) LIMIT 1`
+    ).get(data.slateId, data.startDate?.toISOString() || new Date().toISOString()) as any;
+    if (existing) return existing;
+    throw err;
+  }
   const res = rawDb.prepare(`SELECT * FROM lists WHERE id = ?`).get(id) as any;
   return res || null;
 }
@@ -291,7 +295,7 @@ export async function createTag(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
   const now = nowISO();
-  const id = `tag-${Date.now()}`;
+  const id = `tag-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO tags (id, family_id, name, color, created_at, updated_at) VALUES (?, ?, ?, 'blue', ?, ?)`
   ).run(id, data.family_id, data.name, now, now);
@@ -367,7 +371,7 @@ export async function updateJobStatus(jobId: string, newStatus: string, userId: 
     return { error: `Invalid transition from ${job.status} to ${newStatus}` };
   }
 
-  const historyId = `jh-${Date.now()}`;
+  const historyId = `jh-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO job_history (id, job_id, action, details, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`
   ).run(historyId, jobId, `status_${job.status}_to_${newStatus}`, `Status changed from ${job.status} to ${newStatus}`, userId, now);
@@ -414,7 +418,7 @@ export async function getRotationsBySlate(slateId: string) {
 export async function createListTask(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
-  const id = `ltask-${Date.now()}`;
+  const id = `ltask-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO list_tasks (id, list_id, slate_task_id, points_override) VALUES (?, ?, ?, ?)`
   ).run(id, data.listId, data.slateTaskId, data.pointsOverride || 0);
@@ -426,7 +430,7 @@ export async function createJob(data: any) {
   const rawDb = await ensureDb();
   if (!rawDb) return null;
   const now = nowISO();
-  const id = `job-${Date.now()}`;
+  const id = `job-${crypto.randomUUID()}`;
   rawDb.prepare(
     `INSERT INTO jobs (id, list_id, slate_task_id, assigned_to, name, points, status, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?)`
   ).run(id, data.listId, data.slateTaskId, data.assignedTo || null, data.name || "", data.points || 0,
@@ -439,9 +443,10 @@ export async function resolveSlateTaskSet(slateId: string) {
   const rawDb = await ensureDb();
   if (!rawDb) return [];
 
-  // Fetch explicit slate tasks (join to get task name and schedule)
+  // Fetch explicit slate tasks (join to get task name and schedule).
+  // slateTaskId is the slate_tasks row id — that is what jobs.slate_task_id stores.
   const explicitTasksResult = rawDb.prepare(
-    `SELECT st.task_id, st.points_override, st."order", t.name as task_name, t.schedule as task_schedule FROM slate_tasks st LEFT JOIN tasks t ON st.task_id = t.id WHERE st.slate_id = ?`
+    `SELECT st.id as slate_task_id, st.task_id, st.points_override, st."order", t.name as task_name, t.schedule as task_schedule FROM slate_tasks st LEFT JOIN tasks t ON st.task_id = t.id WHERE st.slate_id = ?`
   ).all(slateId) as any[];
 
   // Fetch slate's tags
@@ -452,11 +457,11 @@ export async function resolveSlateTaskSet(slateId: string) {
   if ((explicitTasksResult?.length || 0) === 0 && tagIdList.length === 0) return [];
 
   // Fetch tag-matched tasks
-  const tagMatchedTasks: Array<{ taskId: string; points: number }> = [];
+  const tagMatchedTasks: Array<{ taskId: string; taskName: string; points: number }> = [];
   if (tagIdList.length > 0) {
     const placeholders = tagIdList.map(() => "?").join(",");
     const matched = rawDb.prepare(
-      `SELECT t.id as task_id, t.points FROM tasks t INNER JOIN task_tags tt ON t.id = tt.task_id WHERE tt.tag_id IN (${placeholders})`
+      `SELECT DISTINCT t.id as task_id, t.name as task_name, t.points FROM tasks t INNER JOIN task_tags tt ON t.id = tt.task_id WHERE tt.tag_id IN (${placeholders})`
     ).all(...tagIdList) as any[];
     if (matched) tagMatchedTasks.push(...matched);
   }
@@ -470,12 +475,33 @@ export async function resolveSlateTaskSet(slateId: string) {
       const taskRow = rawDb.prepare(`SELECT points FROM tasks WHERE id = ?`).get(task.task_id) as any;
       pointsOverride = taskRow?.points || 0;
     }
-    result.set(task.task_id, { taskId: task.task_id, taskName: task.task_name, pointsOverride, order: task.order, isExplicit: true, taskSchedule: task.task_schedule });
+    result.set(task.task_id, {
+      slateTaskId: task.slate_task_id,
+      taskId: task.task_id,
+      taskName: task.task_name,
+      pointsOverride,
+      order: task.order,
+      isExplicit: true,
+      taskSchedule: task.task_schedule,
+    });
   }
   for (const task of tagMatchedTasks) {
-    if (!result.has(task.taskId)) {
-      result.set(task.taskId, { taskId: task.taskId, taskName: undefined, pointsOverride: task.points, order: 0, isExplicit: false, taskSchedule: null });
-    }
+    if (result.has(task.taskId)) continue;
+    // Tag-matched tasks have no slate_tasks row yet. Create a stable one so
+    // jobs.slate_task_id can always be joined back to a slate task.
+    const slateTaskId = `stask-${slateId}-${task.taskId}`;
+    rawDb.prepare(
+      `INSERT OR IGNORE INTO slate_tasks (id, slate_id, task_id, points_override, "order") VALUES (?, ?, ?, NULL, 0)`
+    ).run(slateTaskId, slateId, task.taskId);
+    result.set(task.taskId, {
+      slateTaskId,
+      taskId: task.taskId,
+      taskName: task.taskName,
+      pointsOverride: task.points,
+      order: 0,
+      isExplicit: false,
+      taskSchedule: null,
+    });
   }
 
   const slateTasks = Array.from(result.values());

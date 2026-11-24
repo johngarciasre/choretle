@@ -1,135 +1,106 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
 import { resetDb } from "@/db/drizzle";
+import { signInAndGetFamily } from "./fixtures";
 
-describe("Slates API Integration", () => {
+async function createSlate(harness: TestHarness, body: Record<string, unknown>) {
+  const res = await harness.invokeHandler("/api/slates", "POST", body);
+  expect(res.status).toBe(201);
+  return res.body;
+}
+
+async function listSlates(harness: TestHarness): Promise<any[]> {
+  const res = await harness.invokeHandler("/api/slates", "GET");
+  expect(res.status).toBe(200);
+  return res.body;
+}
+
+describe("Slates API", () => {
   beforeEach(() => {
     resetDb();
   });
 
-  it("POST /api/slates creates a new slate", async () => {
+  it("creates a slate with weekly defaults in the caller's family", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    const { familyId } = await signInAndGetFamily(harness);
 
-    const res = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Weekly Chores",
-    });
+    const slate = await createSlate(harness, { name: "Weekly Chores" });
 
-    expect(res.status).toBe(201);
-    expect(res.body.name).toBe("Weekly Chores");
+    expect(slate).toMatchObject({ name: "Weekly Chores", frequency: "weekly", interval: 1, family_id: familyId });
+    expect(slate.is_active).toBe(1);
   });
 
-  it("POST /api/slates returns 400 when name is missing", async () => {
+  it("persists custom frequency, interval, description and room", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    await signInAndGetFamily(harness);
 
-    const res = await harness.invokeHandler("/api/slates", "POST", {});
-    expect(res.status).toBe(400);
-  });
-
-  it("POST /api/slates sets default frequency to weekly", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    const res = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Default Frequency Slate",
-    });
-
-    expect(res.status).toBe(201);
-  });
-
-  it("POST /api/slates with custom frequency and interval", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    const res = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Biweekly Slate",
+    const slate = await createSlate(harness, {
+      name: "Biweekly Bathroom",
       frequency: "biweekly",
       interval: 2,
+      description: "Scrub the tiles",
+      roomLocation: "Bathroom",
     });
 
-    expect(res.status).toBe(201);
+    expect(slate).toMatchObject({
+      frequency: "biweekly",
+      interval: 2,
+      description: "Scrub the tiles",
+      room_location: "Bathroom",
+    });
+    const listed = await listSlates(harness);
+    // The collection endpoint normalizes snake_case to camelCase.
+    expect(listed[0]).toMatchObject({
+      frequency: "biweekly",
+      interval: 2,
+      description: "Scrub the tiles",
+      roomLocation: "Bathroom",
+    });
   });
 
-  it("Multi-step: create slate, get slates, verify creation", async () => {
+  it("rejects a missing name", async () => {
     const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+    await signInAndGetFamily(harness);
 
-    // Create first slate
-    const res1 = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Slate A",
-    });
-    expect(res1.status).toBe(201);
-    const slateIdA = res1.body.id;
+    const res = await harness.invokeHandler("/api/slates", "POST", {});
 
-    // Create second slate
-    const res2 = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Slate B",
-    });
-    expect(res2.status).toBe(201);
-
-    // Get all slates
-    const getRes = await harness.invokeHandler("/api/slates?familyId=dev-family-001", "GET");
-    expect(getRes.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/name/);
   });
 
-  it("Session persists across multiple slate operations", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+  it("lists only this family's slates", async () => {
+    const mine = new TestHarness();
+    await signInAndGetFamily(mine);
+    await createSlate(mine, { name: "Mine" });
 
-    // Create first slate
-    const res1 = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Persistent Slate 1",
-    });
-    expect(res1.status).toBe(201);
+    const other = new TestHarness();
+    await signInAndGetFamily(other, "other@choretle.dev");
+    await createSlate(other, { name: "Theirs" });
 
-    // Create another slate (same session)
-    const res2 = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Persistent Slate 2",
-    });
-    expect(res2.status).toBe(201);
-
-    // Get all slates
-    const getRes = await harness.invokeHandler("/api/slates?familyId=dev-family-001", "GET");
-    expect(getRes.status).toBe(200);
+    expect((await listSlates(mine)).map((s) => s.name)).toEqual(["Mine"]);
+    expect((await listSlates(other)).map((s) => s.name)).toEqual(["Theirs"]);
   });
 
-  it("Slates created by different users are associated with family", async () => {
+  it("deletes a slate and stops listing it", async () => {
     const harness = new TestHarness();
+    await signInAndGetFamily(harness);
+    const slate = await createSlate(harness, { name: "Disposable" });
 
-    // Parent creates a slate
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-    const adminRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Parent Slate",
-    });
-    expect(adminRes.status).toBe(201);
+    const res = await harness.invokeHandler("/api/slates/[slateId]", "DELETE", undefined, { slateId: slate.id });
 
-    // Child creates a slate (same family)
-    await harness.signIn("child@choretle.dev");
-    const childRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Child Slate",
-    });
-    expect(childRes.status).toBe(201);
+    expect(res.status).toBe(200);
+    expect(await listSlates(harness)).toHaveLength(0);
   });
 
-  it("POST /api/slates with description and room location", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
+  it("cannot read another family's slate by id", async () => {
+    const mine = new TestHarness();
+    await signInAndGetFamily(mine);
 
-    const res = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Living Room Tasks",
-      description: "Tasks that need to be done in the living room",
-      roomLocation: "Living Room",
-    });
+    const other = new TestHarness();
+    await signInAndGetFamily(other, "other@choretle.dev");
+    const foreign = await createSlate(other, { name: "Theirs" });
 
-    expect(res.status).toBe(201);
+    const res = await mine.invokeHandler("/api/slates/[slateId]", "GET", undefined, { slateId: foreign.id });
+    expect(res.status).toBe(404);
   });
 });

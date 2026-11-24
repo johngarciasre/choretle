@@ -87,13 +87,10 @@ export default function SlatesPage() {
   const [buildingSlateId, setBuildingSlateId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const [buildingSlateTasks, setBuildingSlateTasks] = useState<Task[]>([]);
   const [buildingSlateExplicitTaskIds, setBuildingSlateExplicitTaskIds] = useState<string[]>([]);
   const [buildingSlateAutoIncludeTagIds, setBuildingSlateAutoIncludeTagIds] = useState<string[]>([]);
 
   // Slate builder search/filter state
-  const [builderSearchQuery, setBuilderSearchQuery] = useState("");
-  const [builderShowAvailableTasks, setBuilderShowAvailableTasks] = useState(true);
 
   const dataLoadedRef = useRef(false);
 
@@ -101,7 +98,7 @@ export default function SlatesPage() {
     if (!authChecked) return;
     if (dataLoadedRef.current) return;
     dataLoadedRef.current = true;
-    typeof window !== "undefined" && (document.title = "Choretle - Slates");
+    if (typeof window !== "undefined") document.title = "Choretle - Slates";
     Promise.all([fetchSlates(), fetchTasks(), fetchTags()]).then(([slates, tasks, tags]) => {
       if (!slates || !tasks || !tags) {
         setNotAuthenticated(true);
@@ -167,7 +164,6 @@ export default function SlatesPage() {
       const data = await res.json();
 
       setBuildingSlateId(slateId);
-      setBuildingSlateTasks(data.tasks || []);
       setBuildingSlateExplicitTaskIds(data.explicitTaskIds || []);
       setBuildingSlateAutoIncludeTagIds(data.autoIncludeTagIds || []);
     } catch (err) {
@@ -490,7 +486,7 @@ function SlateBuilderPage({
 
           {availableTasks.length === 0 ? (
             searchQuery ? (
-              <p className="text-sm text-ink/60">No tasks match "{searchQuery}".</p>
+              <p className="text-sm text-ink/60">No tasks match &quot;{searchQuery}&quot;.</p>
             ) : (
               <p className="text-sm text-ink/60">All tasks have been added to this slate.</p>
             )

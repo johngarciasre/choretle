@@ -39,33 +39,24 @@ interface HistoryEntry {
   createdAt: string;
 }
 
-interface SubtaskInstance {
-  subtask: {
-    id: string;
-    completedAt: string | null;
-    pointsAwarded: number;
-  };
-  details: {
-    id: string;
-    name: string;
-    points: number;
-  } | null;
-}
-
 const jobId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
 
-async function getFamilyId(): Promise<string> {
+let cachedSession: { familyId: string; role: string } | null = null;
+
+async function getSession(): Promise<{ familyId: string; role: string }> {
+  if (cachedSession) return cachedSession;
   const authRes = await fetch("/api/auth/me", { credentials: "include" });
   if (!authRes.ok) throw new Error("Not authenticated");
   const authData = await authRes.json();
   const familyId = authData.familyId;
   if (!familyId) throw new Error("No family ID");
-  return familyId;
+  cachedSession = { familyId, role: authData.user?.role || "child" };
+  return cachedSession;
 }
 
 const fetchJob = async () => {
   try {
-    const familyId = await getFamilyId();
+    const { familyId } = await getSession();
     const res = await fetch(`/api/jobs/${jobId}?familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch job");
     return await res.json();
@@ -75,21 +66,9 @@ const fetchJob = async () => {
   }
 };
 
-const fetchSubtasks = async (jobId: string) => {
-  try {
-    const familyId = await getFamilyId();
-    const res = await fetch(`/api/tasks/subtasks?jobId=${jobId}&familyId=${familyId}`, { credentials: "include" });
-    if (!res.ok) throw new Error("Failed to fetch subtasks");
-    return await res.json();
-  } catch (err) {
-    error({ err: err }, "Fetch subtasks failed");
-    return [];
-  }
-};
-
 const fetchPhotos = async (objectType: string, objectId: string) => {
   try {
-    const familyId = await getFamilyId();
+    const { familyId } = await getSession();
     const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}&familyId=${familyId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch photos");
     return await res.json();
@@ -110,36 +89,34 @@ interface JobPhoto {
 export default function JobPage() {
   const authChecked = useAuthRedirect();
   const [job, setJob] = useState<Job | null>(null);
-  const [validNextStatuses, setValidNextStatuses] = useState<string[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [subtaskInstances, setSubtaskInstances] = useState<SubtaskInstance[]>([]);
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
+  const [role, setRole] = useState("child");
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
-    typeof window !== "undefined" && (document.title = "Choretle - Job Details");
-    Promise.all([fetchJob(), fetchSubtasks(jobId), fetchPhotos("job", jobId)]).then(([jobData, subtasks, photoData]) => {
+    if (typeof window !== "undefined") document.title = "Choretle - Job Details";
+    getSession().then((s) => setRole(s.role)).catch(() => {});
+    Promise.all([fetchJob(), fetchPhotos("job", jobId)]).then(([jobData, photoData]) => {
       if (jobData) {
-        setJob(jobData.job);
-        setValidNextStatuses(jobData.validNextStatuses || []);
+        setJob(jobData);
         setComments(jobData.comments || []);
-        setHistory(jobData.history || []);
+        setHistory(jobData.jobHistory || []);
       }
-      setSubtaskInstances(subtasks || []);
       setPhotos(photoData || []);
       setLoading(false);
     });
-  }, [jobId]);
+  }, []);
 
   const handleStatusChange = async (newStatus: string) => {
     if (!job) return;
 
     try {
-      const familyId = await getFamilyId();
+      const { familyId } = await getSession();
       const res = await fetch(`/api/jobs/${job.id}?familyId=${familyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -167,9 +144,7 @@ export default function JobPage() {
     if (!jobId || !commentText.trim()) return;
 
     try {
-      const familyId = await getFamilyId();
-      // Note: In production, this would use the user's auth token
-      await fetch(`/api/jobs/${jobId}/comments?familyId=${familyId}`, {
+      await fetch(`/api/jobs/${jobId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: commentText.trim() }),
@@ -183,32 +158,7 @@ export default function JobPage() {
     }
   };
 
-  const handleSubtaskComplete = async (jobSubtaskId: string) => {
-    try {
-      const res = await fetch(`/api/tasks/subtasks/${jobSubtaskId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completedAt: new Date().toISOString() }),
-      });
-
-      if (!res.ok) throw new Error("Failed to complete subtask");
-      
-      setSubtaskInstances(prev =>
-        prev.map((s: SubtaskInstance) =>
-          s.subtask.id === jobSubtaskId
-            ? { ...s, subtask: { ...s.subtask, completedAt: new Date().toISOString() } }
-            : s
-        )
-      );
-    } catch (err) {
-      error({ err: err }, "Complete subtask failed");
-      alert("Failed to complete subtask");
-    }
-  };
-
-  const completedSubtasks = subtaskInstances.filter((s: SubtaskInstance) => s.subtask.completedAt).length;
-  const totalSubtasks = subtaskInstances.length;
-  const allCompleted = totalSubtasks > 0 && completedSubtasks === totalSubtasks;
+  const isReviewer = role === "parent" || role === "admin";
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
   if (loading) return <PageLoader label="Loading job..." />;
@@ -239,64 +189,8 @@ export default function JobPage() {
                 {job.reviewedAt ? "Reviewed" : "Requires Review"}
               </Badge>
             )}
-            {totalSubtasks > 0 && (
-              <Badge status="neutral">
-                {completedSubtasks}/{totalSubtasks} subtasks
-              </Badge>
-            )}
           </div>
         </section>
-
-        {/* Subtasks Section */}
-        {totalSubtasks > 0 && (
-          <Card accent={allCompleted ? "success" : "teal"} className="pt-6 space-y-4">
-            <h3 className="font-display text-lg font-bold text-ink">Subtask Progress</h3>
-            
-            <div className="space-y-2">
-              {subtaskInstances.map((instance: SubtaskInstance) => (
-                <label
-                  key={instance.subtask.id}
-                  className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                    instance.subtask.completedAt ? "bg-success/10" : "bg-white hover:bg-grape/5"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={!!instance.subtask.completedAt}
-                    onChange={() => handleSubtaskComplete(instance.subtask.id)}
-                    disabled={job.status === "done"}
-                    className="accent-grape"
-                  />
-                  {instance.details?.name ? (
-                    <span className={`flex-1 font-medium ${
-                      instance.subtask.completedAt ? "text-success line-through" : "text-ink"
-                    }`}>
-                      {instance.details.name}
-                    </span>
-                  ) : (
-                    <span className="flex-1 font-medium text-ink">Subtask</span>
-                  )}
-                  {instance.details?.points && instance.details.points > 0 && (
-                    <Badge status="points" className="text-xs">{instance.details.points} pts</Badge>
-                  )}
-                </label>
-              ))}
-            </div>
-
-            {/* Progress Bar */}
-            <div className="w-full h-6 bg-cream rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-width ${
-                  allCompleted ? "bg-success" : "bg-grape"
-                }`}
-                style={{ width: `${totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0}%` }}
-              />
-            </div>
-            <p className="text-sm text-ink/60 text-center">
-              {completedSubtasks} of {totalSubtasks} completed
-            </p>
-          </Card>
-        )}
 
         {/* Photo Carousel */}
         <PhotoCarousel
@@ -320,29 +214,35 @@ export default function JobPage() {
             )}
             {job.status === "doing" && (
               <>
-                <Button variant="success" onClick={() => handleStatusChange("done")}>
-                  Done
-                </Button>
-                {job.verifyRequired ? (
-                  <Button variant="grape" onClick={() => handleStatusChange("under_review")}>
+                {job.verifyRequired && !isReviewer ? (
+                  <Button variant="success" onClick={() => handleStatusChange("under_review")}>
                     Submit for Review
                   </Button>
                 ) : (
-                  <Button variant="grape" onClick={() => handleStatusChange("todo")}>
-                    Reset to Todo
+                  <Button variant="success" onClick={() => handleStatusChange("done")}>
+                    Done
                   </Button>
                 )}
+                <Button variant="grape" onClick={() => handleStatusChange("todo")}>
+                  Reset to Todo
+                </Button>
               </>
             )}
             {job.status === "under_review" && (
-              <>
-                <Button variant="success" onClick={() => handleStatusChange("done")}>
-                  Mark Complete
-                </Button>
-                <Button variant="grape" onClick={() => handleStatusChange("doing")}>
-                  Request Rework
-                </Button>
-              </>
+              isReviewer ? (
+                <>
+                  <Button variant="success" onClick={() => handleStatusChange("done")}>
+                    Approve
+                  </Button>
+                  <Button variant="grape" onClick={() => handleStatusChange("doing")}>
+                    Send Back
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-ink/60 font-medium">
+                  Waiting for a parent to review this chore.
+                </p>
+              )
             )}
             {job.status === "done" && (
               <>

@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRawDb } from "@/db/drizzle";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ reviewId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
     const reviewId = (await params).reviewId;
     const result = rawDb.prepare(
-      `SELECT r.*, j.name as job_name, u.name as reviewer_name FROM reviews r LEFT JOIN jobs j ON r.job_id = j.id LEFT JOIN users u ON r.reviewer_id = u.id WHERE r.id = ?`
-    ).get(reviewId) as any;
+      `SELECT r.*, j.name as job_name, u.name as reviewer_name FROM reviews r LEFT JOIN jobs j ON r.job_id = j.id LEFT JOIN users u ON r.reviewer_id = u.id WHERE r.id = ? AND r.family_id = ?`
+    ).get(reviewId, auth.familyId) as any;
     if (!result) return NextResponse.json({ error: "Review not found" }, { status: 404 });
     return NextResponse.json(result);
   } catch (err) {
@@ -20,6 +24,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ reviewId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
     const reviewId = (await params).reviewId;
@@ -33,10 +40,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (status) { fields.push("status = ?"); values.push(status); }
     if (notes !== undefined) { fields.push("notes = ?"); values.push(notes); }
     if (approvedBy) { fields.push("approved_by = ?"); values.push(approvedBy); }
-    values.push(reviewId);
-    rawDb.prepare(`UPDATE reviews SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+    values.push(reviewId, auth.familyId);
+    rawDb.prepare(`UPDATE reviews SET ${fields.join(", ")} WHERE id = ? AND family_id = ?`).run(...values);
 
-    const result = rawDb.prepare(`SELECT * FROM reviews WHERE id = ?`).get(reviewId) as any;
+    const result = rawDb.prepare(`SELECT * FROM reviews WHERE id = ? AND family_id = ?`).get(reviewId, auth.familyId) as any;
+    if (!result) return NextResponse.json({ error: "Review not found" }, { status: 404 });
     return NextResponse.json(result);
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Update review failed");
@@ -46,10 +54,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ reviewId: string }> }) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
     const reviewId = (await params).reviewId;
-    rawDb.prepare(`DELETE FROM reviews WHERE id = ?`).run(reviewId);
+    const result = rawDb.prepare(`DELETE FROM reviews WHERE id = ? AND family_id = ?`).run(reviewId, auth.familyId);
+    if (result.changes === 0) return NextResponse.json({ error: "Review not found" }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Delete review failed");

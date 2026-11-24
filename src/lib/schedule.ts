@@ -110,21 +110,14 @@ export function expandSchedule(
   switch (schedule.type) {
     case "weekly": {
       const days = schedule.daysOfWeek || [1];
-      const interval = schedule.interval || 1;
-      let cursor = new Date(start);
-      // Align cursor to the first occurrence of any scheduled day
+      // Walk one day at a time so every selected weekday is honoured and the
+      // interval check matches shouldGenerateOnDate.
+      const cursor = new Date(start);
       while (cursor <= end) {
-        if (days.includes(cursor.getDay())) {
+        if (days.includes(cursor.getDay()) && shouldGenerateOnDate(schedule, cursor)) {
           results.push({ date: new Date(cursor), dayLabel: DAY_NAMES[cursor.getDay()] });
-          // Skip ahead by interval weeks, but land on the next scheduled day
-          cursor.setDate(cursor.getDate() + 7 * interval);
-          // Adjust to next occurrence of any scheduled day
-          while (cursor <= end && !days.includes(cursor.getDay())) {
-            cursor.setDate(cursor.getDate() + 1);
-          }
-        } else {
-          cursor.setDate(cursor.getDate() + 1);
         }
+        cursor.setDate(cursor.getDate() + 1);
       }
       break;
     }
@@ -202,8 +195,6 @@ function getNthWeekOfMonth(
   const firstDow = firstDay.getDay();
 
   if (weekOfMonth >= 1 && weekOfMonth <= 4) {
-    const offset = (weekOfMonth - 1) * 7;
-    let candidate = firstDow + offset;
     // Find the actual date where dayOfWeek falls in this week
     let d = new Date(year, month, 1 + Math.max(0, dayOfWeek - firstDow + (weekOfMonth - 1) * 7));
     if (d.getMonth() === month && d.getDay() === dayOfWeek) return d;
@@ -218,7 +209,7 @@ function getNthWeekOfMonth(
   if (weekOfMonth === 5) {
     // Last occurrence: find the last day of month, then go backwards
     const lastDay = new Date(year, month + 1, 0);
-    let d = new Date(lastDay);
+    const d = new Date(lastDay);
     while (d.getDay() !== dayOfWeek) {
       d.setDate(d.getDate() - 1);
     }

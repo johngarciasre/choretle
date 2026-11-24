@@ -44,6 +44,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { name, color } = body;
 
@@ -71,7 +75,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
     }
 
-    const tagId = `tag-${Date.now()}`;
+    const tagId = `tag-${crypto.randomUUID()}`;
     rawDb.prepare(
       `INSERT INTO tags (id, name, family_id, color, created_at) VALUES (?, ?, ?, ?, ?)`
     ).run(tagId, name, familyId, color || null, new Date().toISOString());
@@ -90,6 +94,10 @@ export async function PUT(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)
@@ -112,8 +120,8 @@ export async function PUT(request: NextRequest) {
 
     // Get existing tag to check family and new name
     const existingTag = rawDb.prepare(
-      `SELECT * FROM tags WHERE id = ?`
-    ).get(id) as any;
+      `SELECT * FROM tags WHERE id = ? AND family_id = ?`
+    ).get(id, familyId) as any;
 
     if (!existingTag) {
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });
@@ -123,7 +131,7 @@ export async function PUT(request: NextRequest) {
     if (name && name !== existingTag.name) {
       const duplicate = rawDb.prepare(
         `SELECT * FROM tags WHERE family_id = ? AND name = ? AND id != ? LIMIT 1`
-      ).get(existingTag.family_id, name, id) as any;
+      ).get(familyId, name, id) as any;
 
       if (duplicate) {
         return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
@@ -131,10 +139,10 @@ export async function PUT(request: NextRequest) {
     }
 
     rawDb.prepare(
-      `UPDATE tags SET name = ?, color = ? WHERE id = ?`
-    ).run(name, color || null, id);
+      `UPDATE tags SET name = ?, color = ? WHERE id = ? AND family_id = ?`
+    ).run(name, color || null, id, familyId);
 
-    const updated = rawDb.prepare(`SELECT * FROM tags WHERE id = ?`).get(id) as any;
+    const updated = rawDb.prepare(`SELECT * FROM tags WHERE id = ? AND family_id = ?`).get(id, familyId) as any;
 
     return NextResponse.json(updated);
   } catch (err) {
@@ -148,6 +156,10 @@ export async function DELETE(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
     // Accept familyId from query param as fallback (dev mode without middleware headers)
@@ -168,10 +180,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    // Delete tag from junction tables first (cascade via FK constraints in PostgreSQL)
+    const owned = rawDb.prepare(`SELECT id FROM tags WHERE id = ? AND family_id = ?`).get(id, familyId);
+    if (!owned) return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+
+    // Delete tag from junction tables first (no FK cascades in the SQLite schema)
     rawDb.prepare(`DELETE FROM task_tags WHERE tag_id = ?`).run(id);
     rawDb.prepare(`DELETE FROM slate_tags WHERE tag_id = ?`).run(id);
-    rawDb.prepare(`DELETE FROM tags WHERE id = ?`).run(id);
+    rawDb.prepare(`DELETE FROM tags WHERE id = ? AND family_id = ?`).run(id, familyId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -53,7 +53,7 @@ export default function SwapMeetPage() {
   const [schedule, setSchedule] = useState<SlateSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [familyId, setFamilyId] = useState("");
-  const [daysAhead, setDaysAhead] = useState(30);
+  const [daysAhead] = useState(30);
 
   // Swap UI state
   const [selectedSlateId, setSelectedSlateId] = useState("");
@@ -66,17 +66,6 @@ export default function SwapMeetPage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [requestingFamilyId, setRequestingFamilyId] = useState("");
   const [selectedSlateIdsForSharing, setSelectedSlateIdsForSharing] = useState<string[]>([]);
-
-  useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - Swap Meet");
-    getFamilyId().then((fid) => {
-      setFamilyId(fid);
-      fetchSchedule(fid, daysAhead);
-      fetchSwaps(fid);
-    }).catch(() => {
-      setLoading(false);
-    });
-  }, [daysAhead]);
 
   const fetchSchedule = async (fid: string, days: number) => {
     try {
@@ -123,6 +112,19 @@ export default function SwapMeetPage() {
       error({ err: err }, "Failed to fetch swaps");
     }
   };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") document.title = "Choretle - Swap Meet";
+    getFamilyId().then((fid) => {
+      setFamilyId(fid);
+      fetchSchedule(fid, daysAhead);
+      fetchSwaps(fid);
+    }).catch(() => {
+      setLoading(false);
+    });
+    // The fetchers read familyId from the request and daysAhead from this dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daysAhead]);
 
   const handleSlateSelect = async (slateId: string) => {
     setSelectedSlateId(slateId);
@@ -449,7 +451,7 @@ export default function SwapMeetPage() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Enter other family's ID</label>
+                  <label className="block text-sm font-medium mb-1">Enter other family&apos;s ID</label>
                   <input
                     type="text"
                     value={requestingFamilyId}

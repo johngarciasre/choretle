@@ -73,8 +73,10 @@ export function shouldGenerateList(slate: Slate, targetDate: Date): boolean {
   const created = new Date(iso);
   if (isNaN(created.getTime())) return false;
 
-  const diffMs = targetDate.getTime() - created.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  // Compare calendar days (UTC), not instants. A slate created at 18:00 must
+  // still generate for "today" when the caller passes midnight as the target.
+  const dayStart = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const diffDays = Math.floor((dayStart(targetDate) - dayStart(created)) / (1000 * 60 * 60 * 24));
 
   if (diffDays < 0) return false;
 

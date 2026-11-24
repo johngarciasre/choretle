@@ -1,21 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Star, User, LogOut } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Star, LogOut } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import type { User as SupaUser } from "@supabase/supabase-js";
 import { error } from "@/lib/logger";
 
 const NAV_LINKS = [
+  { href: "/jobs", label: "My Chores" },
+  { href: "/my-jobs", label: "Board" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/my-jobs", label: "My Chores" },
-  { href: "/tasks", label: "Tasks" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/slates", label: "Slates" },
-  { href: "/rotations", label: "Rotations" },
-  { href: "/reports", label: "Reports" },
+  { href: "/tasks", label: "Tasks", parentOnly: true },
+  { href: "/slates", label: "Slates", parentOnly: true },
+  { href: "/rotations", label: "Rotations", parentOnly: true },
+  { href: "/reports", label: "Reports", parentOnly: true },
   // { href: "/swap-meet", label: "Swap Meet" },
 ];
 
@@ -28,7 +27,6 @@ interface AuthUser {
 
 export function NavBar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [familyName, setFamilyName] = useState<string | null>(null);
@@ -102,6 +100,9 @@ export function NavBar() {
     ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : (user?.email?.[0]?.toUpperCase() ?? "");
 
+  const isParent = user?.role === "parent" || user?.role === "admin";
+  const navLinks = NAV_LINKS.filter((link) => !link.parentOnly || isParent);
+
   return (
     <nav className="sticky top-0 z-40 bg-cream/90 backdrop-blur border-b-2 border-ink/5">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
@@ -116,7 +117,7 @@ export function NavBar() {
           {loading ? null : user ? (
             <>
               <nav className="hidden lg:flex items-center gap-1">
-                {NAV_LINKS.map(({ href, label }) => (
+                {navLinks.map(({ href, label }) => (
                   <Link
                     key={href}
                     href={href}

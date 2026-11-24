@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { PageShell, PageHeader, Card, Badge, StatCard, EmptyState, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
@@ -66,7 +65,7 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - Reports");
+    if (typeof window !== "undefined") document.title = "Choretle - Reports";
     fetchReport("daily").catch(() => setLoading(false));
   }, []);
 

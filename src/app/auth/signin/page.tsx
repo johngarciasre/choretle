@@ -12,7 +12,7 @@ type Mode = "signin" | "signup";
 
 export default function AuthPage() {
   useEffect(() => {
-    typeof window !== 'undefined' && (document.title = "Choretle - Sign In");
+    if (typeof window !== "undefined") document.title = "Choretle - Sign In";
   }, []);
 
   const [mode, setMode] = useState<Mode>(() => {
@@ -27,7 +27,7 @@ export default function AuthPage() {
     }
     return false;
   });
-  const [savedEmail, setSavedEmail] = useState(() => {
+  const [savedEmail] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem("choretle_saved_email") || "";
     }
@@ -37,6 +37,7 @@ export default function AuthPage() {
   const [email, setEmail] = useState(savedEmail);
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -59,7 +60,10 @@ export default function AuthPage() {
     try {
       const endpoint = mode === "signin" ? "/api/auth/signin" : "/api/auth/signup";
       const body: Record<string, string> = { email, password };
-      if (mode === "signup") body.name = name;
+      if (mode === "signup") {
+        body.name = name;
+        if (inviteCode.trim()) body.inviteCode = inviteCode.trim();
+      }
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -72,8 +76,10 @@ export default function AuthPage() {
       info({ data }, "[AUTH PAGE] Response data");
 
       if (response.ok) {
-        // After signup, redirect to /family for create/join flow
-        window.location.href = "/family";
+        // Kids land on their chores; adults on the dashboard, or the family
+        // page when their account still needs a family.
+        const target = data.role === "child" ? "/jobs" : data.familyId ? "/dashboard" : "/family";
+        window.location.href = target;
       } else {
         setError(data.error || `${mode === "signin" ? "Sign in" : "Sign up"} failed`);
       }
@@ -125,6 +131,15 @@ export default function AuthPage() {
               required
               className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
             />
+            {mode === "signup" && (
+              <input
+                type="text"
+                placeholder="Family code (from your parent)"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"
+              />
+            )}
             <label className="flex items-center gap-2 text-sm font-bold text-ink/70 cursor-pointer">
               <input
                 type="checkbox"

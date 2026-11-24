@@ -1,35 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRawDb } from "@/db/drizzle";
-import { error, warn } from "@/lib/logger.server";
+import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
-
-async function verifyLocalAuth(request: NextRequest): Promise<{ userId: string; familyId?: string } | { error: string }> {
-  const auth = await verifyAuth(request);
-  if (!auth) return { error: "No token provided" };
-  const rawDb = getRawDb();
-  if (!rawDb) return { error: "Database not initialized" };
-  try {
-    const user = rawDb.prepare(`SELECT id, family_id FROM users WHERE id = ?`).get(auth.userId);
-    if (!user) return { error: "User not found" };
-    return { userId: auth.userId, familyId: (auth.familyId || (user as any).family_id || undefined) };
-  } catch (err) {
-    error({ err: String(err), stack: (err as Error).stack }, "Token verification failed");
-    return { error: "Invalid token" };
-  }
-}
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
     const url = new URL(request.url);
-    const familyId = url.searchParams.get("familyId");
-    const slateId = url.searchParams.get("slateId");
     const daysAhead = parseInt(url.searchParams.get("daysAhead") || "30", 10);
-    if (!familyId) return NextResponse.json({ error: "familyId is required" }, { status: 400 });
 
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const slates = rawDb.prepare(`SELECT * FROM slates WHERE family_id = ?`).all(familyId) as any[];
+    // Only this family's schedule — the family id comes from the session, never the query.
+    const slates = rawDb.prepare(`SELECT * FROM slates WHERE family_id = ?`).all(auth.familyId) as any[];
     if (!slates || slates.length === 0) return NextResponse.json({ assignments: [] });
 
     const schedule: any[] = [];
@@ -51,51 +37,52 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await verifyLocalAuth(request);
-    if ("error" in authResult) return NextResponse.json({ error: authResult.error }, { status: 401 });
-    const { userId, familyId } = authResult;
+    const auth = await verifyAuth(request);
+    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
     const body = await request.json();
-    const { sharingFamilyId, requestingFamilyId, slateIds, messages } = body;
-
-    if (!sharingFamilyId || !requestingFamilyId || !slateIds || !Array.isArray(slateIds)) {
-      return NextResponse.json({ error: "sharingFamilyId, requestingFamilyId, and slateIds (array) are required" }, { status: 400 });
-    }
-
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    // Verify families exist
-    const sharingFamily = rawDb.prepare(`SELECT id FROM families WHERE id = ?`).get(sharingFamilyId) as any;
-    if (!sharingFamily) return NextResponse.json({ error: "Sharing family not found" }, { status: 404 });
+    // ─── Swap two rotation entries (the "swap" control on the page) ─────
+    if (body?.rotationId1 && body?.rotationId2) {
+      const { slateId, rotationId1, rotationId2 } = body;
+      const slate = rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, auth.familyId) as any;
+      if (!slate) return NextResponse.json({ error: "Slate not found" }, { status: 404 });
+
+      const first = rawDb.prepare(`SELECT id, user_id FROM rotations WHERE id = ? AND slate_id = ?`).get(rotationId1, slateId) as any;
+      const second = rawDb.prepare(`SELECT id, user_id FROM rotations WHERE id = ? AND slate_id = ?`).get(rotationId2, slateId) as any;
+      if (!first || !second) return NextResponse.json({ error: "Rotation not found" }, { status: 404 });
+
+      rawDb.prepare(`UPDATE rotations SET user_id = ? WHERE id = ?`).run(second.user_id, first.id);
+      rawDb.prepare(`UPDATE rotations SET user_id = ? WHERE id = ?`).run(first.user_id, second.id);
+
+      return NextResponse.json({ success: true, message: "Rotations swapped successfully" });
+    }
+
+    // ─── Share slates with another family ───────────────────────────────
+    const { sharingFamilyId, requestingFamilyId, slateIds, messages } = body;
+
+    if (!sharingFamilyId || !requestingFamilyId || !Array.isArray(slateIds)) {
+      return NextResponse.json({ error: "sharingFamilyId, requestingFamilyId, and slateIds (array) are required" }, { status: 400 });
+    }
+    if (sharingFamilyId !== auth.familyId) {
+      return NextResponse.json({ error: "You can only share your own family's slates" }, { status: 403 });
+    }
+
     const requestingFamily = rawDb.prepare(`SELECT id FROM families WHERE id = ?`).get(requestingFamilyId) as any;
     if (!requestingFamily) return NextResponse.json({ error: "Requesting family not found" }, { status: 404 });
 
-    // Check user is member of sharing family
-    const isMember = rawDb.prepare(`SELECT id FROM users WHERE family_id = ? AND id = ?`).get(familyId, userId);
-    if (!isMember) return NextResponse.json({ error: "You are not a member of this family" }, { status: 403 });
-
-    // Check for existing swap meet entries
-    const existingSwap = rawDb.prepare(
-      `SELECT id FROM swap_meet WHERE sharing_family_id = ? AND requesting_family_id = ?`
-    ).get(sharingFamilyId, requestingFamilyId) as any;
-
     const createdEntries: any[] = [];
     for (const slateId of slateIds) {
-      if (existingSwap && !messages?.[slateId]) continue;
-      const swapMeetId = `sm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const slate = rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, sharingFamilyId) as any;
+      if (!slate) return NextResponse.json({ error: `Slate ${slateId} not found in your family` }, { status: 404 });
+
+      const swapMeetId = `sm-${crypto.randomUUID()}`;
       rawDb.prepare(
         `INSERT INTO swap_meet (id, sharing_family_id, requesting_family_id, slate_id, message, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)`
-      ).run(swapMeetId, sharingFamilyId, requestingFamilyId, slateId, messages?.[slateId] || "", new Date().toISOString());
+      ).run(swapMeetId, sharingFamilyId, requestingFamilyId, slateId, messages?.[slateId] || null, new Date().toISOString());
 
-      // Create history entry
-      try {
-        rawDb.prepare(
-          `INSERT INTO job_history (id, job_id, action, details, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`
-        ).run(`jh-${Date.now()}-${Math.random().toString(36).slice(2, 4)}`, "swap", "swap_meet_request",
-          `Shared slate ${slateId} with family ${requestingFamilyId}`, userId, new Date().toISOString());
-      } catch (historyErr) {
-        error({ err: historyErr }, "Failed to create swap meet history");
-      }
       createdEntries.push({ id: swapMeetId, slateId });
     }
 
@@ -115,7 +102,7 @@ function calculateUpcomingAssignments(rotations: any[], startDate: Date, daysAhe
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + daysAhead);
     while (dateStr <= endDate.toISOString().split("T")[0]) {
-      assignments.push({ date: dateStr, userId: rotation.userId, isCurrent: false,
+      assignments.push({ date: dateStr, userId: rotation.user_id ?? rotation.userId, isCurrent: false,
         rotationId: rotation.id, order: rotation.order });
       const next = new Date(currentDate);
       next.setDate(next.getDate() + (rotation.interval_days || 7));

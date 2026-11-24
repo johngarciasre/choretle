@@ -9,8 +9,8 @@ Welcome! 🌟 You're about to learn how to earn points, complete chores, and kee
 ### Creating Your Account
 1. Open **Choretle** and click **Sign Up**.
 2. Enter your name, email, and password.
-3. Join your family using the code your parent shared with you.
-4. You're in! 🎉
+3. Enter the **family code** your parent shared with you in the "Family code" field. Signing up without a code creates a brand-new empty family instead of joining theirs.
+4. You land on **My Chores** straight away. 🎉
 
 ### Signing In
 - Go to **Sign In** and enter your email and password.
@@ -49,7 +49,7 @@ Up to three tasks are shown in a horizontal carousel. Each card shows:
 
 ## Your Tasks — The Kanban Board
 
-Go to **My Chores** → scroll down to see your full **Kanban board**. It has three columns:
+Tap **Board** in the top menu (or "Open my board" on My Chores) to see your full **Kanban board**. It has three columns:
 
 | Column | Meaning |
 |--------|---------|
@@ -58,11 +58,13 @@ Go to **My Chores** → scroll down to see your full **Kanban board**. It has th
 | **Done** ✅ | Tasks you've finished |
 
 ### How to Move a Task
-- **Start a task**: Drag it from **Todo → Doing** (or tap "Start Task")
-- **Continue a task**: Stay in **Doing** and tap "Continue" to see details
-- **Finish a task**: Drag it from **Doing → Done** (or mark it done on the detail page)
+- **Start a task**: Drag it from **Todo → Doing**, or hit the **Start** button on the card
+- **Continue a task**: Tap the task name to see the full details
+- **Finish a task**: Drag it from **Doing → Done**, or hit the **Done** button on the card
 
-When you drag a task to **Done**, you earn your points! ⭐
+Buttons work on tablets and phones, where dragging doesn't. When a task reaches **Done**, you earn your points! ⭐
+
+Chores marked "Requires Review" ask a parent to approve them: the button reads **Submit for review** and the card shows "Awaiting review" until they say yes.
 
 ### Task Detail Page
 Tap any task to see:

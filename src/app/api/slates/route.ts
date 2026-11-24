@@ -59,6 +59,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { name, description, roomLocation, frequency, interval, schedule, defaultDueDateOffset, isActive } = body;
 

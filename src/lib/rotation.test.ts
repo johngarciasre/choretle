@@ -31,12 +31,17 @@ describe("getRotationForDate", () => {
     expect(result).toBeNull();
   });
 
-  it("handles invalid createdAt by using fallback date", () => {
+  it("ignores an invalid createdAt and anchors on the earliest valid one", () => {
+    const base = new Date("2024-01-01");
     const rotations = [
-      { id: "r1", slateId: "slate-1", userId: "user-1", order: 0, intervalDays: 7, isActive: true },
+      { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true, createdAt: "not-a-date" },
+      { id: "r2", slateId: "slate-1", userId: "user-b", order: 1, intervalDays: 7, isActive: true, createdAt: base.toISOString() },
     ];
-    const result = getRotationForDate(rotations, "slate-1", new Date());
-    expect(result).toBeDefined();
+
+    // Anchored on 2024-01-01: day 0 -> user-a, day 7 -> user-b.
+    // If the invalid date were used, the day count would be NaN and no user returned.
+    expect(getRotationForDate(rotations, "slate-1", base)).toBe("user-a");
+    expect(getRotationForDate(rotations, "slate-1", new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000))).toBe("user-b");
   });
 
   it("respects intervalDays for rotation cycling — user-1 on first period", () => {
@@ -190,7 +195,7 @@ describe("getRotationSchedule", () => {
     expect(schedule).toEqual([]);
   });
 
-  it("returns one entry with same user when interval is larger than date range", () => {
+  it("returns one entry per day in the range, all inside the same rotation period", () => {
     const base = new Date("2024-01-01");
     const rotations = [
       { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 7, isActive: true },
@@ -199,12 +204,14 @@ describe("getRotationSchedule", () => {
 
     const schedule = getRotationSchedule(rotations, "slate-1", base, new Date(base.getTime() + 3 * 24 * 60 * 60 * 1000));
 
-    // Both dates fall within the same cycle period (epoch-based)
-    expect(schedule.length).toBe(4);
-    expect(schedule.every((s) => s.userId === "user-a" || s.userId === "user-b")).toBe(true);
+    // Jan 1-4 (4 days) and the epoch-anchored period has not flipped yet.
+    expect(schedule).toHaveLength(4);
+    expect(schedule.map((s) => s.userId)).toEqual(["user-a", "user-a", "user-a", "user-a"]);
+    expect(schedule[0].date.toISOString().slice(0, 10)).toBe("2024-01-01");
+    expect(schedule[3].date.toISOString().slice(0, 10)).toBe("2024-01-04");
   });
 
-  it("uses the correct intervalDays for scheduling", () => {
+  it("keeps one user for the whole first 14-day interval", () => {
     const base = new Date("2024-01-01");
     const rotations = [
       { id: "r1", slateId: "slate-1", userId: "user-a", order: 0, intervalDays: 14, isActive: true },
@@ -213,7 +220,7 @@ describe("getRotationSchedule", () => {
 
     const schedule = getRotationSchedule(rotations, "slate-1", base, new Date(base.getTime() + 5 * 24 * 60 * 60 * 1000));
 
-    // With 14-day interval, both should be same user for 7 days
+    expect(schedule).toHaveLength(6);
     expect(schedule.every((s) => s.userId === "user-a")).toBe(true);
   });
 });

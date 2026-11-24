@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { PageShell } from "@/components/ui/PageShell";
 import { Card } from "@/components/ui/Card";
 import { Badge, Button, EmptyState } from "@/components/ui";
 import { StatCard } from "@/components/ui/StatCard";
 import {
-  ListChecks, Trophy, User, Plus, Trash2, Loader2, ChevronDown,
+  ListChecks, Trophy, User, Plus, Loader2,
   Clock, CheckCircle2, AlertCircle, Star, Flame, Target,
 } from "lucide-react";
 import { error } from "@/lib/logger";
@@ -94,6 +93,155 @@ function formatRelative(iso: string): string {
 
 // ─── Parent View ────────────────────────────────────────────────────────
 
+interface FamilyMember {
+  id: string;
+  name: string;
+  role: string;
+}
+
+/**
+ * A one-off chore is a single job with no slate behind it. Leaving the assignee
+ * on "Anyone" puts it in the family's open pool for someone to grab.
+ */
+function OneOffChoreForm() {
+  const [open, setOpen] = useState(false);
+  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [name, setName] = useState("");
+  const [points, setPoints] = useState(10);
+  const [assignedTo, setAssignedTo] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleToggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (members.length > 0) return;
+    try {
+      const res = await fetch("/api/users", { credentials: "include" });
+      if (!res.ok) return;
+      const json = await res.json();
+      setMembers(json.users || []);
+    } catch {
+      // The member list is a convenience; an open-to-grab chore still works.
+    }
+  }
+
+  async function handleCreate() {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: name.trim(),
+          points,
+          assignedTo: assignedTo || undefined,
+          dueDate: dueDate || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to create chore");
+      }
+      window.location.reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to create chore");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="contents">
+      <Button variant="grape" icon={<Plus size={16} />} onClick={handleToggle}>
+        {open ? "Close" : "One-off Chore"}
+      </Button>
+
+      {open && (
+        <Card accent="coral" className="w-full p-5 space-y-4">
+          <div>
+            <h3 className="font-display text-lg font-bold text-ink">One-off chore</h3>
+            <p className="text-sm text-ink/60">
+              A chore that happens once. Leave the assignee on “Anyone” so someone can grab it.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label htmlFor="one-off-name" className="block text-sm font-bold text-ink mb-1">
+                Chore *
+              </label>
+              <input
+                id="one-off-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Mow the lawn"
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label htmlFor="one-off-points" className="block text-sm font-bold text-ink mb-1">
+                Points
+              </label>
+              <input
+                id="one-off-points"
+                type="number"
+                min={0}
+                value={points}
+                onChange={(e) => setPoints(parseInt(e.target.value) || 0)}
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="one-off-assignee" className="block text-sm font-bold text-ink mb-1">
+                Assign to
+              </label>
+              <select
+                id="one-off-assignee"
+                value={assignedTo}
+                onChange={(e) => setAssignedTo(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+              >
+                <option value="">Anyone — open to grab</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>{member.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="one-off-due" className="block text-sm font-bold text-ink mb-1">
+                Due date
+              </label>
+              <input
+                id="one-off-due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-ink/15 bg-white font-bold text-ink focus:border-grape focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Button variant="primary" onClick={handleCreate} disabled={saving || !name.trim()}>
+              {saving ? "Saving..." : "Create Chore"}
+            </Button>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function ParentDashboard({ data }: { data: ParentData }) {
   return (
     <div className="space-y-8">
@@ -105,13 +253,14 @@ function ParentDashboard({ data }: { data: ParentData }) {
       </div>
 
       {/* Quick Actions */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button variant="primary" href="/tasks/new" icon={<Plus size={16} />}>
           New Task
         </Button>
         <Button variant="ghost" href="/slates/new" icon={<Plus size={16} />}>
           New Slate
         </Button>
+        <OneOffChoreForm />
       </div>
 
       {/* Active Lists */}
@@ -362,7 +511,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - Dashboard");
+    if (typeof window !== "undefined") document.title = "Choretle - Dashboard";
     Promise.all([checkAuthInternal(), fetch("/api/dashboard", { credentials: "include" }).then((r) => r.json())]).then(([u, d]) => {
       if (u) setUser(u);
       setData(d as DashboardResponse);

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import crypto from "crypto";
 import { error } from "@/lib/logger.server";
+import { getRawDb } from "@/db/drizzle";
+import { clientKey, clearAttempts, tooManyAttempts } from "@/lib/rate-limit";
 
 const WEBSUDO_COOKIE = "webserversudo-session";
 const ELEVATION_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -68,16 +70,6 @@ function setWebsudoCookie(responseHeaders: Headers, payload: WebsudoPayload): vo
   );
 }
 
-/**
- * Clear websudo cookie.
- */
-function clearWebsudoCookie(responseHeaders: Headers): void {
-  responseHeaders.set(
-    "set-cookie",
-    `${WEBSUDO_COOKIE}=; path=/; secure=true; httponly=true`,
-  );
-}
-
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const password = (body?.password ?? "").toString();
@@ -98,17 +90,8 @@ export async function POST(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
-          for (const cookie of cookiesToSet) {
-            const { name, value, options } = cookie;
-            let cookieStr = `${name}=${value}`;
-            if (options) {
-              for (const [key, val] of Object.entries(options)) {
-                cookieStr += `; ${key}=${val}`;
-              }
-            }
-          }
-        },
+        // Cookies are returned on the response below, so nothing to stage here.
+        setAll(_cookiesToSet) {},
       },
     },
   );
@@ -123,6 +106,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const attemptKey = clientKey(request, "websudo");
+  if (tooManyAttempts(attemptKey)) {
+    return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
+  }
+
+  // Only a parent/admin may elevate. Role comes from our users table.
+  const rawDb = getRawDb();
+  const dbUser = rawDb?.prepare(`SELECT role FROM users WHERE id = ?`).get(session.user.id) as any;
+  if (!dbUser || !["parent", "admin"].includes(dbUser.role)) {
+    return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+  }
+
   // Verify the password by attempting to sign in
   const signInResult = await supabase.auth.signInWithPassword({
     email: session.user.email ?? "",
@@ -135,6 +130,7 @@ export async function POST(request: NextRequest) {
       { status: 401 },
     );
   }
+  clearAttempts(attemptKey);
 
   // Set elevated session cookie
   const payload: WebsudoPayload = {

@@ -6,7 +6,9 @@ metadata:
   labels:
     app: choretle
 spec:
-  replicas: 2
+  # SQLite is a single-file database: one replica owns it. Scale out only after
+  # moving to a shared database (see AGENTS.md).
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -33,6 +35,12 @@ spec:
             - secretKeyRef:
                 name: choretle-secrets
                 optional: true
+          env:
+            - name: SQLITE_PATH
+              value: /data/choretle.db
+          volumeMounts:
+            - name: data
+              mountPath: /data
           resources:
             requests:
               cpu: 100m
@@ -60,3 +68,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 2
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: choretle-data

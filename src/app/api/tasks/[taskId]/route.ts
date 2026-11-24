@@ -47,6 +47,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 
@@ -57,6 +62,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const rawDb = getRawDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
+    const owned = rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(taskId, familyId);
+    if (!owned) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+
     // Normalize tag field name — accept both 'tags' and 'tagIds' from client
     const resolvedTags = tags ?? body.tagIds;
 
@@ -64,14 +72,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const updates: string[] = ["name = ?", "description = ?", "points = ?", "icon = ?", "verify_required = ?", "schedule = ?", "updated_at = ?"];
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
     const values: any[] = [name || "", description || null, points || 0, icon || null, verifyRequired ? 1 : 0, scheduleStr || null, new Date().toISOString()];
-    values.push(taskId);
-    rawDb.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+    values.push(taskId, familyId);
+    rawDb.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ? AND family_id = ?`).run(...values);
 
     // Update tags if provided
     if (resolvedTags !== undefined) {
       rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ?`).run(taskId);
       for (const tagId of (resolvedTags || [])) {
-        rawDb.prepare(`INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`).run(`tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, taskId, tagId);
+        rawDb.prepare(`INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`).run(`tt-${crypto.randomUUID()}`, taskId, tagId);
       }
     }
 
@@ -99,6 +107,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
     if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
 

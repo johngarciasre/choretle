@@ -131,7 +131,8 @@ export class TestHarness {
   async invokeHandler(
     handlerPath: string,
     method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
-    body?: any
+    body?: any,
+    params?: Record<string, string>
   ): Promise<MockResponse> {
     const url = new URL(`${this.baseUrl}${handlerPath}`);
     
@@ -167,22 +168,29 @@ export class TestHarness {
     try {
       const relativePath = handlerPath.replace(/^\//, "").replace(/\?.*$/, "").replace(/\//g, "/");
       handlerModule = await import(`@/app/${relativePath}/route`);
-    } catch (e) {
+    } catch {
       return { status: 404, body: { error: "Handler not found" }, headers: {} };
     }
 
     // Invoke the appropriate handler method
     let response: Response;
+    const context = params ? [{ params: Promise.resolve(params) }] : [];
+    const handler = (handlerModule as any)[method];
+    if (typeof handler !== "function") {
+      // Mirrors what Next.js does for a route without that method, but with a
+      // distinct message so tests can tell it apart from an application 405.
+      return { status: 405, body: { error: "Method not found" }, headers: {} };
+    }
     if (method === "GET") {
-      response = await handlerModule.GET(req);
+      response = await handler(req, ...context);
     } else if (method === "POST") {
-      response = await handlerModule.POST(req);
+      response = await handler(req, ...context);
     } else if (method === "PUT") {
-      response = await handlerModule.PUT(req);
+      response = await handler(req, ...context);
     } else if (method === "DELETE") {
-      response = await handlerModule.DELETE(req);
+      response = await handler(req, ...context);
     } else if (method === "PATCH") {
-      response = await handlerModule.PATCH?.(req) || handlerModule.PUT?.(req) || new Response("Not found", { status: 404 });
+      response = await handler(req, ...context);
     } else {
       return { status: 405, body: { error: "Method not allowed" }, headers: {} };
     }
@@ -237,9 +245,14 @@ export class TestHarness {
 
   /**
    * Sign up a new user (idempotent — safe to call even if they already exist).
+   * Throws when signup fails, so a broken route cannot be mistaken for success.
    */
   async signUp(email: string, name?: string, password = "test"): Promise<MockResponse> {
-    return this.invokeHandler("/api/auth/signup", "POST", { email, name: name || email, password });
+    const res = await this.invokeHandler("/api/auth/signup", "POST", { email, name: name || email, password });
+    if (res.status !== 200) {
+      throw new Error(`signUp(${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
+    }
+    return res;
   }
 
   /**
@@ -249,7 +262,11 @@ export class TestHarness {
   async signIn(email: string, password = "test"): Promise<MockResponse> {
     // Ensure user exists before signing in (dev mode requires pre-existing accounts)
     await this.signUp(email, undefined, password);
-    return this.invokeHandler("/api/auth/signin", "POST", { email, password });
+    const res = await this.invokeHandler("/api/auth/signin", "POST", { email, password });
+    if (res.status !== 200) {
+      throw new Error(`signIn(${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
+    }
+    return res;
   }
 
   /**
@@ -259,32 +276,6 @@ export class TestHarness {
     const response = await this.invokeHandler("/api/auth/signout", "POST");
     this.jar.clear();
     return response;
-  }
-
-  /**
-   * Create a mock family via the API and return the family ID.
-   */
-  async createFamily(name: string, slug: string): Promise<string> {
-    const res = await this.invokeHandler("/api/family", "POST", {
-      name,
-      slug,
-    });
-    if (res.status !== 200) return "";
-    return res.body.id || "";
-  }
-
-  /**
-   * Create a mock user via the API.
-   */
-  async createUser(email: string, name: string, role = "child", familyId?: string): Promise<string> {
-    const res = await this.invokeHandler("/api/users", "POST", {
-      email,
-      name,
-      role,
-      ...(familyId && { familyId }),
-    });
-    if (res.status !== 200) return "";
-    return res.body.id || "";
   }
 
   /**

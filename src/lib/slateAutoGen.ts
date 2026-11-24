@@ -118,16 +118,14 @@ export async function generateJobsFromSlate(
     createdAt: r.created_at || r.createdAt,
   }));
 
-  // Map resolveSlateTaskSet output to calculateRotationAssignment input shape.
-  // resolveSlateTaskSet returns { taskId, pointsOverride, order, isExplicit },
-  // but calculateRotationAssignment expects { id, slateId }.
-
-  // Determine assignments using filtered tasks
+  // Determine assignments using filtered tasks.
+  // calculateRotationAssignment works on ids only; use the slate_tasks row id
+  // because that is what jobs.slate_task_id stores.
   let assignments: Map<string, string[]> = new Map();
 
   if (normalizedRotations && normalizedRotations.length > 0) {
     assignments = calculateRotationAssignment(filteredTasks.map((st: any) => ({
-      id: st.taskId,
+      id: st.slateTaskId,
       slateId,
     })), normalizedRotations, targetDate);
   } else {
@@ -135,7 +133,7 @@ export async function generateJobsFromSlate(
     for (const slateTask of filteredTasks) {
       const job = await createJob({
         listId: list.id,
-        slateTaskId: slateTask.taskId,
+        slateTaskId: slateTask.slateTaskId,
         name: slateTask.taskName || `Task ${slateTask.taskId.slice(-6)}`,
         points: slateTask.pointsOverride || 0,
         status: "todo",
@@ -145,7 +143,7 @@ export async function generateJobsFromSlate(
       if (job?.id) {
         await createListTask({
           listId: list.id,
-          slateTaskId: slateTask.taskId,
+          slateTaskId: slateTask.slateTaskId,
           pointsOverride: slateTask.pointsOverride,
         });
       }
@@ -156,14 +154,14 @@ export async function generateJobsFromSlate(
   // Create jobs for each rotation assignment using filtered tasks
   const result: GeneratedJob[] = [];
 
-  for (const [userId, taskIds] of assignments.entries()) {
-    for (const slateTaskId of taskIds) {
-      const slateTask = filteredTasks.find((st: any) => st.taskId === slateTaskId);
+  for (const [userId, slateTaskIds] of assignments.entries()) {
+    for (const slateTaskId of slateTaskIds) {
+      const slateTask = filteredTasks.find((st: any) => st.slateTaskId === slateTaskId);
       if (!slateTask) continue;
 
       const job = await createJob({
         listId: list.id,
-        slateTaskId: slateTask.taskId,
+        slateTaskId: slateTask.slateTaskId,
         assignedTo: userId,
         name: slateTask.taskName || `Task ${slateTask.taskId.slice(-6)}`,
         points: slateTask.pointsOverride || 0,
@@ -174,15 +172,29 @@ export async function generateJobsFromSlate(
       if (job?.id) {
         await createListTask({
           listId: list.id,
-          slateTaskId: slateTask.taskId,
+          slateTaskId: slateTask.slateTaskId,
           pointsOverride: slateTask.pointsOverride,
         });
-        result.push(job);
+        result.push(toGeneratedJob(job, targetDate));
       }
     }
   }
 
   return result;
+}
+
+/** DB rows are snake_case; the API contract for generation is camelCase. */
+function toGeneratedJob(job: any, dueDate: Date): GeneratedJob {
+  return {
+    id: job.id,
+    listId: job.list_id,
+    slateTaskId: job.slate_task_id,
+    assignedTo: job.assigned_to || undefined,
+    name: job.name,
+    points: job.points || 0,
+    status: job.status,
+    dueDate: job.due_date ? new Date(job.due_date) : dueDate,
+  };
 }
 
 /**

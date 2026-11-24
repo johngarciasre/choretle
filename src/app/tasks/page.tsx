@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageShell, PageHeader, EmptyState, PageLoader, Card, Badge } from "@/components/ui";
 import { TagPill } from "@/components/ui";
-import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 interface Task {
@@ -52,7 +51,7 @@ export default function TasksPage() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - Tasks");
+    if (typeof window !== "undefined") document.title = "Choretle - Tasks";
     Promise.all([fetchTasks(), fetchTags()]).then(([tasksData, tagsData]) => {
       setTasks(tasksData || []);
       setTags(tagsData || []);

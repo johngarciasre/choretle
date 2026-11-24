@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { PageShell, Card, Badge, PageLoader } from "@/components/ui";
+import { PageShell, Card, PageLoader } from "@/components/ui";
 import { TagPill, Button } from "@/components/ui";
 import { ScheduleEditor } from "@/components/ScheduleEditor";
-import { X } from "lucide-react";
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
@@ -53,7 +52,7 @@ export default function NewTaskPage() {
   });
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - New Task");
+    if (typeof window !== "undefined") document.title = "Choretle - New Task";
     Promise.all([fetchTags()]).then(([tagsData]) => {
       setTags(tagsData || []);
       setLoading(false);

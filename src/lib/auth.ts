@@ -1,13 +1,13 @@
 /**
  * Shared Auth Verification for API Routes
  *
- * Works in both production (middleware headers) and dev mode / Turbopack
- * (cookie fallback). Turbopack doesn't run Next.js middleware, so routes
- * must self-authenticate to work locally.
+ * Works in both production (middleware headers) and dev mode (signed cookie).
+ * The database is the source of truth for the user's family and role, so a
+ * stale cookie cannot grant access to a family the user does not belong to.
  */
 
 import { NextRequest } from "next/server";
-import { parseDevSession } from "./dev-auth";
+import { getDevUserFromRequest } from "./dev-auth";
 import { getRawDb } from "@/db/drizzle";
 
 export interface AuthResult {
@@ -16,70 +16,60 @@ export interface AuthResult {
   role?: string;
 }
 
-/**
- * Verifies authentication by checking middleware headers first, then falling
- * back to dev-session cookie. Returns the authenticated user + family ID,
- * or null if not authenticated.
- *
- * Order of precedence:
- *   1. x-user-id / x-family-id headers (set by middleware in production)
- *   2. dev-session cookie (set by signin route in dev mode)
- */
+interface DbUser {
+  id: string;
+  family_id: string | null;
+  role: string | null;
+}
+
+function lookupUser(userId: string): DbUser | null {
+  const rawDb = getRawDb();
+  if (!rawDb) return null;
+  try {
+    return (rawDb.prepare(`SELECT id, family_id, role FROM users WHERE id = ?`).get(userId) as DbUser) || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Extracts just the userId from a request (without requiring familyId).
  * Used by routes that need to authenticate a user who may not yet have a family.
  */
-export function extractUserId(request: NextRequest): string | null {
-  // Middleware headers — works in production AND dev when middleware runs
-  const userId = request.headers.get("x-user-id");
-  if (userId) return userId;
+export async function extractUserId(request: NextRequest): Promise<string | null> {
+  const headerUserId = request.headers.get("x-user-id");
+  if (headerUserId) return headerUserId;
 
-  // Cookie fallback — needed when Turbopack doesn't run middleware
-  const cookieHeader = request.headers.get("cookie") || "";
-  const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
-
-  if (setCookie) {
-    const value = setCookie.replace("dev-session=", "").trim();
-    const user = parseDevSession(value);
-    if (user) {
-      return user.id;
-    }
-  }
-
-  return null;
+  const cookieUser = await getDevUserFromRequest(request);
+  return cookieUser?.id ?? null;
 }
 
+/**
+ * Verifies authentication. Returns the authenticated user + family ID,
+ * or null if not authenticated.
+ *
+ * Order of precedence:
+ *   1. x-user-id header (set by middleware in production and dev)
+ *   2. signed dev-session cookie (dev mode only)
+ *
+ * In both cases family and role come from the users table when the row exists.
+ */
 export async function verifyAuth(request: NextRequest): Promise<AuthResult | null> {
-  // Middleware headers — works in production AND dev when middleware runs
-  const userId = request.headers.get("x-user-id");
-  const familyId = request.headers.get("x-family-id");
+  const headerUserId = request.headers.get("x-user-id") || "";
+  const cookieUser = headerUserId ? null : await getDevUserFromRequest(request);
+  const userId = headerUserId || cookieUser?.id || "";
 
-  if (userId && familyId) {
-    return { userId, familyId };
+  if (!userId) return null;
+
+  const dbUser = lookupUser(userId);
+  if (dbUser?.family_id) {
+    return { userId: dbUser.id, familyId: dbUser.family_id, role: dbUser.role || "child" };
   }
 
-  // Cookie fallback — needed when Turbopack doesn't run middleware.
-  // Query the DB for fresh role/family_id instead of trusting stale cookie values.
-  const cookieHeader = request.headers.get("cookie") || "";
-  const setCookie = cookieHeader.split(";").find((c) => c.includes("dev-session"));
+  // No family row yet (e.g. a brand-new account): fall back to trusted headers
+  // or the signed cookie so onboarding routes can still identify the user.
+  const familyId = request.headers.get("x-family-id") || cookieUser?.familyId || "";
+  if (!familyId) return null;
 
-  if (setCookie) {
-    const value = setCookie.replace("dev-session=", "").trim();
-    const user = parseDevSession(value);
-    if (user) {
-      const rawDb = getRawDb();
-      if (rawDb) {
-        const dbUser = rawDb.prepare(`SELECT id, family_id, role FROM users WHERE id = ?`).get(user.id) as any;
-        if (dbUser?.family_id) {
-          return { userId: dbUser.id, familyId: dbUser.family_id, role: dbUser.role };
-        }
-      }
-      // Fallback to cookie values if DB not available
-      if (user.familyId) {
-        return { userId: user.id, familyId: user.familyId };
-      }
-    }
-  }
-
-  return null;
+  return { userId, familyId, role: dbUser?.role || cookieUser?.role || "child" };
 }

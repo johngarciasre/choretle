@@ -8,7 +8,7 @@ import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 export default function RotationsPage() {
   const authChecked = useAuthRedirect();
   useEffect(() => {
-    typeof window !== 'undefined' && (document.title = "Choretle - Rotations");
+    if (typeof window !== "undefined") document.title = "Choretle - Rotations";
   }, []);
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;

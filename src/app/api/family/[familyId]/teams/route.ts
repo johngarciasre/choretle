@@ -12,6 +12,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const familyId = (await params).familyId;
+    if (familyId !== auth.familyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
 
     const teams = rawDb.prepare(`SELECT * FROM teams WHERE family_id = ?`).all(familyId) as any[];
     const teamsWithMembers: any[] = [];
@@ -37,9 +40,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { name } = body;
     const familyId = (await params).familyId;
+    if (familyId !== auth.familyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
 
     if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
@@ -47,7 +57,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const now = new Date().toISOString();
-    const teamId = `team-${Date.now()}`;
+    const teamId = `team-${crypto.randomUUID()}`;
     rawDb.prepare(`INSERT INTO teams (id, family_id, name, logo_url, created_at) VALUES (?, ?, ?, NULL, ?)`).run(teamId, familyId, name, now);
 
     const result = rawDb.prepare(`SELECT * FROM teams WHERE id = ?`).get(teamId) as any;

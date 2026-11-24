@@ -1,6 +1,6 @@
 "use client";
 
-import { Star, ListChecks, Sparkles, Trophy, Heart, Smile, Gift } from "lucide-react";
+import { Star, Sparkles, Heart, Smile, Gift } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageShell } from "@/components/ui/PageShell";

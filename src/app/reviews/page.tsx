@@ -45,8 +45,10 @@ export default function ReviewQueuePage() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    typeof window !== "undefined" && (document.title = "Choretle - Review Queue");
+    if (typeof window !== "undefined") document.title = "Choretle - Review Queue";
     fetchReviews();
+    // fetchReviews closes over `filter`, which is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   async function fetchReviews() {
@@ -140,7 +142,7 @@ export default function ReviewQueuePage() {
 
                 {review.notes && (
                   <p className="text-sm text-ink/70 italic bg-cream p-3 rounded-xl">
-                    "{review.notes}"
+                    &quot;{review.notes}&quot;
                   </p>
                 )}
 

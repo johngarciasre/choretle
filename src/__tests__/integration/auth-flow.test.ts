@@ -25,7 +25,7 @@ describe("Auth Flow Integration", () => {
     expect(res.body.role).toBe("parent");
   });
 
-  it("first user to sign up gets parent role on signup route", async () => {
+  it("signing up without an invite makes you a parent of a new family", async () => {
     const harness = new TestHarness();
     // Reset DB for clean state
     resetDb();
@@ -37,11 +37,15 @@ describe("Auth Flow Integration", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
-    // First user should be parent (checked via /api/auth/me)
+    expect(res.body.role).toBe("parent");
+    expect(res.body.familyId).toBeTruthy();
+
+    const me = await harness.invokeHandler("/api/auth/me", "GET");
+    expect(me.body.user.role).toBe("parent");
+    expect(me.body.familyId).toBe(res.body.familyId);
   });
 
-  it("GET /api/auth/me without cookie returns 401", async () => {
+  it("GET /api/auth/me without a cookie reports unauthenticated", async () => {
     const harness = new TestHarness();
     const res = await harness.invokeHandler("/api/auth/me", "GET");
 
@@ -81,19 +85,19 @@ describe("Auth Flow Integration", () => {
     expect(protectedRes.body.authenticated).toBe(false);
   });
 
-  it("Multiple sign-ins replace the session cookie", async () => {
+  it("each new account gets its own family instead of joining the first one", async () => {
     const harness = new TestHarness();
-    
-    // Sign in first time
+
     resetDb();
-    await harness.signIn("admin@choretle.dev");
+    const first = await harness.signIn("first@choretle.dev");
+    expect(first.body.role).toBe("parent");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
-    // Sign in again — should create a new user with parent role (first user)
-    const res = await harness.signIn("second@choretle.dev");
-    expect(res.status).toBe(200);
-    // Second user should be child since first is already parent
-    expect(res.body.role).toBe("child");
+    const second = await harness.signIn("second@choretle.dev");
+    expect(second.status).toBe(200);
+    expect(second.body.role).toBe("parent");
+    expect(second.body.familyId).toBeTruthy();
+    expect(second.body.familyId).not.toBe(first.body.familyId);
   });
 
   it("GET /api/auth/signup returns session info when logged in", async () => {

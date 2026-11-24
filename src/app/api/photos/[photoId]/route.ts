@@ -12,7 +12,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const photoId = (await params).photoId;
-    rawDb.prepare(`DELETE FROM photos WHERE id = ?`).run(photoId);
+    const result = rawDb.prepare(`DELETE FROM photos WHERE id = ? AND family_id = ?`).run(photoId, auth.familyId);
+    if (result.changes === 0) return NextResponse.json({ error: "Photo not found" }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Delete photo failed");

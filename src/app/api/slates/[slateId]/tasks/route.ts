@@ -10,14 +10,34 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const rawDb = getRawDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     const slateId = (await params).slateId;
+    if (!rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, auth.familyId)) {
+      return NextResponse.json({ error: "Slate not found" }, { status: 404 });
+    }
+
     const body = await request.json();
     const { explicitTaskIds, autoIncludeTagIds } = body as { explicitTaskIds?: string[]; autoIncludeTagIds?: string[] };
+
+    // Every referenced task/tag must belong to the same family.
+    for (const taskId of explicitTaskIds || []) {
+      if (!rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(taskId, auth.familyId)) {
+        return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      }
+    }
+    for (const tagId of autoIncludeTagIds || []) {
+      if (!rawDb.prepare(`SELECT id FROM tags WHERE id = ? AND family_id = ?`).get(tagId, auth.familyId)) {
+        return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+      }
+    }
 
     // Delete existing slate tasks for this slate
     rawDb.prepare(`DELETE FROM slate_tasks WHERE slate_id = ?`).run(slateId);
@@ -71,6 +91,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const slateId = (await params).slateId;
+    if (!rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, auth.familyId)) {
+      return NextResponse.json({ error: "Slate not found" }, { status: 404 });
+    }
 
     // Get explicit tasks for this slate using raw SQL
     const slateTasks = rawDb.prepare(`

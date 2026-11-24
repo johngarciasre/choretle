@@ -12,6 +12,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const { familyId, teamId } = await params;
+    if (familyId !== auth.familyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
 
     const members = rawDb.prepare(
       `SELECT tm.*, u.name as user_name, u.avatar_url FROM team_members tm LEFT JOIN users u ON tm.user_id = u.id WHERE tm.team_id = ?`
@@ -30,9 +33,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { userId } = body;
     const { familyId, teamId } = await params;
+    if (familyId !== auth.familyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
 
     if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
 
@@ -52,7 +62,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (existingMemberRows) return NextResponse.json({ error: "User already in team" }, { status: 409 });
 
     const now = new Date().toISOString();
-    const memberId = `tm-${Date.now()}`;
+    const memberId = `tm-${crypto.randomUUID()}`;
     rawDb.prepare(`INSERT INTO team_members (id, team_id, user_id, joined_at) VALUES (?, ?, ?, ?)`).run(memberId, teamId, userId, now);
 
     return NextResponse.json({ success: true });
@@ -67,9 +77,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
+    if (auth.role !== "parent") {
+      return NextResponse.json({ error: "Parent access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { userId } = body;
     const { familyId, teamId } = await params;
+    if (familyId !== auth.familyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
 
     if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
 

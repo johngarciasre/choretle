@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { getDevUserFromRequest, createDevSession, setDevSessionCookie, DEV_COOKIE_NAME } from "@/lib/dev-auth";
+import { getDevUserFromRequest, createDevSession, setDevSessionCookie } from "@/lib/dev-auth";
 
 const PUBLIC_ROUTES = [
   "/_next/static",
@@ -16,9 +16,17 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/signout",
   "/api/auth/me",
   "/api/auth/websudo",
-  "/api/schedules/generate",
   "/api/family/join",
 ];
+
+const WEBSUDO_COOKIE = "webserversudo-session";
+
+interface AuthHeaders {
+  userId: string;
+  email: string;
+  role: string;
+  familyId: string;
+}
 
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -39,49 +47,48 @@ async function getSessionFromSupabase(request: NextRequest) {
   }
 }
 
-async function checkWebsudoAuth(request: NextRequest): Promise<boolean> {
-  const cookieHeader = request.headers.get("cookie") || "";
-  const setCookie = cookieHeader.split(";").find((c) => c.includes("webserversudo-session"));
+/**
+ * Verify a websudo elevation cookie. Returns the payload, or null.
+ * Refuses to verify without WEBSUDO_SECRET — there is no default secret.
+ */
+async function readWebsudoAuth(request: NextRequest): Promise<Record<string, unknown> | null> {
+  const secret = process.env.WEBSUDO_SECRET;
+  if (!secret) return null;
 
-  if (!setCookie) return false;
+  const cookieHeader = request.headers.get("cookie") || "";
+  const setCookie = cookieHeader.split(";").find((c) => c.includes(WEBSUDO_COOKIE));
+  if (!setCookie) return null;
 
   try {
-    const value = setCookie.replace("webserversudo-session=", "").trim();
-    const [json, hash] = value.split(".");
+    const value = setCookie.replace(`${WEBSUDO_COOKIE}=`, "").trim();
+    const dot = value.lastIndexOf(".");
+    if (dot <= 0) return null;
 
-    if (!json || !hash) return false;
-
+    const json = value.slice(0, dot);
+    const hash = value.slice(dot + 1);
     const payload = JSON.parse(json);
-    if (Date.now() >= payload.exp) return false;
+    if (Date.now() >= payload.exp) return null;
 
-    const secret = process.env.WEBSUDO_SECRET || "dev-websudo-secret-change-me";
-    const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw",
-      encoder.encode(secret),
+      new TextEncoder().encode(secret),
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"],
     );
-    const signature = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      encoder.encode(json),
-    );
+    const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(json));
     const expectedHash = Array.from(new Uint8Array(signature))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    if (hash.length !== expectedHash.length) return false;
+    if (hash.length !== expectedHash.length) return null;
+    let diff = 0;
     for (let i = 0; i < hash.length; i++) {
-      if (hash.charCodeAt(i) !== expectedHash.charCodeAt(i)) {
-        return false;
-      }
+      diff |= hash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
     }
-
-    return true;
+    return diff === 0 ? payload : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -91,62 +98,69 @@ function setNoCacheHeaders(response: NextResponse): void {
   response.headers.set("Expires", "0");
 }
 
+/**
+ * Build a response that carries the auth identity to the route handler.
+ * Next.js only forwards headers to handlers when they are set on the
+ * request passed to NextResponse.next({ request }), not on the response.
+ */
+function nextWithAuth(request: NextRequest, auth: AuthHeaders): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-user-id", auth.userId);
+  requestHeaders.set("x-email", auth.email);
+  requestHeaders.set("x-role", auth.role);
+  requestHeaders.set("x-family-id", auth.familyId);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("x-middleware-test", "running");
+  setNoCacheHeaders(response);
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const pathname = requestUrl.pathname;
-
-  // Test: add header to ALL responses to verify middleware is running
-  const response = NextResponse.next();
-  response.headers.set("x-middleware-test", "running");
 
   // ─── Check if route is public ────────────────────────────────────────
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
   const isPublicApiRoute = PUBLIC_API_ROUTES.some((route) => pathname.startsWith(route));
 
   if (isPublicRoute || isPublicApiRoute) {
+    const response = NextResponse.next();
+    response.headers.set("x-middleware-test", "running");
     return response;
   }
 
   // ─── Production Mode: Verify Supabase session and set auth headers ──
   if (!isDevMode()) {
-    const websudoValid = await checkWebsudoAuth(request);
-    if (websudoValid) {
-      const cookieHeader = request.headers.get("cookie") || "";
-      const setCookie = cookieHeader.split(";").find((c) => c.includes("webserversudo-session"));
-      if (setCookie) {
-        try {
-          const value = setCookie.replace("webserversudo-session=", "").trim();
-          const [json] = value.split(".");
-          const payload: Record<string, unknown> = JSON.parse(json);
-
-          response.headers.set("x-user-id", String(payload.userId || ""));
-          response.headers.set("x-email", String(payload.email || ""));
-          response.headers.set("x-role", "superadmin");
-          response.headers.set("x-family-id", "");
-          setNoCacheHeaders(response);
-          return response;
-        } catch {
-          // Invalid websudo session, fall through to redirect
-        }
-      }
+    const websudo = await readWebsudoAuth(request);
+    if (websudo) {
+      return nextWithAuth(request, {
+        userId: String(websudo.userId || ""),
+        email: String(websudo.email || ""),
+        role: "superadmin",
+        familyId: "",
+      });
     }
 
     const result = await getSessionFromSupabase(request);
 
     if (result?.data?.session) {
-      setNoCacheHeaders(response);
+      const user = result.data.session.user;
 
-      // Set user info from Supabase session (familyId will be resolved by API routes via /api/auth/me)
-      response.headers.set("x-user-id", result.data.session.user?.id || "");
-      response.headers.set("x-email", result.data.session.user?.email || "");
-      response.headers.set("x-role", "child");
-
-      // Redirect authenticated users from landing page to family
       if (pathname === "/") {
-        return NextResponse.redirect(new URL("/family", request.url));
+        const redirect = NextResponse.redirect(new URL("/family", request.url));
+        setNoCacheHeaders(redirect);
+        return redirect;
       }
 
-      return response;
+      // familyId and the authoritative role are resolved from the database by
+      // verifyAuth(); middleware runs on the edge and cannot open SQLite.
+      return nextWithAuth(request, {
+        userId: user?.id || "",
+        email: user?.email || "",
+        role: (user?.user_metadata?.role as string) || "child",
+        familyId: "",
+      });
     }
 
     // No valid session — redirect to signin
@@ -156,25 +170,13 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Dev Mode: Check or auto-create dev session cookie ──────────────
-  let devUser = getDevUserFromRequest(request);
+  let devUser = await getDevUserFromRequest(request);
+  let newSession = null;
 
   if (!devUser) {
     // Auto-login: create a fresh random identity on first visit (e.g. after server restart).
-    // Set-Cookie only takes effect once — the browser stores it and sends it on subsequent requests,
-    // so this won't regenerate on every request.
-    const session = createDevSession();
-    setDevSessionCookie(response.headers, session);
-    devUser = session.user;
-  }
-
-  // Allow requests to auth pages through (so they can show forms)
-  if (pathname.startsWith("/auth/signin") || pathname.startsWith("/auth/signup")) {
-    response.headers.set("x-user-id", devUser.id);
-    response.headers.set("x-email", devUser.email);
-    response.headers.set("x-role", devUser.role);
-    response.headers.set("x-family-id", devUser.familyId || "");
-    setNoCacheHeaders(response);
-    return response;
+    newSession = createDevSession();
+    devUser = newSession.user;
   }
 
   // Redirect dev users from landing page to family
@@ -182,15 +184,21 @@ export async function middleware(request: NextRequest) {
     const redirectUrl = devUser.familyId ? `/family/${devUser.familyId}` : "/family";
     const redirect = NextResponse.redirect(new URL(redirectUrl, request.url));
     setNoCacheHeaders(redirect);
+    if (newSession) await setDevSessionCookie(redirect.headers, newSession);
     return redirect;
   }
 
-  // Set user headers for protected routes
-  response.headers.set("x-user-id", devUser.id);
-  response.headers.set("x-email", devUser.email);
-  response.headers.set("x-role", devUser.role);
-  response.headers.set("x-family-id", devUser.familyId || "");
-  setNoCacheHeaders(response);
+  // Set user headers for protected routes (also auth pages, so they can render)
+  const response = nextWithAuth(request, {
+    userId: devUser.id,
+    email: devUser.email,
+    role: devUser.role,
+    familyId: devUser.familyId || "",
+  });
+
+  if (newSession) {
+    await setDevSessionCookie(response.headers, newSession);
+  }
 
   return response;
 }

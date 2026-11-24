@@ -1,9 +1,13 @@
 /**
  * Development Auth Bypass Module
- * 
+ *
  * When AUTH_MODE=dev, this module provides a mock authentication system
  * that lets you demo the app without Supabase. It generates random fake users
- * and manages them via cookies.
+ * and manages them via signed cookies.
+ *
+ * The cookie is HMAC-signed with WEBSUDO_SECRET (or a local dev fallback), and
+ * it is only accepted when AUTH_MODE === "dev", so a forged cookie can never
+ * authenticate against a production deployment.
  */
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -24,6 +28,22 @@ export interface DevSession {
 
 export const DEV_COOKIE_NAME = "dev-session";
 
+const devSecret = (): string => process.env.WEBSUDO_SECRET || "choretle-local-dev-session";
+
+async function hmacHex(data: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(devSecret()),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /**
  * Generate a random fake UUID for dev mode users.
  */
@@ -38,8 +58,8 @@ function generateFakeId(): string {
  */
 export function createDevSession(options?: { userId?: string }): DevSession {
   const userId = options?.userId || generateFakeId();
-  
-  return { 
+
+  return {
     user: {
       id: userId,
       email: options?.userId ? `${options.userId}@choretle.dev` : `user-${Math.random().toString(36).substring(2, 8)}@choretle.dev`,
@@ -51,7 +71,8 @@ export function createDevSession(options?: { userId?: string }): DevSession {
 }
 
 /**
- * Parses and validates a dev session from a cookie value.
+ * Parses an (already signature-checked) dev session from a cookie value.
+ * Not a trust boundary on its own — use verifyDevSession() for that.
  */
 export function parseDevSession(cookieValue?: string): DevUser | null {
   if (!cookieValue) return null;
@@ -73,44 +94,71 @@ export function parseDevSession(cookieValue?: string): DevUser | null {
 }
 
 /**
- * Gets the dev user from the request cookies.
+ * Signs a dev session into a cookie value: `<encoded-json>.<hmac>`.
  */
-export function getDevUserFromRequest(request: Request): DevUser | null {
+export async function signDevSession(session: DevSession): Promise<string> {
+  const json = JSON.stringify(session);
+  return `${encodeURIComponent(json)}.${await hmacHex(json)}`;
+}
+
+/**
+ * Verifies the HMAC on a dev session cookie and returns the user.
+ */
+export async function verifyDevSession(cookieValue?: string): Promise<DevUser | null> {
+  if (!cookieValue) return null;
+
+  const dot = cookieValue.lastIndexOf(".");
+  if (dot <= 0) return null;
+
+  const encoded = cookieValue.slice(0, dot);
+  const signature = cookieValue.slice(dot + 1);
+
+  let json: string;
+  try {
+    json = decodeURIComponent(encoded);
+  } catch {
+    return null;
+  }
+
+  const expected = await hmacHex(json);
+  if (signature.length !== expected.length) return null;
+
+  let diff = 0;
+  for (let i = 0; i < signature.length; i++) {
+    diff |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+  if (diff !== 0) return null;
+
+  return parseDevSession(encoded);
+}
+
+/**
+ * Gets the dev user from the request cookies.
+ * Returns null unless AUTH_MODE=dev, so a dev cookie can never authenticate
+ * against a production deployment.
+ */
+export async function getDevUserFromRequest(request: Request): Promise<DevUser | null> {
+  if (process.env.AUTH_MODE !== "dev") return null;
+
   const cookieHeader = request.headers.get("cookie") || "";
   const setCookie = cookieHeader.split(";").find((c) => c.includes(DEV_COOKIE_NAME));
-
   if (!setCookie) return null;
 
   const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
-  return parseDevSession(value);
+  return verifyDevSession(value);
 }
 
 /**
- * Sets a dev session cookie on response headers.
- * Uses encodeURIComponent for reliable cookie values (URL-safe).
+ * Sets a signed dev session cookie on response headers.
  */
-export function setDevSessionCookie(
-  responseHeaders: Headers, 
+export async function setDevSessionCookie(
+  responseHeaders: Headers,
   session: DevSession
-): void {
-  const encoded = encodeURIComponent(JSON.stringify(session));
+): Promise<void> {
+  const signed = await signDevSession(session);
   responseHeaders.set(
     "set-cookie",
-    `${DEV_COOKIE_NAME}=${encoded}; path=/; secure=false; httpOnly=true`
-  );
-}
-
-/**
- * Sets a dev session cookie on response headers (alternative name).
- */
-export function setDevSessionOnResponse(
-  responseHeaders: Headers, 
-  session: DevSession
-): void {
-  const encoded = encodeURIComponent(JSON.stringify(session));
-  responseHeaders.set(
-    "set-cookie",
-    `${DEV_COOKIE_NAME}=${encoded}; path=/; secure=false; httpOnly=true`
+    `${DEV_COOKIE_NAME}=${signed}; path=/; samesite=lax; secure=false; httpOnly=true`
   );
 }
 
@@ -120,7 +168,7 @@ export function setDevSessionOnResponse(
 export function clearDevSessionCookie(responseHeaders: Headers): void {
   responseHeaders.set(
     "set-cookie",
-    `${DEV_COOKIE_NAME}=; path=/; secure=false; httpOnly=true`
+    `${DEV_COOKIE_NAME}=; path=/; samesite=lax; secure=false; httpOnly=true`
   );
 }
 
@@ -139,7 +187,7 @@ export async function verifyDevAuth(
   }
 
   const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
-  const user = parseDevSession(value);
+  const user = await verifyDevSession(value);
 
   if (!user) {
     return { error: "Invalid dev session" };
@@ -154,7 +202,7 @@ export async function verifyDevAuth(
 export async function getDemoDevUser(
   request: Request
 ): Promise<DevUser | { error: string }> {
-  const existing = getDevUserFromRequest(request);
+  const existing = await getDevUserFromRequest(request);
   if (existing) return existing;
 
   // Create a default session for the user

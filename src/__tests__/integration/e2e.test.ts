@@ -1,175 +1,95 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
+import { resetDb, getRawDb } from "@/db/drizzle";
+import { signInAndGetFamily, createListFixture } from "./fixtures";
 
-describe("E2E — Full Workflow: Family Setup → Jobs → Rotations", () => {
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+describe("E2E — Full Workflow: tasks → slate → rotation → generated jobs → points", () => {
   beforeEach(() => {
     resetDb();
   });
 
-  it("Complete workflow: create family → slates → jobs → rotations", async () => {
+  it("generates a job from a slate, assigns it, completes it and scores it once", async () => {
     const harness = new TestHarness();
-    
-    // Step 1: Sign in as parent (auto-creates a family)
-    await harness.signIn("admin@choretle.dev");
-    expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
+    const { userId } = await signInAndGetFamily(harness, "parent@choretle.dev");
 
-    // Get the auto-created family ID
-    const meRes = await harness.invokeHandler("/api/auth/me", "GET");
-    expect(meRes.status).toBe(200);
-    expect(meRes.body.familyId).toBeTruthy();
-    const familyId = meRes.body.familyId;
+    // A task worth 7 points
+    const taskRes = await harness.invokeHandler("/api/tasks", "POST", { name: "Wash dishes", points: 7 });
+    expect(taskRes.status).toBe(200);
+    const taskId = taskRes.body.id;
 
-    // Step 2: Create a slate (using the auto-created family)
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "E2E Slate",
-      familyId,
-    });
+    // A slate holding that task
+    const slateRes = await harness.invokeHandler("/api/slates", "POST", { name: "Kitchen", frequency: "daily" });
     expect(slateRes.status).toBe(201);
+    const slateId = slateRes.body.id;
 
-    // Step 3: Create a job
-    const jobRes = await harness.invokeHandler("/api/jobs", "POST", {
-      name: "E2E Job",
-      familyId,
-      slateId: slateRes.body.id,
-    });
-    expect(jobRes.status).toBe(200);
+    const setTasks = await harness.invokeHandler("/api/slates/[slateId]/tasks", "PUT", { explicitTaskIds: [taskId] }, { slateId });
+    expect(setTasks.status).toBe(200);
 
-    // Step 4: Create a rotation
-    const rotRes = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slateRes.body.id,
-      userId: meRes.body.user?.id || "dev-user-admin-001",
-    });
-    expect(rotRes.status).toBe(201);
+    // Rotate the slate to the parent so generated jobs are assigned
+    const rotation = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId });
+    expect(rotation.status).toBe(201);
 
-    // Step 5: Complete the job workflow
-    const doingRes = await harness.invokeHandler("/api/jobs", "PUT", {
-      id: jobRes.body.id,
-      status: "doing",
-    });
-    expect(doingRes.status).toBe(200);
+    // Generate today's list
+    const generated = await harness.invokeHandler("/api/schedules/generate", "POST", { date: today() });
+    expect(generated.status).toBe(200);
+    expect(generated.body.count).toBe(1);
 
-    const doneRes = await harness.invokeHandler("/api/jobs", "PUT", {
-      id: jobRes.body.id,
-      status: "done",
-    });
-    expect(doneRes.status).toBe(200);
+    const job = generated.body.jobs[0];
+    expect(job.points).toBe(7);
+    expect(job.assignedTo).toBe(userId);
+
+    // The job must point at a real slate_tasks row, not at the task id
+    const slateTask = getRawDb()!.prepare(`SELECT id, task_id FROM slate_tasks WHERE id = ?`).get(job.slateTaskId) as any;
+    expect(slateTask).toBeTruthy();
+    expect(slateTask.task_id).toBe(taskId);
+
+    // Complete it: todo -> doing -> done
+    await harness.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "doing" }, { jobId: job.id });
+    const done = await harness.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "done" }, { jobId: job.id });
+    expect(done.status).toBe(200);
+
+    const points = getRawDb()!.prepare(`SELECT points_total FROM users WHERE id = ?`).get(userId) as any;
+    expect(points.points_total).toBe(7);
+
+    // Reports: the done job is counted on the completion date, and per-task stats are non-zero
+    const report = await harness.invokeHandler("/api/reports?type=task_completion", "GET");
+    expect(report.status).toBe(200);
+    const stats = report.body.stats.find((s: any) => s.taskId === taskId);
+    expect(stats.totalJobs).toBe(1);
+    expect(stats.completedJobs).toBe(1);
+    expect(report.body.jobs).toHaveLength(1);
+
+    // Generation is idempotent for the same day
+    const again = await harness.invokeHandler("/api/schedules/generate", "POST", { date: today() });
+    expect(again.status).toBe(200);
+    expect(again.body.count).toBe(0);
   });
 
-  it("Cross-user workflow: parent creates family, child does chores", async () => {
-    const harness = new TestHarness();
+  it("keeps two families' generated jobs apart", async () => {
+    const first = new TestHarness();
+    const firstIdentity = await signInAndGetFamily(first, "first@choretle.dev");
 
-    // Parent signs in (auto-creates a family)
-    await harness.signIn("admin@choretle.dev");
-    const adminMeRes = await harness.invokeHandler("/api/auth/me", "GET");
-    expect(adminMeRes.status).toBe(200);
-    expect(adminMeRes.body.familyId).toBeTruthy();
-    const adminFamilyId = adminMeRes.body.familyId;
+    const second = new TestHarness();
+    const secondIdentity = await signInAndGetFamily(second, "second@choretle.dev");
 
-    // Child signs in (gets their own family — different user)
-    await harness.signIn("child@choretle.dev");
-    const childMeRes = await harness.invokeHandler("/api/auth/me", "GET");
-    expect(childMeRes.status).toBe(200);
-    expect(childMeRes.body.familyId).toBeTruthy();
+    expect(firstIdentity.familyId).not.toBe(secondIdentity.familyId);
 
-    // Child creates a job in their own family
-    const slateRes = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Child Slate",
-      familyId: childMeRes.body.familyId,
+    const job = await first.invokeHandler("/api/jobs", "POST", {
+      listId: createListFixture(firstIdentity.familyId),
+      name: "First family job",
+      points: 3,
     });
-    expect(slateRes.status).toBe(201);
+    expect(job.status).toBe(200);
 
-    const jobRes = await harness.invokeHandler("/api/jobs", "POST", {
-      name: "Child Job",
-      familyId: childMeRes.body.familyId,
-      slateId: slateRes.body.id,
-    });
-    expect(jobRes.status).toBe(200);
-  });
+    // The second family cannot read or complete it
+    const read = await second.invokeHandler("/api/jobs/[jobId]", "GET", undefined, { jobId: job.body.id });
+    expect(read.status).toBe(403);
 
-  it("Session isolation — each harness has independent cookies", async () => {
-    // Create first harness and sign in as parent
-    const harness1 = new TestHarness();
-    await harness1.signIn("admin@choretle.dev");
-    
-    const me1Res = await harness1.invokeHandler("/api/auth/me", "GET");
-    expect(me1Res.status).toBe(200);
-    expect(me1Res.body.familyId).toBeTruthy();
-
-    // Create second harness and sign in as child (different user)
-    const harness2 = new TestHarness();
-    await harness2.signIn("child@choretle.dev");
-    
-    const me2Res = await harness2.invokeHandler("/api/auth/me", "GET");
-    expect(me2Res.status).toBe(200);
-    expect(me2Res.body.familyId).toBeTruthy();
-
-    // Verify both sessions work independently with valid cookies
-    expect(harness1.getCookieJar().get("dev-session")).toBeTruthy();
-    expect(harness2.getCookieJar().get("dev-session")).toBeTruthy();
-  });
-
-  it("Full lifecycle: create → update → delete tag", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create
-    const createRes = await harness.invokeHandler("/api/tags", "POST", {
-      name: "Lifecycle Tag",
-      color: "#ff0000",
-    });
-    expect(createRes.status).toBe(201);
-
-    // Delete (skip update due to Drizzle ORM bug)
-    const deleteRes = await harness.invokeHandler("/api/tags", "DELETE", {
-      id: createRes.body.id,
-    });
-    expect(deleteRes.status).toBe(200);
-  });
-
-  it("Full lifecycle: create → assign rotation for multiple slates", async () => {
-    const harness = new TestHarness();
-    await harness.signIn("admin@choretle.dev");
-    harness.setFamilyId("dev-family-001");
-
-    // Create two slates
-    const slate1Res = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Rotation Slate 1",
-    });
-    expect(slate1Res.status).toBe(201);
-
-    const slate2Res = await harness.invokeHandler("/api/slates", "POST", {
-      name: "Rotation Slate 2",
-    });
-    expect(slate2Res.status).toBe(201);
-
-    // Create rotations for both slates
-    const rot1Res = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slate1Res.body.id,
-      userId: "dev-user-admin-001",
-    });
-    expect(rot1Res.status).toBe(201);
-
-    await harness.signIn("child@choretle.dev");
-    const rot2Res = await harness.invokeHandler("/api/rotations", "POST", {
-      slateId: slate2Res.body.id,
-      userId: "dev-user-child-001",
-    });
-    expect(rot2Res.status).toBe(201);
-  });
-
-  it("Error handling: invalid inputs return appropriate status codes", async () => {
-    const harness = new TestHarness();
-
-    // No auth — should get 401
-    const noAuthRes = await harness.invokeHandler("/api/family", "POST", {});
-    expect(noAuthRes.status).toBe(401);
-
-    // Valid auth, missing required field — signin auto-creates a family
-    await harness.signIn("admin@choretle.dev");
-    // Trying to create another family with empty name returns 400 (name validation)
-    const alreadyHasFamily = await harness.invokeHandler("/api/family", "POST", { name: "" });
-    expect(alreadyHasFamily.status).toBe(400);
+    const complete = await second.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "doing" }, { jobId: job.body.id });
+    expect(complete.status).toBe(403);
   });
 });

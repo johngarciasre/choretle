@@ -90,38 +90,27 @@ describe("legacyToSchedule", () => {
 });
 
 describe("expandSchedule - weekly", () => {
-  it("expands single day of week", () => {
-    const dates = expandSchedule(
-      { type: "weekly", daysOfWeek: [1], interval: 1 },
-      new Date("2024-01-01"), // Monday
-      new Date("2024-01-31"),
-    );
-    expect(dates.length).toBeGreaterThan(0);
-    // All dates should be Mondays
-    dates.forEach((d) => {
-      expect(d.date.getDay()).toBe(1);
-    });
+  // Local-date constructors: the runner's timezone must not shift the dates.
+  const jan = (day: number) => new Date(2024, 0, day);
+
+  it("expands a single day of week to every matching date", () => {
+    const dates = expandSchedule({ type: "weekly", daysOfWeek: [1], interval: 1 }, jan(1), jan(31));
+    expect(dates.map((d) => d.date.getDate())).toEqual([1, 8, 15, 22, 29]);
+    expect(dates.every((d) => d.date.getDay() === 1)).toBe(true);
   });
 
-  it("expands multiple days of week", () => {
-    const dates = expandSchedule(
-      { type: "weekly", daysOfWeek: [1, 3, 5], interval: 1 },
-      new Date("2024-01-01"),
-      new Date("2024-01-31"),
-    );
-    dates.forEach((d) => {
-      expect([1, 3, 5]).toContain(d.date.getDay());
-    });
+  it("expands every selected day of week, not just the first", () => {
+    const dates = expandSchedule({ type: "weekly", daysOfWeek: [1, 3, 5], interval: 1 }, jan(1), jan(31));
+    // Jan 2024: 5 Mondays + 5 Wednesdays + 4 Fridays
+    expect(dates).toHaveLength(14);
+    expect(dates.slice(0, 3).map((d) => d.date.getDate())).toEqual([1, 3, 5]);
+    expect(dates[dates.length - 1].date.getDate()).toBe(31);
+    expect(dates.every((d) => [1, 3, 5].includes(d.date.getDay()))).toBe(true);
   });
 
   it("respects interval of 2 weeks", () => {
-    const dates = expandSchedule(
-      { type: "weekly", daysOfWeek: [1], interval: 2 },
-      new Date("2024-01-01"),
-      new Date("2024-01-31"),
-    );
-    // With interval=2, should generate roughly half as many dates
-    expect(dates.length).toBeLessThan(5);
+    const dates = expandSchedule({ type: "weekly", daysOfWeek: [1], interval: 2 }, jan(1), jan(31));
+    expect(dates.map((d) => d.date.getDate())).toEqual([1, 15, 29]);
   });
 });
 
@@ -179,10 +168,8 @@ describe("expandSchedule - monthly-week-pattern", () => {
       new Date("2024-01-31"),
     );
     // Last Friday of January 2024 is Jan 26
-    expect(dates.length).toBe(1);
-    if (dates.length > 0) {
-      expect(dates[0].date.getDate()).toBe(26);
-    }
+    expect(dates).toHaveLength(1);
+    expect(dates[0].date.getDate()).toBe(26);
   });
 });
 

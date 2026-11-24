@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { clientKey, clearAttempts, tooManyAttempts } from "@/lib/rate-limit";
 
 const SUPERADMIN_COOKIE = "superadmin-session";
+
+/** Fixed-length comparison: timingSafeEqual throws when input lengths differ. */
+function safeEqual(a: string, b: string): boolean {
+  const digest = (value: string) => crypto.createHash("sha256").update(value).digest();
+  return crypto.timingSafeEqual(digest(a), digest(b));
+}
 
 interface SuperadminUser {
   id: string;
@@ -50,20 +57,14 @@ function setSuperadminSessionCookie(
   );
 }
 
-/**
- * Clear the superadmin session cookie.
- */
-function clearSuperadminSessionCookie(responseHeaders: Headers): void {
-  responseHeaders.set(
-    "set-cookie",
-    `${SUPERADMIN_COOKIE}=; path=/; secure=true; httpOnly=true; sameSite=lax`,
-  );
-}
-
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const username = (body?.username ?? "").toString().trim();
   const password = (body?.password ?? "").toString();
+
+  if (tooManyAttempts(clientKey(request, "superadmin"))) {
+    return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
+  }
 
   const expectedUsername = process.env.SUPERADMIN_USERNAME ?? "";
   const expectedPassword = process.env.SUPERADMIN_PASSWORD ?? "";
@@ -75,9 +76,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (username !== expectedUsername || !crypto.timingSafeEqual(Buffer.from(password), Buffer.from(expectedPassword))) {
+  // Hash both sides so the comparison has a fixed length — timingSafeEqual
+  // throws on differing lengths, which previously surfaced as a 500.
+  if (username !== expectedUsername || !safeEqual(password, expectedPassword)) {
     return NextResponse.json({ error: "Invalid superadmin credentials" }, { status: 401 });
   }
+  clearAttempts(clientKey(request, "superadmin"));
 
   const user: SuperadminUser = {
     id: "superadmin",

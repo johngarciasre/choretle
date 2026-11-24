@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { error, info } from "@/lib/logger.server";
+import { error } from "@/lib/logger.server";
 import { verifyAuth, extractUserId } from "@/lib/auth";
 import { getRawDb } from "@/db/drizzle";
 
@@ -35,11 +35,12 @@ async function getInviteByCode(code: string) {
 export async function joinFamily(code: string, request: NextRequest) {
   try {
     if (!code) return NextResponse.json({ error: "Invite code is required" }, { status: 400 });
-    const userId = extractUserId(request);
+    const userId = await extractUserId(request);
     if (!userId) return NextResponse.json({ error: "You must be logged in to join a family" }, { status: 401 });
 
     const invite = await getInviteByCode(code);
     if (!invite) return NextResponse.json({ error: "Invalid or expired invite" }, { status: 400 });
+    if (invite.used) return NextResponse.json({ error: "This invite has already been used" }, { status: 400 });
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
       return NextResponse.json({ error: "Invite code has expired" }, { status: 400 });
     }
@@ -51,10 +52,12 @@ export async function joinFamily(code: string, request: NextRequest) {
 
       const now = new Date().toISOString();
       rawDb.prepare(`UPDATE invites SET used = 1, updated_at = ? WHERE id = ?`).run(now, invite.id);
-      rawDb.prepare(`UPDATE users SET family_id = ?, updated_at = ? WHERE id = ?`).run(invite.family_id, now, userId);
+      rawDb.prepare(`UPDATE users SET family_id = ?, role = ?, updated_at = ? WHERE id = ?`)
+        .run(invite.family_id, invite.role || "child", now, userId);
     }
 
-    return NextResponse.json({ id: invite.family_id, name: "Family" });
+    const family = rawDb?.prepare(`SELECT id, name FROM families WHERE id = ?`).get(invite.family_id) as any;
+    return NextResponse.json({ ok: true, family: { id: invite.family_id, name: family?.name || "Family" } });
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Join family failed");
     return NextResponse.json({ error: "Failed to join family" }, { status: 500 });

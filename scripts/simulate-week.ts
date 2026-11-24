@@ -129,9 +129,6 @@ function dayOffset(n: number) {
   return d.toISOString().split("T")[0];
 }
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
 
 // ── Day 0: Setup ─────────────────────────────────────────────────────
 
@@ -296,7 +293,7 @@ async function simulateWeek(weekData: Awaited<ReturnType<typeof setup>>) {
         /* ignore */
       }
 
-      const doneRes = await parent.put(`/api/jobs/${job.id}`, { status: "done" });
+      await parent.put(`/api/jobs/${job.id}`, { status: "done" });
       allJobs.push({
         id: job.id,
         name: job.name,

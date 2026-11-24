@@ -16,7 +16,7 @@ interface RotationBoardProps {
 
 const accentColors = ["coral", "teal", "sunny", "grape", "bubblegum", "coral", "teal"] as const;
 
-export default function RotationBoard({ familyName, users, slates, onSave, onSlatesChange }: RotationBoardProps) {
+export default function RotationBoard({ users, slates, onSave, onSlatesChange }: RotationBoardProps) {
   const [draggedUserId, setDraggedUserId] = useState<string | null>(null);
   const [dragOverSlate, setDragOverSlate] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
