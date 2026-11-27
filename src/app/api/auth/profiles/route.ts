@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyPicker } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -8,7 +9,7 @@ import { noCache } from "@/lib/http";
  * Picker only: the people on this tablet who have a PIN. Names and avatars,
  * nothing else — no points, no emails, no chore data.
  */
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const picker = await verifyPicker(request);
     if (!picker) return NextResponse.json({ error: "Tablet not enrolled" }, { status: 401 });
@@ -44,3 +45,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to load profiles" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };

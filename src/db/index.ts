@@ -14,6 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { APP_DB_ROLE, currentTenant } from "./tenant";
 
 export type Row = Record<string, any>;
 
@@ -48,7 +49,14 @@ export class Db {
 
   private queryFn(): QueryFn {
     if (this.bound) return this.bound;
-    return async (text, params) => (await this.resolve()).query(text, params);
+    return async (text, params) => {
+      const driver = await this.resolve();
+      const tenant = currentTenant();
+      // Outside a tenant scope (sign-in, session lookup, migrations) statements
+      // run as the owner; inside one they run in a transaction that sets
+      // app.household_id and switches to the RLS-bound role.
+      return tenant ? driver.queryAsTenant(text, params, tenant) : driver.query(text, params);
+    };
   }
 
   prepare(sql: string): Stmt {
@@ -84,6 +92,7 @@ export class Db {
 
 interface Driver {
   query: QueryFn;
+  queryAsTenant(text: string, params: any[] | undefined, householdId: string): Promise<QueryResult>;
   exec(text: string): Promise<void>;
   transaction<T>(fn: (db: Db) => Promise<T>): Promise<T>;
   close(): Promise<void>;
@@ -187,8 +196,32 @@ function connectViaPg(): Promise<Driver> {
       return { rows: res.rows as Row[], rowCount: res.rowCount ?? 0 };
     };
 
+    /** Scope a connection to one household for the rest of its transaction. */
+    const applyTenant = async (
+      client: { query: (text: string, params?: any[]) => Promise<any> },
+      householdId: string,
+    ) => {
+      await client.query("select set_config('app.household_id', $1, true)", [householdId]);
+      await client.query(`set local role ${APP_DB_ROLE}`);
+    };
+
     return {
       query,
+      queryAsTenant: async (text, params, householdId) => {
+        const client = await pool.connect();
+        try {
+          await client.query("begin");
+          await applyTenant(client, householdId);
+          const res = await client.query(text, params ?? []);
+          await client.query("commit");
+          return { rows: res.rows as Row[], rowCount: res.rowCount ?? 0 };
+        } catch (err) {
+          await client.query("rollback").catch(() => {});
+          throw err;
+        } finally {
+          client.release();
+        }
+      },
       exec: async (text) => {
         const client = await pool.connect();
         try {
@@ -199,8 +232,10 @@ function connectViaPg(): Promise<Driver> {
       },
       transaction: async (fn) => {
         const client = await pool.connect();
+        const tenant = currentTenant();
         try {
           await client.query("begin");
+          if (tenant) await applyTenant(client, tenant);
           const txQuery: QueryFn = async (text, params) => {
             const res = await client.query(text, params ?? []);
             return { rows: res.rows as Row[], rowCount: res.rowCount ?? 0 };
@@ -240,14 +275,30 @@ function connectViaPGlite(): Promise<Driver> {
       return { rows: res.rows as Row[], rowCount: (res as any).affectedRows ?? 0 };
     };
 
+    const applyTenant = async (tx: any, householdId: string) => {
+      await tx.query("select set_config('app.household_id', $1, true)", [householdId]);
+      await tx.query(`set local role ${APP_DB_ROLE}`);
+    };
+
     return {
       query,
+      queryAsTenant: async (text, params, householdId) => {
+        let out: QueryResult | undefined;
+        await client.transaction(async (tx: any) => {
+          await applyTenant(tx, householdId);
+          const res = await tx.query(text, params ?? []);
+          out = { rows: res.rows as Row[], rowCount: (res as any).affectedRows ?? 0 };
+        });
+        return out ?? { rows: [], rowCount: 0 };
+      },
       exec: async (text) => {
         await client.exec(text);
       },
       transaction: async (fn) => {
+        const tenant = currentTenant();
         let result!: unknown;
         await client.transaction(async (tx) => {
+          if (tenant) await applyTenant(tx, tenant);
           const txQuery: QueryFn = async (text, params) => {
             const res = await tx.query(text, params ?? []);
             return { rows: res.rows as Row[], rowCount: (res as any).affectedRows ?? 0 };
@@ -290,9 +341,6 @@ export async function runMigrations(driver: Driver, quiet = false): Promise<stri
     const { rows } = await driver.query("select 1 from schema_migrations where version = $1", [file]);
     if (rows.length > 0) continue;
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
-    if (sql.includes("$$")) {
-      throw new Error(`migration ${file} contains a $$ block; apply it manually`);
-    }
     await driver.exec(
       `begin;\n${sql}\ninsert into schema_migrations (version) values ('${file.replace(/'/g, "''")}');\ncommit;`,
     );

@@ -1,9 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) {
@@ -112,3 +113,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch kanban data" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };

@@ -91,8 +91,9 @@ enrolment, and kiosk endpoints.
 ### Known gaps
 - Supabase-mode sign-in has not been exercised against a live Supabase project.
 - The Swap Meet accept/reject flow is not implemented (requests are recorded).
-- Row-level security is designed but not enforced; isolation rests on the
-  per-route household checks plus the multitenancy tests.
+- Row-level security is enforced per household (`db/migrations/002_rls.sql`); the
+  remaining work is performance, since each statement opens its own tenant
+  transaction.
 
 ## License
 

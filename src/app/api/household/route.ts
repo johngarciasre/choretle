@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { slugify } from "@/lib/slugify";
@@ -9,7 +10,7 @@ import { verifyAuth, extractUserId } from "@/lib/auth";
  * GET /api/household?id=<id>
  * Fetch a household by ID (used by Household page to load household data)
  */
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     const url = new URL(request.url);
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
  * POST /api/household
  * Create a new household and associate the current user with it
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     let userId: string | null = auth?.userId ?? null;
@@ -143,3 +144,8 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

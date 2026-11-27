@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { DEV_COOKIE_NAME, setDevSessionCookie, verifyDevSession } from "@/lib/dev-auth";
@@ -10,7 +11,7 @@ function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const attemptKey = clientKey(request, "signin");
     if (tooManyAttempts(attemptKey)) {
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     if (process.env.AUTH_MODE === "dev") {
       const cookieHeader = request.headers.get("cookie") || "";
@@ -167,3 +168,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

@@ -86,10 +86,11 @@ describe("E2E — Full Workflow: tasks → slate → rotation → generated jobs
     expect(job.status).toBe(200);
 
     // The second household cannot read or complete it
+    // RLS makes the row invisible rather than forbidden, so the answer is 404.
     const read = await second.invokeHandler("/api/jobs/[jobId]", "GET", undefined, { jobId: job.body.id });
-    expect(read.status).toBe(403);
+    expect(read.status).toBe(404);
 
     const complete = await second.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "doing" }, { jobId: job.body.id });
-    expect(complete.status).toBe(403);
+    expect(complete.status).toBe(404);
   });
 });

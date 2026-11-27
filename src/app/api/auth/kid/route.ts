@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyPicker } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -19,7 +20,7 @@ import {
  * The credential decides the session kind: a parent signing in with a PIN gets
  * `tablet_adult`, which carries the same kid-level rights as a child session.
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const picker = await verifyPicker(request);
     if (!picker) return NextResponse.json({ error: "Tablet not enrolled" }, { status: 401 });
@@ -87,3 +88,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not sign in" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

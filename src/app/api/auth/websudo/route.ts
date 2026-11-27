@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import crypto from "crypto";
@@ -70,7 +71,7 @@ function setWebsudoCookie(responseHeaders: Headers, payload: WebsudoPayload): vo
   );
 }
 
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   const body = await request.json();
   const password = (body?.password ?? "").toString();
 
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
   return response;
 }
 
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   const cookieHeader = request.headers.get("cookie") || "";
   const setCookie = cookieHeader.split(";").find((c) => c.includes(WEBSUDO_COOKIE));
 
@@ -173,3 +174,8 @@ export async function GET(request: NextRequest) {
     },
   });
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

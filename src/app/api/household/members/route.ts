@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { canAuthor, verifyAuth } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -12,7 +13,7 @@ import { randomUUID } from "node:crypto";
  * Under-13 accounts arrive without an email (no identity row); a 13+ teen may
  * carry one and attach a Supabase login later without changing their user id.
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -65,3 +66,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not add that member" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

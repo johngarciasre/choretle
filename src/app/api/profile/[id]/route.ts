@@ -1,10 +1,11 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { isRestrictedSession, verifyAuth } from "@/lib/auth";
 import { currentStreakFromDays } from "@/lib/streak";
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -112,7 +113,7 @@ function normalizeAvatarUrl(input: unknown): string | null | undefined {
 }
 
 /** Set or clear a member's profile picture. Self-service, plus parents for their kids. */
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -145,3 +146,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Failed to update profile photo" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const PUT_impl = withTenant(PUT);
+export { PUT_impl as PUT };

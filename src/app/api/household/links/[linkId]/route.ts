@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { canAuthor, verifyAuth } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -21,7 +22,7 @@ async function loadLink(linkId: string) {
     | undefined;
 }
 
-export async function POST(
+async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ linkId: string }> },
 ) {
@@ -51,7 +52,7 @@ export async function POST(
   }
 }
 
-export async function DELETE(
+async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ linkId: string }> },
 ) {
@@ -76,3 +77,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Could not revoke the link" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };
+const DELETE_impl = withTenant(DELETE);
+export { DELETE_impl as DELETE };

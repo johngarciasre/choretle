@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
@@ -7,7 +8,7 @@ async function ownedSlate(rawDb: any, slateId: string, householdId: string): Pro
   return await rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND household_id = ?`).get(slateId, householdId);
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
+async function GET(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
+async function PUT(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -74,3 +75,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Failed to update slate tags" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const PUT_impl = withTenant(PUT);
+export { PUT_impl as PUT };

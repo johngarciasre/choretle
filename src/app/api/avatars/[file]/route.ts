@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -17,7 +18,7 @@ const CONTENT_TYPES: Record<string, string> = {
   webp: "image/webp",
 };
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ file: string }> }) {
+async function GET(request: NextRequest, { params }: { params: Promise<{ file: string }> }) {
   const auth = await verifyAuth(request);
   if (!auth) return new NextResponse(null, { status: 401, headers: { "Cache-Control": "no-store" } });
 
@@ -39,3 +40,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new NextResponse(null, { status: 404 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };

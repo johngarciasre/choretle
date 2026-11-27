@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { getMembershipFor } from "@/lib/membership";
@@ -16,7 +17,7 @@ import {
  * Public, code-gated. Consumes a single-use enrolment code and creates either a
  * kid session (own device) or a picker session (shared tablet).
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const code = typeof body?.code === "string" ? body.code.trim() : "";
@@ -83,3 +84,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not finish enrolment" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

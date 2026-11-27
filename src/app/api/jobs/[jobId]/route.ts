@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
@@ -38,7 +39,7 @@ function serializeJob(job: any) {
   };
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+async function GET(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   try {
     const parsedParams = await params;
     const jobId = parsedParams.jobId;
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+async function PUT(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   try {
     const parsedParams = await params;
     const jobId = parsedParams.jobId;
@@ -205,7 +206,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+async function POST(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   try {
     const parsedParams = await params;
     const jobId = parsedParams.jobId;
@@ -242,3 +243,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Failed to create comment" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };
+const PUT_impl = withTenant(PUT);
+export { PUT_impl as PUT };

@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { verifyDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
@@ -26,7 +27,7 @@ function hasSupabaseConfig(): boolean {
  * In dev mode (AUTH_MODE=dev), clears the dev session cookie.
  * Supports global signout via body { type: 'global' } to terminate all sessions.
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const isGlobal = body.type === "global";
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
  * GET endpoint for signout page (returns the current session if logged in).
  * In dev mode, checks for dev session cookie.
  */
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     // ─── Dev Mode: Check dev session cookie ────────────────
     if (process.env.AUTH_MODE === "dev") {
@@ -160,3 +161,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ authenticated: false, error: "Failed to check session" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

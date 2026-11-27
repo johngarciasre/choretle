@@ -1,8 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
 import { getMembershipFor } from "@/lib/membership";
 import { error } from "@/lib/logger.server";
 import { noCache } from "@/lib/http";
+import { suspendTenant } from "@/db/tenant";
 
 const COOKIE = "ch-household";
 
@@ -13,7 +15,7 @@ const COOKIE = "ch-household";
  * the cookie can never widen access — `verifyAuth` re-checks it on every request
  * and falls back to the person's own membership when it does not match.
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -25,7 +27,8 @@ export async function POST(request: NextRequest) {
     const householdId = typeof body?.householdId === "string" ? body.householdId : "";
     if (!householdId) return NextResponse.json({ error: "householdId is required" }, { status: 400 });
 
-    const membership = await getMembershipFor(auth.userId, householdId);
+    // The target household is outside the current tenant by definition.
+    const membership = await suspendTenant(() => getMembershipFor(auth.userId, householdId));
     if (!membership) return NextResponse.json({ error: "Not a member of that household" }, { status: 403 });
 
     const response = noCache(
@@ -46,8 +49,13 @@ export async function POST(request: NextRequest) {
 }
 
 /** Forget the choice, falling back to the person's first membership. */
-export async function DELETE() {
+async function DELETE() {
   const response = noCache(NextResponse.json({ ok: true }));
   response.cookies.set(COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
   return response;
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };
+const DELETE_impl = withTenant(DELETE);
+export { DELETE_impl as DELETE };

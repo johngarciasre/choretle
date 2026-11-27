@@ -1,9 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { verifyAuth, canAuthor } from "@/lib/auth";
 
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) {
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PUT(request: NextRequest) {
+async function PUT(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) {
@@ -204,7 +205,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-export async function DELETE(request: NextRequest) {
+async function DELETE(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) {
@@ -240,3 +241,12 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };
+const PUT_impl = withTenant(PUT);
+export { PUT_impl as PUT };
+const DELETE_impl = withTenant(DELETE);
+export { DELETE_impl as DELETE };

@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth, verifyPicker } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -15,7 +16,7 @@ function firstName(name: string | null): string {
   return base.split(" ")[0] || "Member";
 }
 
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const picker = await verifyPicker(request);
     const auth = picker ? null : await verifyAuth(request);
@@ -76,3 +77,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to load the leaderboard" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };

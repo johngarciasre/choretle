@@ -125,7 +125,7 @@ describe("One-off chores and the grab pool", () => {
     const { harness: outsider } = await signInAsChild(otherIdentity.householdId);
 
     const res = await outsider.invokeHandler("/api/jobs/[jobId]", "PUT", { claim: true }, { jobId: created.body.id });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect((await jobRow(created.body.id)).assigned_to).toBeNull();
   });
 

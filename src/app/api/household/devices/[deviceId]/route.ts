@@ -1,10 +1,11 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { canAuthor, verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 import { revokeSession } from "@/lib/session";
 
 /** Parent only: revoke one device. A foreign id is a 404, never a 403. */
-export async function DELETE(
+async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ deviceId: string }> },
 ) {
@@ -22,3 +23,6 @@ export async function DELETE(
     return NextResponse.json({ error: "Failed to revoke the device" }, { status: 500 });
   }
 }
+
+const DELETE_impl = withTenant(DELETE);
+export { DELETE_impl as DELETE };

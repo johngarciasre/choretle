@@ -1,7 +1,9 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
+import { suspendTenant } from "@/db/tenant";
 
 /** Jobs joined to their slate task and task. jobs.slate_task_id is a slate_tasks id. */
 const JOB_SELECT = `
@@ -11,7 +13,7 @@ const JOB_SELECT = `
   LEFT JOIN slate_tasks st ON j.slate_task_id = st.id
   LEFT JOIN tasks t ON st.task_id = t.id`;
 
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -29,13 +31,15 @@ export async function GET(request: NextRequest) {
     // Cross-household reporting: aggregates only, and only while a two-sided
     // link is active. Never jobs, comments or photos.
     if (searchParams.get("scope") === "linked") {
-      const partners = (await rawDb
-        .prepare(
-          `select case when household_id = ? then linked_household_id else household_id end as other_id
-             from household_links
-            where (household_id = ? or linked_household_id = ?) and status = 'active'`,
-        )
-        .all(householdId, householdId, householdId)) as { other_id: string }[];
+      const partners = (await suspendTenant(() =>
+        rawDb
+          .prepare(
+            `select case when household_id = ? then linked_household_id else household_id end as other_id
+               from household_links
+              where (household_id = ? or linked_household_id = ?) and status = 'active'`,
+          )
+          .all(householdId, householdId, householdId),
+      )) as { other_id: string }[];
 
       if (partners.length === 0) {
         return NextResponse.json({ error: "No active household link" }, { status: 403 });
@@ -44,10 +48,11 @@ export async function GET(request: NextRequest) {
       const ids = [householdId, ...partners.map((partner) => partner.other_id)];
       const households = [];
       for (const id of ids) {
-        const household = (await rawDb.prepare(`select name from households where id = ?`).get(id)) as
-          | { name: string }
-          | undefined;
-        const stats = (await rawDb
+        const household = (await suspendTenant(() =>
+          rawDb.prepare(`select name from households where id = ?`).get(id),
+        )) as { name: string } | undefined;
+        const stats = (await suspendTenant(() =>
+          rawDb
           .prepare(
             `select
                (select coalesce(sum(m.points_total), 0) from memberships m where m.household_id = ?) as points,
@@ -56,7 +61,8 @@ export async function GET(request: NextRequest) {
                    and j.completed_at >= now() - interval '7 days') as completed,
                (select count(*) from memberships m where m.household_id = ?) as members`,
           )
-          .get(id, id, id)) as { points: number | string; completed: number | string; members: number | string };
+          .get(id, id, id),
+        )) as { points: number | string; completed: number | string; members: number | string };
         households.push({
           householdId: id,
           name: household?.name ?? "",
@@ -206,3 +212,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch reports" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };

@@ -1,9 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { verifyAuth, canAuthor } from "@/lib/auth";
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
+async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
+async function PUT(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -118,7 +119,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
+async function DELETE(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -149,3 +150,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const PUT_impl = withTenant(PUT);
+export { PUT_impl as PUT };
+const DELETE_impl = withTenant(DELETE);
+export { DELETE_impl as DELETE };

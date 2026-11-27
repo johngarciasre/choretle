@@ -1,9 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { error } from "@/lib/logger.server";
 import { verifyAuth, extractUserId, canAuthor } from "@/lib/auth";
 import { getDb } from "@/db";
 
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const householdId = url.searchParams.get("householdId");
@@ -73,7 +74,12 @@ export async function joinHousehold(code: string, request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   const body = await request.json();
   return joinHousehold(body?.code, request);
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

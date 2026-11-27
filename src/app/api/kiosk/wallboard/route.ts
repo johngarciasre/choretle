@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth, verifyPicker } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -8,7 +9,7 @@ import { noCache } from "@/lib/http";
  * Kiosk summary: how much of today is done, and how the household is doing this
  * week. Aggregates only — no job names, no chore detail.
  */
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const picker = await verifyPicker(request);
     const auth = picker ? null : await verifyAuth(request);
@@ -64,3 +65,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to load the wallboard" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };

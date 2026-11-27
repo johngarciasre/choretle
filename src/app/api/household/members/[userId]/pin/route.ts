@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { canAuthor, verifyAuth } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -14,7 +15,7 @@ import { revokeAllForMembership } from "@/lib/session";
  * after proving the current one. Old PIN sessions are revoked on every change so
  * a forgotten tablet cannot keep working with the previous code.
  */
-export async function POST(
+async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> },
 ) {
@@ -60,3 +61,6 @@ export async function POST(
     return NextResponse.json({ error: "Could not set that PIN" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

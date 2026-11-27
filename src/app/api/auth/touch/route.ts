@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
@@ -8,7 +9,7 @@ import { SHARED_ABSOLUTE_MS, cookieOptions, sessionCookieNames, touchSession } f
  * Activity ping. Only a real interaction on the client calls this, so an
  * abandoned tab cannot keep a shared session alive by running a timer.
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth || !auth.sessionId) {
@@ -30,3 +31,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not refresh the session" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

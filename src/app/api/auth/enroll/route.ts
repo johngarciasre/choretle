@@ -1,3 +1,4 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { canAuthor, verifyAuth } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -13,7 +14,7 @@ const TTL_MS = 5 * 60 * 1000;
  * Parent only: mint a single-use enrolment code. Omit `userId` to enrol a
  * shared tablet (picker); pass one to enrol that person's own device.
  */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -51,3 +52,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not create a code" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

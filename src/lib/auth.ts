@@ -17,6 +17,7 @@ import { getDb } from "@/db";
 import { getDevUserFromRequest } from "./dev-auth";
 import { getMembership, type Role } from "./membership";
 import { resolveSessionToken, sessionCookieNames } from "./session";
+import { cacheGet } from "@/db/tenant";
 
 export type SessionKind = "adult" | "tablet_adult" | "kid";
 
@@ -44,6 +45,10 @@ export async function extractUserId(request: NextRequest): Promise<string | null
 }
 
 export async function verifyAuth(request: NextRequest): Promise<AuthResult | null> {
+  // Resolved once per request by withTenant(); reuse it inside the RLS scope.
+  const cachedAuth = cacheGet<AuthResult>("auth");
+  if (cachedAuth) return cachedAuth;
+
   // 1. Middleware-resolved identity (Supabase in production, dev cookie in dev).
   const headerUserId = request.headers.get("x-user-id") || "";
   const cookieUser = headerUserId ? null : await getDevUserFromRequest(request);
@@ -125,6 +130,9 @@ async function canonicalUserId(id: string): Promise<string> {
  * only: list profiles, exchange a PIN, read the kiosk payload.
  */
 export async function verifyPicker(request: NextRequest): Promise<PickerResult | null> {
+  const cachedPicker = cacheGet<PickerResult>("picker");
+  if (cachedPicker) return cachedPicker;
+
   const session = await resolveSessionToken(request.cookies.get(sessionCookieNames().device)?.value);
   if (!session || session.kind !== "picker") return null;
   return { sessionId: session.id, householdId: session.householdId };

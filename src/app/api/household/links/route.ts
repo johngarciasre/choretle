@@ -1,9 +1,11 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { canAuthor, verifyAuth } from "@/lib/auth";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { noCache } from "@/lib/http";
 import { randomBytes } from "node:crypto";
+import { suspendTenant } from "@/db/tenant";
 
 interface LinkRow {
   id: string;
@@ -16,12 +18,13 @@ interface LinkRow {
 }
 
 /** Both directions of this household's links, with the other side named. */
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
-    const links = (await getDb()
+    const links = (await suspendTenant(() =>
+      getDb()
       .prepare(
         `select l.id, l.household_id, l.linked_household_id, l.status, l.requested_by, l.approved_by, l.created_at,
                 h.name as other_name
@@ -31,7 +34,8 @@ export async function GET(request: NextRequest) {
           where l.household_id = ? or l.linked_household_id = ?
           order by l.created_at desc`,
       )
-      .all(auth.householdId, auth.householdId, auth.householdId)) as (LinkRow & { other_name: string })[];
+      .all(auth.householdId, auth.householdId, auth.householdId),
+    )) as (LinkRow & { other_name: string })[];
 
     return noCache(
       NextResponse.json({
@@ -53,7 +57,7 @@ export async function GET(request: NextRequest) {
 }
 
 /** Parent only: ask another household to share aggregate reports. */
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -67,7 +71,10 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
-    const target = await db.prepare(`select id from households where id = ?`).get(targetId);
+    // The household being invited is outside this tenant by definition.
+    const target = await suspendTenant(() =>
+      db.prepare(`select id from households where id = ?`).get(targetId),
+    );
     if (!target) return NextResponse.json({ error: "Household not found" }, { status: 404 });
 
     const existing = (await db
@@ -96,3 +103,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

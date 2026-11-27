@@ -1,8 +1,9 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 
 const WEBSUDO_COOKIE = "webserversudo-session";
 
-export async function POST(_request: NextRequest) {
+async function POST(_request: NextRequest) {
   const response = NextResponse.json({ ok: true });
   
   // Clear websudo cookie
@@ -13,3 +14,6 @@ export async function POST(_request: NextRequest) {
   
   return response;
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

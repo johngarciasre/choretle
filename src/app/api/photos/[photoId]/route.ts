@@ -1,9 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ photoId: string }> }) {
+async function DELETE(request: NextRequest, { params }: { params: Promise<{ photoId: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -20,3 +21,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return NextResponse.json({ error: "Failed to delete photo" }, { status: 500 });
   }
 }
+
+const DELETE_impl = withTenant(DELETE);
+export { DELETE_impl as DELETE };

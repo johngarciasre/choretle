@@ -37,6 +37,10 @@ export function routeTable(): Route[] {
       for (const match of text.matchAll(/export\s+(?:async\s+)?(?:function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b/g)) {
         methods.add(match[1]);
       }
+      // withTenant() exports the wrapped handler as an alias.
+      for (const match of text.matchAll(/export\s*\{\s*\w+\s+as\s+(GET|POST|PUT|PATCH|DELETE)\s*\}/g)) {
+        methods.add(match[1]);
+      }
       return { segments, methods, file: path.relative(SRC, file) };
     });
 }

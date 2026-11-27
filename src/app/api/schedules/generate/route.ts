@@ -1,9 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { autoGenerateJobs } from "@/lib/slateAutoGen";
 import { error } from "@/lib/logger.server";
 import { verifyAuth, canAuthor } from "@/lib/auth";
 
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) {
@@ -32,3 +33,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

@@ -1,6 +1,7 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
   const cookieHeader = request.headers.get("cookie") || "";
   const setCookie = cookieHeader.split(";").find((c) => c.includes("superadmin-session"));
@@ -16,3 +17,6 @@ export async function POST(request: NextRequest) {
   );
   return response;
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

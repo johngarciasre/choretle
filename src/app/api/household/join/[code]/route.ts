@@ -1,9 +1,10 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth, canAuthor } from "@/lib/auth";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+async function DELETE(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
     const auth = await verifyAuth(request);
@@ -24,3 +25,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return NextResponse.json({ error: "Failed to invalidate invite code" }, { status: 500 });
   }
 }
+
+const DELETE_impl = withTenant(DELETE);
+export { DELETE_impl as DELETE };

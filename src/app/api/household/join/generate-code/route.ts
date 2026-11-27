@@ -1,10 +1,11 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth, canAuthor } from "@/lib/auth";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { generateInviteCode, isValidInviteCode } from "@/lib/invite-codes";
 
-export async function POST(request: NextRequest) {
+async function POST(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -39,3 +40,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to generate invite code" }, { status: 500 });
   }
 }
+
+const POST_impl = withTenant(POST);
+export { POST_impl as POST };

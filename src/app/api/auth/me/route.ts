@@ -1,15 +1,17 @@
+import { withTenant } from "@/lib/with-tenant";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth, verifyPicker } from "@/lib/auth";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { noCache } from "@/lib/http";
+import { suspendTenant } from "@/db/tenant";
 
 /**
  * Identity for the current request. Resolves adults (Supabase / dev cookie),
  * PIN sessions (kid, tablet adult) and picker tablets, which only ever learn the
  * household name so the lobby screen has something to render.
  */
-export async function GET(request: NextRequest) {
+async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
 
@@ -38,15 +40,18 @@ export async function GET(request: NextRequest) {
       .get(auth.householdId)) as { id: string; name: string } | undefined;
 
     // Every household this person can act in, so the UI can offer a switcher.
-    const households = (await db
-      .prepare(
-        `select m.household_id, m.role, h.name
-           from memberships m
-           join households h on h.id = m.household_id
-          where m.user_id = ?
-          order by m.joined_at asc`,
-      )
-      .all(auth.userId)) as { household_id: string; role: string; name: string }[];
+    // Cross-household by definition, and scoped to the caller's own memberships.
+    const households = (await suspendTenant(() =>
+      db
+        .prepare(
+          `select m.household_id, m.role, h.name
+             from memberships m
+             join households h on h.id = m.household_id
+            where m.user_id = ?
+            order by m.joined_at asc`,
+        )
+        .all(auth.userId),
+    )) as { household_id: string; role: string; name: string }[];
 
     return noCache(
       NextResponse.json({
@@ -70,3 +75,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to get auth status" }, { status: 500 });
   }
 }
+
+const GET_impl = withTenant(GET);
+export { GET_impl as GET };
