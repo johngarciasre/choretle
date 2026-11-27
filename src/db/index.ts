@@ -144,6 +144,25 @@ export function toPgPlaceholders(sql: string): string {
 
 // ─── Driver construction ────────────────────────────────────────────────────
 
+/**
+ * Postgres writes a UTC offset as `+00`, which `Date` rejects — it wants
+ * `+00:00`. Without this normalisation every timestamptz read threw
+ * `RangeError: Invalid time value` inside the type parser.
+ */
+export function timestamptzToIso(value: string, assumeUtc = false): string {
+  const isoish = value.replace(" ", "T");
+  const withZone = /[+-]\d{2}$/.test(isoish)
+    ? isoish.replace(/([+-]\d{2})$/, "$1:00")
+    : assumeUtc
+      ? `${isoish}Z`
+      : isoish;
+  const parsed = new Date(withZone);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`unparseable timestamp from Postgres: ${value}`);
+  }
+  return parsed.toISOString();
+}
+
 function connectViaPg(): Promise<Driver> {
   return (async () => {
     const mod: any = await import("pg");
@@ -155,8 +174,8 @@ function connectViaPg(): Promise<Driver> {
     pg.types.setTypeParser(21, (v: string) => Number(v));
     pg.types.setTypeParser(1700, (v: string) => Number(v));
     pg.types.setTypeParser(1082, (v: string) => v);
-    pg.types.setTypeParser(1114, (v: string) => new Date(`${v.replace(" ", "T")}Z`).toISOString());
-    pg.types.setTypeParser(1184, (v: string) => new Date(v.replace(" ", "T")).toISOString());
+    pg.types.setTypeParser(1114, (v: string) => timestamptzToIso(v, true));
+    pg.types.setTypeParser(1184, (v: string) => timestamptzToIso(v));
 
     const pool = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
