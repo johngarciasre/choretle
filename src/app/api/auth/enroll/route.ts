@@ -11,8 +11,8 @@ import { randomBytes } from "node:crypto";
 const TTL_MS = 5 * 60 * 1000;
 
 /**
- * Parent only: mint a single-use enrolment code. Omit `userId` to enrol a
- * shared tablet (picker); pass one to enrol that person's own device.
+ * Parent only: mint a single-use enrollment code. Omit `userId` to enroll a
+ * shared tablet (picker); pass one to enroll that person's own device.
  */
 async function POST(request: NextRequest) {
   try {
@@ -48,7 +48,7 @@ async function POST(request: NextRequest) {
       }),
     );
   } catch (err) {
-    error({ err: String(err), stack: (err as Error).stack }, "Enrolment mint failed");
+    error({ err: String(err), stack: (err as Error).stack }, "Enrollment mint failed");
     return NextResponse.json({ error: "Could not create a code" }, { status: 500 });
   }
 }

@@ -166,6 +166,11 @@ export default function AuthPage() {
                 {mode === "signin" ? "Sign up" : "Sign in"}
               </button>
             </p>
+            <p className="mt-4 border-t border-ink/10 pt-4 text-sm">
+              <a href="/enroll/device" className="font-bold text-ink/60 underline hover:text-ink">
+                Enroll a shared tablet
+              </a>
+            </p>
           </div>
         </Card>
       </main>

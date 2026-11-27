@@ -155,7 +155,7 @@ create index on sessions (household_id);
 create table device_enrollments (
   id            uuid primary key default gen_random_uuid(),
   household_id  uuid not null references households(id) on delete cascade,
-  user_id       uuid references users(id),        -- null = enrol a picker
+  user_id       uuid references users(id),        -- null = enroll a picker
   code_hash     text unique not null,
   created_by    uuid not null references users(id),
   expires_at    timestamptz not null,
@@ -200,7 +200,7 @@ Config for a 1–2 GB droplet: `shared_buffers=256MB`, `max_connections=50`, `wo
 |---|---|---|---|
 | `__Host-cs-device` | picker token | 180 days, sliding | the tablet's credential; binds to one household |
 | `__Host-cs-kid` | kid token, shared tablet | **5 minutes idle**, sliding, 4 h absolute | activity refreshes |
-| `__Host-cs-kid` | kid token, own device | 90 days, sliding | from QR enrolment |
+| `__Host-cs-kid` | kid token, own device | 90 days, sliding | from QR enrollment |
 | `__Host-cs-tablet` | tablet-adult token | **5 minutes idle**, sliding, 4 h absolute | PIN-authenticated adult |
 | Supabase cookies | adult | unchanged | the authority device is the phone/laptop |
 
@@ -284,7 +284,7 @@ Both are read-only, cache for `private, max-age=30`, and return **first names + 
 
 **F1 Parent adds a member.** Household page → name, avatar, role. Under-13: no email field at all. 13+: optional email, which creates a Supabase user + `auth_identities` row. Both get a PIN on first setup (for the picker).
 
-**F2 Enrol the shared tablet.** Parent → "Set up this tablet" → QR + copyable code → tablet opens `/enroll#code` → `cs-device` (picker) bound to that household → `/profiles` → kiosk leaderboard idles behind the picker.
+**F2 Enroll the shared tablet.** Parent → "Set up this tablet" → QR + copyable code → tablet opens `/enroll#code` → `cs-device` (picker) bound to that household → `/profiles` → kiosk leaderboard idles behind the picker.
 
 **F3 Sign in on the tablet.** `/profiles` → tap → emoji grid → kid/tablet_adult session (5 min idle). Sign-out returns to `/profiles`; the device token survives.
 
@@ -376,7 +376,7 @@ The order is forced: Postgres and the rename must land before membership-shaped 
 | **R — Postgres + rename** | `db/migrations/*.sql`, `src/db/client.ts` shim, type parsers, `withTx`, port 367 sites (compiler-guided `await`), delete better-sqlite3/Drizzle/both schema files/PRAGMA code, PGlite test harness, `docker-compose.yml`, Helm chart with `postgres.enabled`, reseed | 3–4 days |
 | **T — Households** | `households`, `users`, `auth_identities`, `memberships`, `household_links`; `getMembership()`; points/medals/streaks move to memberships; `/api/family/*` → `/api/household/*`; RLS policies + the "forgotten WHERE" test | 2 days |
 | **K1 — Kid auth** | sessions, PIN, picker, `verifyAuth` branches, profiles API + UI | 2 days |
-| **K2 — Devices** | enrolment endpoints, QR, `/enroll`, device list + revoke, reset PIN | 1 day |
+| **K2 — Devices** | enrollment endpoints, QR, `/enroll`, device list + revoke, reset PIN | 1 day |
 | **S — Shared session** | idle 5 min, touch endpoint, 60 s warning, kiosk endpoints + screens | 1 day |
 | **Tests** | §14 alongside each phase | 1 day total |
 

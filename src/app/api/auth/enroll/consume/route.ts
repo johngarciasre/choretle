@@ -14,7 +14,7 @@ import {
 } from "@/lib/session";
 
 /**
- * Public, code-gated. Consumes a single-use enrolment code and creates either a
+ * Public, code-gated. Consumes a single-use enrollment code and creates either a
  * kid session (own device) or a picker session (shared tablet).
  */
 async function POST(request: NextRequest) {
@@ -33,10 +33,14 @@ async function POST(request: NextRequest) {
       | { id: string; household_id: string; user_id: string | null; expires_at: string; used_at: string | null }
       | undefined;
 
-    if (!row) return NextResponse.json({ error: "That code is not valid" }, { status: 400 });
-    if (row.used_at) return NextResponse.json({ error: "That code has already been used" }, { status: 400 });
+    // 404, not 400: a paired device polls this endpoint and has to tell "the
+    // phone has not approved yet" apart from "that code is dead".
+    if (!row) return NextResponse.json({ error: "That code is not valid", reason: "unknown" }, { status: 404 });
+    if (row.used_at) {
+      return NextResponse.json({ error: "That code has already been used", reason: "used" }, { status: 400 });
+    }
     if (new Date(row.expires_at).getTime() <= Date.now()) {
-      return NextResponse.json({ error: "That code has expired" }, { status: 400 });
+      return NextResponse.json({ error: "That code has expired", reason: "expired" }, { status: 400 });
     }
 
     const label = typeof body?.label === "string" ? body.label.slice(0, 120) : null;
@@ -80,8 +84,8 @@ async function POST(request: NextRequest) {
     response.cookies.set(kind === "kid" ? names.kid : names.device, token, cookieOptions(maxAgeSeconds));
     return response;
   } catch (err) {
-    error({ err: String(err), stack: (err as Error).stack }, "Enrolment consume failed");
-    return NextResponse.json({ error: "Could not finish enrolment" }, { status: 500 });
+    error({ err: String(err), stack: (err as Error).stack }, "Enrollment consume failed");
+    return NextResponse.json({ error: "Could not finish enrollment" }, { status: 500 });
   }
 }
 

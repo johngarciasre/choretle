@@ -80,7 +80,7 @@ create policy household_links_tenant on household_links
     or linked_household_id = current_setting('app.household_id', true)
   );
 
--- Sessions and enrolment codes belong to one household only.
+-- Sessions and enrollment codes belong to one household only.
 drop policy if exists sessions_tenant on sessions;
 create policy sessions_tenant on sessions
   for all

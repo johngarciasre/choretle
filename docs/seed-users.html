@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Choretle demo accounts</title>
+    <!--
+      Generated from scripts/seed.mjs on 2026-11-27. The PINs are the
+      deterministic pinFor(name) values that seed wrote, so this page can be
+      regenerated from the same source if the seed ever changes.
+    -->
+    <style>
+      @page {
+        size: letter;
+        margin: 12mm 14mm;
+      }
+
+      :root {
+        --ink: #23212b;
+        --muted: #5f5b6b;
+        --line: #d8d4e0;
+        --cream: #fdfaf3;
+        --accent: #e2634f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        background: var(--cream);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 12pt;
+        line-height: 1.4;
+      }
+
+      .sheet {
+        max-width: 178mm;
+        margin: 0 auto;
+      }
+
+      header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20pt;
+        letter-spacing: -0.01em;
+      }
+
+      .stamp {
+        font-size: 9pt;
+        color: var(--muted);
+      }
+
+      .note {
+        margin: 8px 0 16px;
+        font-size: 9.5pt;
+        color: var(--muted);
+      }
+
+      .note strong {
+        color: var(--ink);
+      }
+
+      .households {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      section {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px 12px 12px;
+        background: #fff;
+      }
+
+      h2 {
+        margin: 0 0 2px;
+        font-size: 13pt;
+      }
+
+      .slug {
+        margin: 0 0 8px;
+        font-size: 8.5pt;
+        color: var(--muted);
+        font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10pt;
+      }
+
+      th {
+        text-align: left;
+        font-size: 8pt;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1px solid var(--line);
+        padding: 3px 6px;
+      }
+
+      td {
+        padding: 4px 6px;
+        border-bottom: 1px solid #efeaf6;
+        vertical-align: top;
+      }
+
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      .name {
+        font-weight: 700;
+      }
+
+      .role-parent {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .role-helper {
+        color: #6b5bd2;
+        font-weight: 700;
+      }
+
+      .num {
+        text-align: right;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .email {
+        font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+        font-size: 9.5pt;
+      }
+
+      .none {
+        color: #9a95a6;
+        font-style: italic;
+      }
+
+      .pin {
+        font-size: 17pt;
+        letter-spacing: 0.08em;
+        line-height: 1;
+        white-space: nowrap;
+        font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+      }
+
+      .pin-ids {
+        display: block;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 7.5pt;
+        letter-spacing: 0;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+
+      footer {
+        margin-top: 12px;
+        font-size: 8pt;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+        padding-top: 6px;
+      }
+
+      @media print {
+        body {
+          padding: 0;
+          background: #fff;
+        }
+
+        section {
+          border-color: #bbb;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <h1>Choretle demo accounts</h1>
+        <span class="stamp">Seeded 27 November 2026</span>
+      </header>
+
+      <p class="note">
+        <strong>Any password signs in</strong> while the server runs with <code>AUTH_MODE=dev</code>.
+        Everyone listed also has an emoji PIN, but PINs only appear on an enrolled picker at
+        <code>/profiles</code>. People under 13 have no email at all.
+      </p>
+
+      <div class="households">
+        <section>
+          <h2>The Brady Bunch</h2>
+          <p class="slug">seed-brady</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th class="num">Age</th>
+                <th>Role</th>
+                <th>Sign-in</th>
+                <th>PIN</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="name">Mike Brady</td>
+                <td class="num">46</td>
+                <td class="role-parent">parent</td>
+                <td class="email">mike@brady.bunch</td>
+                <td><span class="pin">⚽ 🚀 💚 🌻</span><span class="pin-ids">soccer, rocket, heart, flower</span></td>
+              </tr>
+              <tr>
+                <td class="name">Carol Brady</td>
+                <td class="num">44</td>
+                <td class="role-parent">parent</td>
+                <td class="email">carol@brady.bunch</td>
+                <td><span class="pin">🌳 🐳 🏀 😊</span><span class="pin-ids">tree, whale, basketball, smile</span></td>
+              </tr>
+              <tr>
+                <td class="name">Alice Nelson</td>
+                <td class="num">58</td>
+                <td class="role-helper">helper</td>
+                <td class="email">alice@brady.bunch</td>
+                <td><span class="pin">🎨 🤩 🌙 🐼</span><span class="pin-ids">paint, starstruck, moon, panda</span></td>
+              </tr>
+              <tr>
+                <td class="name">Greg Brady</td>
+                <td class="num">17</td>
+                <td>child</td>
+                <td class="email">greg@brady.bunch</td>
+                <td><span class="pin">🌙 🐼 🍉 🧩</span><span class="pin-ids">moon, panda, watermelon, puzzle</span></td>
+              </tr>
+              <tr>
+                <td class="name">Marcia Brady</td>
+                <td class="num">16</td>
+                <td>child</td>
+                <td class="email">marcia@brady.bunch</td>
+                <td><span class="pin">🪁 😉 ✨ 🐱</span><span class="pin-ids">kite, wink, sparkle, cat</span></td>
+              </tr>
+              <tr>
+                <td class="name">Peter Brady</td>
+                <td class="num">15</td>
+                <td>child</td>
+                <td class="email">peter@brady.bunch</td>
+                <td><span class="pin">💚 🌻 🐢 🍕</span><span class="pin-ids">heart, flower, turtle, pizza</span></td>
+              </tr>
+              <tr>
+                <td class="name">Jan Brady</td>
+                <td class="num">14</td>
+                <td>child</td>
+                <td class="email">jan@brady.bunch</td>
+                <td><span class="pin">🍉 🧩 😎 ☀️</span><span class="pin-ids">watermelon, puzzle, cool, sun</span></td>
+              </tr>
+              <tr>
+                <td class="name">Bobby Brady</td>
+                <td class="num">12</td>
+                <td>child</td>
+                <td class="none">no email</td>
+                <td><span class="pin">🍀 🦋 ⚽ 🚀</span><span class="pin-ids">clover, butterfly, soccer, rocket</span></td>
+              </tr>
+              <tr>
+                <td class="name">Cindy Brady</td>
+                <td class="num">11</td>
+                <td>child</td>
+                <td class="none">no email</td>
+                <td><span class="pin">🦄 🚲 😄 ⭐</span><span class="pin-ids">unicorn, bike, grin, star</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>The Partridge Family</h2>
+          <p class="slug">seed-partridge</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th class="num">Age</th>
+                <th>Role</th>
+                <th>Sign-in</th>
+                <th>PIN</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="name">Shirley Partridge</td>
+                <td class="num">52</td>
+                <td class="role-parent">parent</td>
+                <td class="email">shirley@partridge.bunch</td>
+                <td><span class="pin">🚲 😄 ⭐ 🌳</span><span class="pin-ids">bike, grin, star, tree</span></td>
+              </tr>
+              <tr>
+                <td class="name">Reuben Kincaid</td>
+                <td class="num">60</td>
+                <td class="role-helper">helper</td>
+                <td class="email">reuben@partridge.bunch</td>
+                <td><span class="pin">🐼 🍉 🧩 😎</span><span class="pin-ids">panda, watermelon, puzzle, cool</span></td>
+              </tr>
+              <tr>
+                <td class="name">Keith Partridge</td>
+                <td class="num">17</td>
+                <td>child</td>
+                <td class="email">keith@partridge.bunch</td>
+                <td><span class="pin">🚀 💚 🌻 🐢</span><span class="pin-ids">rocket, heart, flower, turtle</span></td>
+              </tr>
+              <tr>
+                <td class="name">Laurie Partridge</td>
+                <td class="num">16</td>
+                <td>child</td>
+                <td class="email">laurie@partridge.bunch</td>
+                <td><span class="pin">🍀 🦋 ⚽ 🚀</span><span class="pin-ids">clover, butterfly, soccer, rocket</span></td>
+              </tr>
+              <tr>
+                <td class="name">Danny Partridge</td>
+                <td class="num">13</td>
+                <td>child</td>
+                <td class="email">danny@partridge.bunch</td>
+                <td><span class="pin">🐱 🦄 🚲 😄</span><span class="pin-ids">cat, unicorn, bike, grin</span></td>
+              </tr>
+              <tr>
+                <td class="name">Tracy Partridge</td>
+                <td class="num">11</td>
+                <td>child</td>
+                <td class="none">no email</td>
+                <td><span class="pin">🏀 😊 🌈 🍀</span><span class="pin-ids">basketball, smile, rainbow, clover</span></td>
+              </tr>
+              <tr>
+                <td class="name">Chris Partridge</td>
+                <td class="num">9</td>
+                <td>child</td>
+                <td class="none">no email</td>
+                <td><span class="pin">🪁 😉 ✨ 🐱</span><span class="pin-ids">kite, wink, sparkle, cat</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>The Bower House</h2>
+          <p class="slug">seed-bower</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th class="num">Age</th>
+                <th>Role</th>
+                <th>Sign-in</th>
+                <th>PIN</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="name">Angela Bower</td>
+                <td class="num">34</td>
+                <td class="role-parent">parent</td>
+                <td class="email">angela@bower.bunch</td>
+                <td><span class="pin">🪁 😉 ✨ 🐱</span><span class="pin-ids">kite, wink, sparkle, cat</span></td>
+              </tr>
+              <tr>
+                <td class="name">Mona Robinson</td>
+                <td class="num">58</td>
+                <td class="role-parent">parent</td>
+                <td class="email">mona@bower.bunch</td>
+                <td><span class="pin">🚀 💚 🌻 🐢</span><span class="pin-ids">rocket, heart, flower, turtle</span></td>
+              </tr>
+              <tr>
+                <td class="name">Tony Micelli</td>
+                <td class="num">37</td>
+                <td class="role-helper">helper</td>
+                <td class="email">tony@bower.bunch</td>
+                <td><span class="pin">🍉 🧩 😎 ☀️</span><span class="pin-ids">watermelon, puzzle, cool, sun</span></td>
+              </tr>
+              <tr>
+                <td class="name">Samantha Micelli</td>
+                <td class="num">14</td>
+                <td>child</td>
+                <td class="email">samantha@bower.bunch</td>
+                <td><span class="pin">🐢 🍕 🎵 🥳</span><span class="pin-ids">turtle, pizza, music, party</span></td>
+              </tr>
+              <tr>
+                <td class="name">Jonathan Bower</td>
+                <td class="num">7</td>
+                <td>child</td>
+                <td class="none">no email</td>
+                <td><span class="pin">🧩 😎 ☀️ 🐶</span><span class="pin-ids">puzzle, cool, sun, dog</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>The Micelli House</h2>
+          <p class="slug">seed-micelli</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th class="num">Age</th>
+                <th>Role</th>
+                <th>Sign-in</th>
+                <th>PIN</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="name">Tony Micelli</td>
+                <td class="num">37</td>
+                <td class="role-parent">parent</td>
+                <td class="email">tony@micelli.bunch</td>
+                <td><span class="pin">🍉 🧩 😎 ☀️</span><span class="pin-ids">watermelon, puzzle, cool, sun</span></td>
+              </tr>
+              <tr>
+                <td class="name">Samantha Micelli</td>
+                <td class="num">14</td>
+                <td>child</td>
+                <td class="email">samantha@micelli.bunch</td>
+                <td><span class="pin">🐢 🍕 🎵 🥳</span><span class="pin-ids">turtle, pizza, music, party</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <footer>
+        Tony and Samantha Micelli exist in both the Bower and Micelli households as separate people, with the same
+        PIN each time because the PIN is derived from the name. A PIN is checked against the chosen person, so that
+        is harmless. 23 people in total.
+      </footer>
+    </div>
+  </body>
+</html>

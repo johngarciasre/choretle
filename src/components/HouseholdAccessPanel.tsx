@@ -2,16 +2,16 @@
 
 /**
  * Household access panel: the admin surface for the things a parent has to do
- * that are not chores — enrol a tablet, add someone, set a picture PIN, and
+ * that are not chores — enroll a tablet, add someone, set a picture PIN, and
  * manage report links with another household.
  *
  * Kept as one component so the household page only grows by one line.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import qrcode from "qrcode-generator";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, KeyRound, Link2, Plus, Smartphone, Trash2 } from "lucide-react";
 import { Button, Card, EmptyState } from "@/components/ui";
+import { QrCode } from "@/components/QrCode";
 import { PIN_EMOJI, PIN_LENGTH } from "@/lib/pin-emoji";
 
 interface Member {
@@ -43,46 +43,44 @@ interface Props {
   onChanged?: () => void | Promise<void>;
 }
 
-/** Small dependency-free QR matrix, rendered as a grid of cells. */
-function QrCode({ value }: { value: string }) {
-  const modules = useMemo(() => {
-    const qr = qrcode(0, "M");
-    qr.addData(value);
-    qr.make();
-    const count = qr.getModuleCount();
-    const rows: boolean[][] = [];
-    for (let row = 0; row < count; row += 1) {
-      const cells: boolean[] = [];
-      for (let col = 0; col < count; col += 1) cells.push(qr.isDark(row, col));
-      rows.push(cells);
+/**
+ * Copy without lying about it. A tablet opens the household page over plain
+ * http on a LAN address, where `navigator.clipboard` does not exist, so fall
+ * back to the old selection copy rather than reporting a success that never
+ * happened.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      return true;
     }
-    return rows;
-  }, [value]);
-
-  return (
-    <div
-      className="inline-grid gap-0 rounded-xl bg-white p-3"
-      style={{ gridTemplateColumns: `repeat(${modules.length}, 6px)` }}
-      role="img"
-      aria-label="Setup QR code"
-    >
-      {modules.flatMap((row, rowIndex) =>
-        row.map((dark, colIndex) => (
-          <span
-            key={`${rowIndex}-${colIndex}`}
-            className={dark ? "bg-ink" : "bg-white"}
-            style={{ width: 6, height: 6 }}
-          />
-        )),
-      )}
-    </div>
-  );
+  } catch {
+    // Permission or insecure-context failure: try the fallback below.
+  }
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  field.remove();
+  return copied;
 }
 
 export function HouseholdAccessPanel({ householdId, members, onChanged }: Props) {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [links, setLinks] = useState<LinkRow[] | null>(null);
   const [enrollment, setEnrollment] = useState<{ code: string; url: string; forName: string } | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [enrollFor, setEnrollFor] = useState("");
   const [pinTarget, setPinTarget] = useState<Member | null>(null);
   const [pin, setPin] = useState<string[]>([]);
@@ -129,11 +127,31 @@ export function HouseholdAccessPanel({ householdId, members, onChanged }: Props)
     }
   };
 
-  const enrol = async () => {
+  useEffect(() => () => {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+  }, []);
+
+  const enroll = async () => {
     const data = await post("/api/auth/enroll", enrollFor ? { userId: enrollFor } : {});
     if (!data) return;
     const target = members.find((member) => member.id === enrollFor);
-    setEnrollment({ code: data.code, url: data.qrPayload, forName: target?.name ?? "this tablet" });
+    setCopyState("idle");
+    // Build the link from this browser's origin: the API trusts the request
+    // origin, which is 0.0.0.0 when the server is bound to every interface and
+    // therefore useless to type into another device.
+    setEnrollment({
+      code: data.code,
+      url: `${window.location.origin}/enroll#${data.code}`,
+      forName: target?.name ?? "this tablet",
+    });
+  };
+
+  const copySetupLink = async () => {
+    if (!enrollment) return;
+    const worked = await copyText(enrollment.url);
+    setCopyState(worked ? "copied" : "failed");
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopyState("idle"), 2500);
   };
 
   const revoke = async (deviceId: string) => {
@@ -198,7 +216,7 @@ export function HouseholdAccessPanel({ householdId, members, onChanged }: Props)
       <Card className="p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-display text-lg font-bold text-ink">Enrol this tablet</h3>
+            <h3 className="font-display text-lg font-bold text-ink">Enroll this tablet</h3>
             <p className="text-sm text-ink/60">Creates a single-use code. The tablet stays signed in as a picker.</p>
           </div>
           <div className="flex items-center gap-2">
@@ -206,7 +224,7 @@ export function HouseholdAccessPanel({ householdId, members, onChanged }: Props)
               value={enrollFor}
               onChange={(event) => setEnrollFor(event.target.value)}
               className="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm"
-              aria-label="Enrol for"
+              aria-label="Enroll for"
             >
               <option value="">A shared tablet</option>
               {members.map((member) => (
@@ -215,7 +233,7 @@ export function HouseholdAccessPanel({ householdId, members, onChanged }: Props)
                 </option>
               ))}
             </select>
-            <Button onClick={enrol} disabled={busy} size="sm">
+            <Button onClick={enroll} disabled={busy} size="sm">
               <Plus size={14} className="inline mr-1" />
               Create code
             </Button>
@@ -230,10 +248,20 @@ export function HouseholdAccessPanel({ householdId, members, onChanged }: Props)
               <p className="mt-2 break-all font-mono text-sm text-ink">{enrollment.url}</p>
               <button
                 type="button"
-                onClick={() => navigator.clipboard?.writeText(enrollment.url)}
-                className="mt-2 text-sm font-medium text-coral hover:underline"
+                onClick={copySetupLink}
+                aria-live="polite"
+                className="mt-2 flex items-center gap-1 text-left text-sm font-medium text-coral hover:underline"
               >
-                Copy the setup link
+                {copyState === "copied" ? (
+                  <>
+                    <Check size={14} aria-hidden />
+                    Link copied
+                  </>
+                ) : copyState === "failed" ? (
+                  "Could not copy. Select the link and copy it manually."
+                ) : (
+                  "Copy the setup link"
+                )}
               </button>
             </div>
           </div>
@@ -245,7 +273,7 @@ export function HouseholdAccessPanel({ householdId, members, onChanged }: Props)
         {devices === null ? (
           <p className="text-sm text-ink/60">Loading.</p>
         ) : devices.length === 0 ? (
-          <EmptyState icon={<Smartphone size={28} />} title="No devices yet" message="Enrol a tablet to keep a picker signed in." />
+          <EmptyState icon={<Smartphone size={28} />} title="No devices yet" message="Enroll a tablet to keep a picker signed in." />
         ) : (
           <ul className="divide-y divide-ink/5">
             {devices.map((device) => (

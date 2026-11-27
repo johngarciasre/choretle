@@ -2,7 +2,7 @@
 
 /**
  * Shared-tablet profile picker, with the kiosk leaderboard behind it so an idle
- * tablet still looks alive. A parent enrols the tablet once from the household
+ * tablet still looks alive. A parent enrolls the tablet once from the household
  * page; after that this screen needs no adult.
  */
 

@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui";
 import { Star, Clock, CheckCircle2, PlayCircle } from "lucide-react";
+import { canTransition } from "@/lib/jobStatus";
 
 interface KanbanJob {
   id: string;
@@ -27,14 +28,19 @@ const COLUMNS: Array<{ key: "todo" | "doing" | "done"; label: string; icon: Reac
   { key: "done", label: "Done", icon: <CheckCircle2 size={14} /> },
 ];
 
+/** Submitted chores stay on the board next to "doing" until a parent decides. */
+export function columnFor(status: string): "todo" | "doing" | "done" {
+  return status === "under_review" ? "doing" : (status as "todo" | "doing" | "done");
+}
+
 export default function KanbanBoard({ jobs, onStatusChange }: KanbanBoardProps) {
   const [draggedJobId, setDraggedJobId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const grouped: Record<string, KanbanJob[]> = { todo: [], doing: [], done: [] };
   for (const job of jobs) {
-    // Submitted chores stay on the board next to "doing" until a parent decides.
-    const status = job.status === "under_review" ? "doing" : job.status;
+    const status = columnFor(job.status);
     if (grouped[status]) grouped[status].push(job);
   }
 
@@ -45,24 +51,32 @@ export default function KanbanBoard({ jobs, onStatusChange }: KanbanBoardProps) 
   const moveJob = useCallback(async (jobId: string, newStatus: string) => {
     setDraggedJobId(null);
     setDragOverColumn(null);
-    try {
-      const res = await fetch(`/api/jobs/${jobId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to update job");
-      }
-    } catch (err) {
-      console.error("Failed to update job status:", err);
-      alert(err instanceof Error ? err.message : "Failed to update job");
-    } finally {
-      // Refetch either way so the board matches the server after a rejection.
-      onStatusChange?.(jobId, newStatus);
+    const job = jobs.find((entry) => entry.id === jobId);
+    if (!job) return;
+    // Check the shared rules first: the board already knows a completed chore is
+    // final, so it must not ask the server to reopen one.
+    if (columnFor(job.status) === newStatus) return;
+    if (!canTransition(job.status, newStatus)) {
+      setNotice(
+        job.status === "done"
+          ? "A finished chore stays finished. Points are already counted."
+          : `Cannot move “${job.name}” to ${newStatus} from where it is.`,
+      );
+      return;
     }
-  }, [onStatusChange]);
+    setNotice(null);
+    const res = await fetch(`/api/jobs/${jobId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setNotice(data.error || "Could not update that chore. Try again.");
+    }
+    // Refetch either way so the board matches the server after a rejection.
+    onStatusChange?.(jobId, newStatus);
+  }, [jobs, onStatusChange]);
 
   const totalPoints = jobs.reduce((sum, j) => sum + j.points, 0);
 
@@ -74,6 +88,12 @@ export default function KanbanBoard({ jobs, onStatusChange }: KanbanBoardProps) 
           {jobs.filter((j) => j.status === "done").length} completed · {totalPoints} pts available
         </span>
       </div>
+
+      {notice ? (
+        <p className="mb-4 rounded-xl bg-sunny/20 px-3 py-2 text-sm font-medium text-ink/70" role="status">
+          {notice}
+        </p>
+      ) : null}
 
       {/* Kanban columns */}
       <div className="grid grid-cols-3 gap-4 min-h-[320px]">
@@ -143,6 +163,8 @@ interface KanbanCardProps {
 
 function KanbanCard({ job, columnKey, onDragStart, onMove }: KanbanCardProps) {
   const isOverdue = job.due_date && new Date(job.due_date) < new Date() && columnKey !== "done";
+  // "done" is final: points are already awarded, so a finished card cannot leave.
+  const draggable = columnKey !== "done";
   // Touch boards cannot drag, so every card also carries its next action.
   const nextAction =
     columnKey === "todo" ? { label: "Start", status: "doing" }
@@ -153,9 +175,11 @@ function KanbanCard({ job, columnKey, onDragStart, onMove }: KanbanCardProps) {
 
   return (
     <div
-      draggable
+      draggable={draggable}
       onDragStart={() => onDragStart()}
-      className={`rounded-xl p-4 cursor-grab active:cursor-grab transition-shadow ${
+      className={`rounded-xl p-4 transition-shadow ${
+        draggable ? "cursor-grab active:cursor-grab" : ""
+      } ${
         columnKey === "todo" ? "bg-white shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:shadow-md" : ""
       } ${columnKey === "doing" ? "bg-grape/10 ring-1 ring-grape/30" : ""} ${
         columnKey === "done" ? "bg-teal/10 opacity-80" : ""

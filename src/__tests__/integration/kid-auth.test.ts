@@ -220,7 +220,7 @@ describe("Kid and picker sessions", () => {
     expect(cookie).toContain("Max-Age=14400");
   });
 
-  it("allows only one use of an enrolment code", async () => {
+  it("allows only one use of an enrollment code", async () => {
     const parent = new TestHarness();
     const { householdId } = await signInAndGetHousehold(parent);
 
@@ -238,7 +238,7 @@ describe("Kid and picker sessions", () => {
     expect(replay.status).toBe(400);
   });
 
-  it("refuses to mint an enrolment code from a kid session", async () => {
+  it("refuses to mint an enrollment code from a kid session", async () => {
     const parent = new TestHarness();
     const { householdId } = await signInAndGetHousehold(parent);
     const kidId = await addHouseholdMember(householdId, "child", "Sneaky Kid");

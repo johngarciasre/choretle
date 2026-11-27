@@ -51,7 +51,7 @@ docker compose up -d
 ├── src/app/                # Next.js App Router pages + API routes
 │   ├── api/                # Server-side API endpoints
 │   ├── profiles/           # Shared-tablet profile picker and kiosk
-│   ├── enroll/             # QR device enrolment landing page
+│   ├── enroll/             # QR device enrollment landing page
 │   └── ...                 # Feature pages (dashboard, tasks, jobs, etc.)
 ├── src/db/                 # Postgres client (pg + PGlite) and migration loader
 ├── src/lib/                # Utilities, sessions, PINs, tenancy
@@ -86,7 +86,7 @@ need no container.
 All core flows are implemented: households and invites, memberships, tasks and
 subtasks, slates with tag auto-inclusion, rotation assignment, schedule
 generation, scoring, medals, reports, Swap Meet, PIN sign-in with device
-enrolment, and kiosk endpoints.
+enrollment, and kiosk endpoints.
 
 ### Known gaps
 - Supabase-mode sign-in has not been exercised against a live Supabase project.

@@ -59,3 +59,6 @@ supabase/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+
+# generated print output (docs/seed-users.html is the source; re-export the PDF)
+docs/*.pdf
