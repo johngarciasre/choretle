@@ -43,32 +43,32 @@ interface Slate {
   taskCount?: number;
 }
 
-async function getFamilyId(): Promise<string> {
+async function getHouseholdId(): Promise<string> {
   const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
   if (data.authenticated === false) throw new Error("Not authenticated");
-  if (!data.familyId) throw new Error(data.authenticated ? "No family ID" : "Not authenticated");
-  return data.familyId;
+  if (!data.householdId) throw new Error(data.authenticated ? "No household ID" : "Not authenticated");
+  return data.householdId;
 }
 
 const fetchSlates = async () => {
-  const fid = await getFamilyId();
-  const res = await fetch(`/api/slates?familyId=${fid}`, { credentials: "include" });
+  const fid = await getHouseholdId();
+  const res = await fetch(`/api/slates?householdId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch slates");
   return await res.json();
 };
 
 const fetchTasks = async () => {
-  const fid = await getFamilyId();
-  const res = await fetch(`/api/tasks?familyId=${fid}`, { credentials: "include" });
+  const fid = await getHouseholdId();
+  const res = await fetch(`/api/tasks?householdId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch tasks");
   return await res.json();
 };
 
 const fetchTags = async () => {
-  const fid = await getFamilyId();
-  const res = await fetch(`/api/tags?familyId=${fid}`, { credentials: "include" });
+  const fid = await getHouseholdId();
+  const res = await fetch(`/api/tags?householdId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch tags");
   return await res.json();
 };
@@ -117,8 +117,8 @@ export default function SlatesPage() {
     if (!newSlateName.trim()) return;
 
     try {
-      const fid = await getFamilyId();
-      const res = await fetch(`/api/slates?familyId=${fid}`, {
+      const fid = await getHouseholdId();
+      const res = await fetch(`/api/slates?householdId=${fid}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newSlateName, schedule: newSlateSchedule }),
@@ -158,8 +158,8 @@ export default function SlatesPage() {
 
   async function handleStartBuilding(slateId: string) {
     try {
-      const fid = await getFamilyId();
-      const res = await fetch(`/api/slates/${slateId}/tasks?familyId=${fid}`, { credentials: "include" });
+      const fid = await getHouseholdId();
+      const res = await fetch(`/api/slates/${slateId}/tasks?householdId=${fid}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch slate tasks");
       const data = await res.json();
 

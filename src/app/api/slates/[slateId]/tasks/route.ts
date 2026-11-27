@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
-import { verifyAuth } from "@/lib/auth";
+import { getDb } from "@/db";
+import { verifyAuth, canAuthor } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ slateId: string }> }) {
@@ -10,41 +10,41 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     const slateId = (await params).slateId;
-    if (!rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, auth.familyId)) {
+    if (!await rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND household_id = ?`).get(slateId, auth.householdId)) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
 
     const body = await request.json();
     const { explicitTaskIds, autoIncludeTagIds } = body as { explicitTaskIds?: string[]; autoIncludeTagIds?: string[] };
 
-    // Every referenced task/tag must belong to the same family.
+    // Every referenced task/tag must belong to the same household.
     for (const taskId of explicitTaskIds || []) {
-      if (!rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(taskId, auth.familyId)) {
+      if (!await rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND household_id = ?`).get(taskId, auth.householdId)) {
         return NextResponse.json({ error: "Task not found" }, { status: 404 });
       }
     }
     for (const tagId of autoIncludeTagIds || []) {
-      if (!rawDb.prepare(`SELECT id FROM tags WHERE id = ? AND family_id = ?`).get(tagId, auth.familyId)) {
+      if (!await rawDb.prepare(`SELECT id FROM tags WHERE id = ? AND household_id = ?`).get(tagId, auth.householdId)) {
         return NextResponse.json({ error: "Tag not found" }, { status: 404 });
       }
     }
 
     // Delete existing slate tasks for this slate
-    rawDb.prepare(`DELETE FROM slate_tasks WHERE slate_id = ?`).run(slateId);
+    await rawDb.prepare(`DELETE FROM slate_tasks WHERE slate_id = ?`).run(slateId);
 
     if (explicitTaskIds) {
       // Insert new slate tasks with deterministic IDs
-      const insertStmt = rawDb.prepare(
+      const insertStmt = await rawDb.prepare(
         `INSERT INTO slate_tasks (id, slate_id, task_id, points_override, "order") VALUES (?, ?, ?, ?, ?)`
       );
 
@@ -60,9 +60,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Update auto-include tag associations
-    rawDb.prepare(`DELETE FROM slate_tags WHERE slate_id = ?`).run(slateId);
+    await rawDb.prepare(`DELETE FROM slate_tags WHERE slate_id = ?`).run(slateId);
     if (autoIncludeTagIds && autoIncludeTagIds.length > 0) {
-      const insertTagStmt = rawDb.prepare(
+      const insertTagStmt = await rawDb.prepare(
         `INSERT INTO slate_tags (id, slate_id, tag_id) VALUES (?, ?, ?)`
       );
       for (const tagId of autoIncludeTagIds) {
@@ -85,18 +85,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     const slateId = (await params).slateId;
-    if (!rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, auth.familyId)) {
+    if (!await rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND household_id = ?`).get(slateId, auth.householdId)) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
 
     // Get explicit tasks for this slate using raw SQL
-    const slateTasks = rawDb.prepare(`
+    const slateTasks = await rawDb.prepare(`
       SELECT st.id as slate_task_id, st.task_id, t.id as task_id, t.name, t.description, t.points
       FROM slate_tasks st
       LEFT JOIN tasks t ON st.task_id = t.id
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const explicitTaskIds = slateTasks.map((st: any) => st.task_id);
 
     // Get auto-include tag associations
-    const slateTags = rawDb.prepare(
+    const slateTags = await rawDb.prepare(
       `SELECT tag_id FROM slate_tags WHERE slate_id = ?`
     ).all(slateId) as any[];
     const autoIncludeTagIds = (slateTags || []).map((t: any) => t.tag_id);

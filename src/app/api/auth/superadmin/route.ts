@@ -15,7 +15,7 @@ interface SuperadminUser {
   email: string;
   name: string;
   role: "superadmin";
-  familyId: null;
+  householdId: null;
 }
 
 interface SuperadminSession {
@@ -36,7 +36,7 @@ function parseSuperadminSession(cookieValue?: string): SuperadminUser | null {
       email: u.email,
       name: u.name,
       role: u.role,
-      familyId: null,
+      householdId: null,
     };
   } catch {
     return null;
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     email: expectedUsername,
     name: "Superadmin",
     role: "superadmin",
-    familyId: null,
+    householdId: null,
   };
 
   const session: SuperadminSession = { user };

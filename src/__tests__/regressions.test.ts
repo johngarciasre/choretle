@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { TestHarness } from "./integration/harness";
-import { signInAndGetFamily, createListFixture, addFamilyMember } from "./integration/fixtures";
-import { resetDb, getRawDb, resolveDbPath } from "@/db/drizzle";
+import { signInAndGetHousehold, createListFixture, addHouseholdMember } from "./integration/fixtures";
+import { resetDb, getDb } from "@/db";
 import { verifyAuth } from "@/lib/auth";
 import { getDevUserFromRequest } from "@/lib/dev-auth";
 import { middleware } from "../../middleware";
 
 /** A request the way Next hands it to a route after middleware forwarding. */
-function headerRequest(userId: string, familyId = ""): NextRequest {
+function headerRequest(userId: string, householdId = ""): NextRequest {
   return new NextRequest("http://localhost:3000/api/tasks", {
-    headers: { "x-user-id": userId, "x-family-id": familyId },
+    headers: { "x-user-id": userId, "x-household-id": householdId },
   });
 }
 
@@ -23,26 +23,26 @@ async function hmac(json: string, secret: string): Promise<string> {
 }
 
 describe("audit regressions", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllEnvs();
   });
 
-  it("resolves the family from the database when middleware only forwarded x-user-id", async () => {
+  it("resolves the household from the database when middleware only forwarded x-user-id", async () => {
     const harness = new TestHarness();
-    const { userId, familyId } = await signInAndGetFamily(harness);
+    const { userId, householdId } = await signInAndGetHousehold(harness);
 
     const auth = await verifyAuth(headerRequest(userId));
-    expect(auth).toEqual({ userId, familyId, role: "parent" });
+    expect(auth).toMatchObject({ userId, householdId, role: "parent" });
   });
 
   it("does not trust a dev cookie outside dev mode", async () => {
     vi.stubEnv("AUTH_MODE", "production");
     const forged = new Request("http://localhost:3000/api/tasks", {
-      headers: { cookie: 'dev-session={"user":{"id":"dev-user-x","email":"x@x","name":"x","role":"parent","familyId":"family-1"}}' },
+      headers: { cookie: 'dev-session={"user":{"id":"dev-user-x","email":"x@x","name":"x","role":"parent","householdId":"household-1"}}' },
     });
     expect(await getDevUserFromRequest(forged)).toBeNull();
   });
@@ -63,9 +63,9 @@ describe("audit regressions", () => {
 
   it("serves the dashboard for a child without a SQL error", async () => {
     const parent = new TestHarness();
-    const { familyId } = await signInAndGetFamily(parent, "parent@choretle.dev");
-    const childId = addFamilyMember(familyId);
-    const childRow = getRawDb()!.prepare(`SELECT email FROM users WHERE id = ?`).get(childId) as any;
+    const { householdId } = await signInAndGetHousehold(parent, "parent@choretle.dev");
+    const childId = await addHouseholdMember(householdId);
+    const childRow = await getDb()!.prepare(`SELECT email FROM users WHERE id = ?`).get(childId) as any;
 
     const child = new TestHarness();
     await child.signIn(childRow.email);
@@ -76,29 +76,29 @@ describe("audit regressions", () => {
     expect(res.body.kid.stats.points_total).toBe(0);
   });
 
-  it("persists a swap meet share with its requesting family and message columns", async () => {
+  it("persists a swap meet share with its requesting household and message columns", async () => {
     const a = new TestHarness();
-    const aId = await signInAndGetFamily(a, "a@choretle.dev");
+    const aId = await signInAndGetHousehold(a, "a@choretle.dev");
     const b = new TestHarness();
-    const bId = await signInAndGetFamily(b, "b@choretle.dev");
+    const bId = await signInAndGetHousehold(b, "b@choretle.dev");
 
     const slate = await a.invokeHandler("/api/slates", "POST", { name: "Shareable" });
     const res = await a.invokeHandler("/api/swap-meet", "POST", {
-      sharingFamilyId: aId.familyId,
-      requestingFamilyId: bId.familyId,
+      sharingHouseholdId: aId.householdId,
+      requestingHouseholdId: bId.householdId,
       slateIds: [slate.body.id],
       messages: { [slate.body.id]: "try this" },
     });
 
     expect(res.status).toBe(200);
-    const row = getRawDb()!.prepare(`SELECT * FROM swap_meet WHERE id = ?`).get(res.body.entries[0].id) as any;
-    expect(row.requesting_family_id).toBe(bId.familyId);
+    const row = await getDb()!.prepare(`SELECT * FROM swap_meet WHERE id = ?`).get(res.body.entries[0].id) as any;
+    expect(row.requesting_household_id).toBe(bId.householdId);
     expect(row.message).toBe("try this");
 
     // Cannot share someone else's slate
     const stolen = await a.invokeHandler("/api/swap-meet", "POST", {
-      sharingFamilyId: bId.familyId,
-      requestingFamilyId: aId.familyId,
+      sharingHouseholdId: bId.householdId,
+      requestingHouseholdId: aId.householdId,
       slateIds: [slate.body.id],
     });
     expect(stolen.status).toBe(403);
@@ -106,7 +106,7 @@ describe("audit regressions", () => {
 
   it("edits subtasks and renames teams (no missing updated_at column)", async () => {
     const harness = new TestHarness();
-    await signInAndGetFamily(harness);
+    await signInAndGetHousehold(harness);
 
     const task = await harness.invokeHandler("/api/tasks", "POST", { name: "Tidy", points: 2 });
     const subtask = await harness.invokeHandler("/api/tasks/subtasks", "POST", { taskId: task.body.id, name: "Step 1", points: 1 });
@@ -124,9 +124,9 @@ describe("audit regressions", () => {
 
   it("filters the done report by completion date, not list start date", async () => {
     const harness = new TestHarness();
-    const { familyId, userId } = await signInAndGetFamily(harness);
+    const { householdId, userId } = await signInAndGetHousehold(harness);
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-    const listId = createListFixture(familyId, tenDaysAgo);
+    const listId = await createListFixture(householdId, tenDaysAgo);
 
     const job = await harness.invokeHandler("/api/jobs", "POST", { listId, name: "Old list job", points: 4, assignedTo: userId });
     await harness.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "done" }, { jobId: job.body.id });
@@ -136,14 +136,14 @@ describe("audit regressions", () => {
     expect(done.body.jobs.map((j: any) => j.id)).toContain(job.body.id);
   });
 
-  it("ranks the leaderboard medal by points within the family", async () => {
+  it("ranks the leaderboard medal by points within the household", async () => {
     const parent = new TestHarness();
-    const { familyId, userId: parentId } = await signInAndGetFamily(parent, "parent@choretle.dev");
-    const childId = addFamilyMember(familyId);
-    const childRow = getRawDb()!.prepare(`SELECT email FROM users WHERE id = ?`).get(childId) as any;
+    const { householdId, userId: parentId } = await signInAndGetHousehold(parent, "parent@choretle.dev");
+    const childId = await addHouseholdMember(householdId);
+    const childRow = await getDb()!.prepare(`SELECT email FROM users WHERE id = ?`).get(childId) as any;
 
-    getRawDb()!.prepare(`UPDATE users SET points_total = 100 WHERE id = ?`).run(parentId);
-    getRawDb()!.prepare(`UPDATE users SET points_total = 50 WHERE id = ?`).run(childId);
+    await getDb()!.prepare(`UPDATE memberships SET points_total = 100 WHERE user_id = ?`).run(parentId);
+    await getDb()!.prepare(`UPDATE memberships SET points_total = 50 WHERE user_id = ?`).run(childId);
 
     const child = new TestHarness();
     await child.signIn(childRow.email);
@@ -154,18 +154,12 @@ describe("audit regressions", () => {
     expect(leaderboard.level).toBe("gold");
   });
 
-  it("keeps a real database path outside tests and creates the swap_meet columns", () => {
-    expect(resolveDbPath()).toBe(":memory:");
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("SQLITE_PATH", "/tmp/choretle-test.db");
-    expect(resolveDbPath()).toBe("/tmp/choretle-test.db");
-    vi.stubEnv("SQLITE_PATH", "");
-    vi.stubEnv("SQLITE_DB", "");
-    expect(resolveDbPath()).toBe("./data/choretle.db");
-
-    const columns = getRawDb()!.prepare(`PRAGMA table_info(swap_meet)`).all() as any[];
-    const names = columns.map((c) => c.name);
-    expect(names).toContain("requesting_family_id");
+  it("creates the household-shaped swap_meet columns", async () => {
+    const columns = (await getDb()!
+      .prepare(`select column_name from information_schema.columns where table_name = 'swap_meet'`)
+      .all()) as { column_name: string }[];
+    const names = columns.map((c) => c.column_name);
+    expect(names).toContain("requesting_household_id");
     expect(names).toContain("message");
   });
 
@@ -198,18 +192,18 @@ describe("audit regressions", () => {
 
   it("refuses to generate jobs without a session", async () => {
     const anonymous = new TestHarness();
-    const res = await anonymous.invokeHandler("/api/schedules/generate", "POST", { familyId: "family-any" });
+    const res = await anonymous.invokeHandler("/api/schedules/generate", "POST", { householdId: "household-any" });
     expect(res.status).toBe(401);
   });
 
-  it("does not let one family edit another family's task", async () => {
+  it("does not let one household edit another household's task", async () => {
     const a = new TestHarness();
-    await signInAndGetFamily(a, "a@choretle.dev");
+    await signInAndGetHousehold(a, "a@choretle.dev");
     const task = await a.invokeHandler("/api/tasks", "POST", { name: "A's chore", points: 5 });
     expect(task.status).toBe(200);
 
     const b = new TestHarness();
-    await signInAndGetFamily(b, "b@choretle.dev");
+    await signInAndGetHousehold(b, "b@choretle.dev");
 
     const viaCollection = await b.invokeHandler("/api/tasks", "PUT", { id: task.body.id, name: "Hijacked" });
     expect(viaCollection.status).toBe(404);

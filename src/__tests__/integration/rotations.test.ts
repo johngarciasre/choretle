@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
-import { signInAndGetFamily, addFamilyMember } from "./fixtures";
+import { resetDb } from "@/db";
+import { signInAndGetHousehold, addHouseholdMember } from "./fixtures";
 
 async function createSlate(harness: TestHarness, name = "Rotation Slate"): Promise<string> {
   const res = await harness.invokeHandler("/api/slates", "POST", { name });
@@ -10,15 +10,15 @@ async function createSlate(harness: TestHarness, name = "Rotation Slate"): Promi
 }
 
 describe("Rotations API Integration", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
-  it("POST /api/rotations creates a rotation for a family slate and member", async () => {
+  it("POST /api/rotations creates a rotation for a household slate and member", async () => {
     const harness = new TestHarness();
-    const { familyId, userId } = await signInAndGetFamily(harness);
+    const { householdId, userId } = await signInAndGetHousehold(harness);
     const slateId = await createSlate(harness);
-    const childId = addFamilyMember(familyId);
+    const childId = await addHouseholdMember(householdId);
 
     const res = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId: childId });
     expect(res.status).toBe(201);
@@ -32,31 +32,31 @@ describe("Rotations API Integration", () => {
 
   it("POST /api/rotations returns 400 when slateId or userId is missing", async () => {
     const harness = new TestHarness();
-    await signInAndGetFamily(harness);
+    await signInAndGetHousehold(harness);
 
     const res = await harness.invokeHandler("/api/rotations", "POST", {});
     expect(res.status).toBe(400);
   });
 
-  it("POST /api/rotations rejects a slate from another family", async () => {
+  it("POST /api/rotations rejects a slate from another household", async () => {
     const other = new TestHarness();
-    await signInAndGetFamily(other, "other@choretle.dev");
+    await signInAndGetHousehold(other, "other@choretle.dev");
     const foreignSlate = await createSlate(other, "Foreign Slate");
 
     const harness = new TestHarness();
-    const { userId } = await signInAndGetFamily(harness);
+    const { userId } = await signInAndGetHousehold(harness);
 
     const res = await harness.invokeHandler("/api/rotations", "POST", { slateId: foreignSlate, userId });
     expect(res.status).toBe(404);
   });
 
-  it("POST /api/rotations rejects a user from another family", async () => {
+  it("POST /api/rotations rejects a user from another household", async () => {
     const harness = new TestHarness();
-    const { userId: ownUserId } = await signInAndGetFamily(harness);
+    const { userId: ownUserId } = await signInAndGetHousehold(harness);
     const slateId = await createSlate(harness);
 
     const other = new TestHarness();
-    const otherIdentity = await signInAndGetFamily(other, "other@choretle.dev");
+    const otherIdentity = await signInAndGetHousehold(other, "other@choretle.dev");
 
     const res = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId: otherIdentity.userId });
     expect(res.status).toBe(404);
@@ -65,12 +65,12 @@ describe("Rotations API Integration", () => {
 
   it("PUT /api/rotations updates an existing rotation", async () => {
     const harness = new TestHarness();
-    const { familyId, userId } = await signInAndGetFamily(harness);
+    const { householdId, userId } = await signInAndGetHousehold(harness);
     const slateId = await createSlate(harness);
-    const childId = addFamilyMember(familyId);
+    const childId = await addHouseholdMember(householdId);
     const created = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId });
 
-    const res = await harness.invokeHandler("/api/rotations?familyId=x", "PUT", {
+    const res = await harness.invokeHandler("/api/rotations?householdId=x", "PUT", {
       id: created.body.id, slateId, userId: childId, intervalDays: 14,
     });
     expect(res.status).toBe(200);
@@ -78,9 +78,37 @@ describe("Rotations API Integration", () => {
     expect(res.body.interval_days).toBe(14);
   });
 
+  it("GET /api/rotations returns assignments in the camelCase shape the board posts back", async () => {
+    const harness = new TestHarness();
+    const { userId } = await signInAndGetHousehold(harness);
+    const slateId = await createSlate(harness);
+    await harness.invokeHandler("/api/rotations", "POST", { slateId, userId, intervalDays: 14 });
+
+    const res = await harness.invokeHandler("/api/rotations?householdId=x", "GET");
+    expect(res.status).toBe(200);
+    const assignment = res.body.slates.find((s: any) => s.id === slateId).assignments[0];
+    expect(assignment).toMatchObject({ slateId, userId, intervalDays: 14, isActive: true });
+
+    // Saving the board means posting those assignments straight back.
+    const save = await harness.invokeHandler("/api/rotations", "POST", {
+      id: assignment.id,
+      slateId: assignment.slateId,
+      userId: assignment.userId,
+      order: 1,
+      intervalDays: 3,
+      isActive: assignment.isActive,
+    });
+    expect(save.status).toBe(200);
+
+    const after = await harness.invokeHandler("/api/rotations?householdId=x", "GET");
+    const reloaded = after.body.slates.find((s: any) => s.id === slateId).assignments;
+    expect(reloaded).toHaveLength(1);
+    expect(reloaded[0]).toMatchObject({ intervalDays: 3, order: 1 });
+  });
+
   it("DELETE /api/rotations/[rotationId] removes the rotation once", async () => {
     const harness = new TestHarness();
-    const { userId } = await signInAndGetFamily(harness);
+    const { userId } = await signInAndGetHousehold(harness);
     const slateId = await createSlate(harness);
     const created = await harness.invokeHandler("/api/rotations", "POST", { slateId, userId });
 

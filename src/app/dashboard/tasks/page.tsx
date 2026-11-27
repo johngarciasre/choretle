@@ -19,7 +19,7 @@ export default function TasksPage() {
         <Card accent="teal" className="w-full max-w-md p-8 text-center">
           <h1 className="font-display text-3xl font-bold text-ink mb-4">Tasks</h1>
           <p className="text-ink/60 text-lg mb-6">
-            Create and manage chores for your family.
+            Create and manage chores for your household.
           </p>
           <div className="bg-teal/10 border-2 border-teal rounded-xl p-4 max-w-sm mx-auto">
             <p className="text-teal/80 font-bold">

@@ -20,25 +20,25 @@ interface Tag {
   color?: string;
 }
 
-async function getFamilyId(): Promise<string> {
+async function getHouseholdId(): Promise<string> {
   const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
   if (data.authenticated === false) throw new Error("Not authenticated");
-  if (!data.familyId) throw new Error(data.authenticated ? "No family ID" : "Not authenticated");
-  return data.familyId;
+  if (!data.householdId) throw new Error(data.authenticated ? "No household ID" : "Not authenticated");
+  return data.householdId;
 }
 
 const fetchTasks = async () => {
-  const fid = await getFamilyId();
-  const res = await fetch(`/api/tasks?familyId=${fid}`, { credentials: "include" });
+  const fid = await getHouseholdId();
+  const res = await fetch(`/api/tasks?householdId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch tasks");
   return await res.json();
 };
 
 const fetchTags = async () => {
-  const fid = await getFamilyId();
-  const res = await fetch(`/api/tags?familyId=${fid}`, { credentials: "include" });
+  const fid = await getHouseholdId();
+  const res = await fetch(`/api/tags?householdId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch tags");
   return await res.json();
 };
@@ -76,7 +76,7 @@ export default function TasksPage() {
     <PageShell>
       <PageHeader
         title="Tasks"
-        subtitle="Browse and manage all available tasks for your family"
+        subtitle="Browse and manage all available tasks for your household"
       />
 
       <div className="relative space-y-8 pb-16">

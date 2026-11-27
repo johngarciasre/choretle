@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { type AuthResult, canApprove, canAuthor, isRestrictedSession, verifyAuth } from "@/lib/auth";
 import { canTransition } from "@/lib/jobStatus";
 
-async function verifyLocalAuth(request: NextRequest): Promise<{ userId: string; familyId?: string; role: string } | { error: string }> {
+async function verifyLocalAuth(request: NextRequest): Promise<AuthResult | { error: string }> {
   const auth = await verifyAuth(request);
   if (!auth) return { error: "No token provided" };
-  const rawDb = getRawDb();
+  const rawDb = getDb();
   if (!rawDb) return { error: "Database not initialized" };
   try {
-    const user = rawDb.prepare(`SELECT id, family_id, role FROM users WHERE id = ?`).get(auth.userId);
-    if (!user) return { error: "User not found" };
     return {
       userId: auth.userId,
-      familyId: (auth.familyId || (user as any).family_id || undefined),
-      role: (user as any).role || auth.role || "child",
+      householdId: auth.householdId,
+      membershipId: auth.membershipId,
+      role: auth.role,
+      kind: auth.kind,
+      sessionId: auth.sessionId,
     };
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Token verification failed");
@@ -43,25 +44,34 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const jobId = parsedParams.jobId;
     const authResult = await verifyLocalAuth(request);
     if ("error" in authResult) return NextResponse.json({ error: authResult.error }, { status: 401 });
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const job = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+    const job = await rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-    const jobList = rawDb.prepare(`SELECT family_id FROM lists WHERE id = ?`).get(job.list_id) as any;
-    if (!jobList || jobList.family_id !== authResult.familyId)
+    const jobList = await rawDb.prepare(`SELECT household_id FROM lists WHERE id = ?`).get(job.list_id) as any;
+    if (!jobList || jobList.household_id !== authResult.householdId)
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
 
-    const task = rawDb.prepare(
-      `SELECT t.* FROM slate_tasks st JOIN tasks t ON t.id = st.task_id WHERE st.id = ?`
-    ).get(job.slate_task_id) as any;
+    // A PIN session only sees its own chores. The household board is a
+    // separate, family-wide read; the detail view is personal.
+    if (isRestrictedSession(authResult) && job.assigned_to && job.assigned_to !== authResult.userId) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
 
-    const commentsRaw = rawDb.prepare(
+    const task = await rawDb.prepare(
+      `SELECT t.* FROM slate_tasks st
+       JOIN tasks t ON t.id = st.task_id
+       JOIN slates s ON s.id = st.slate_id
+       WHERE st.id = ? AND s.household_id = ?`
+    ).get(job.slate_task_id, authResult.householdId) as any;
+
+    const commentsRaw = await rawDb.prepare(
       `SELECT c.*, u.name as user_name, u.avatar_url FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.job_id = ? ORDER BY c.created_at DESC`
     ).all(jobId) as any[];
 
-    const historyRaw = rawDb.prepare(
+    const historyRaw = await rawDb.prepare(
       `SELECT jh.*, u.name as user_name, u.avatar_url FROM job_history jh LEFT JOIN users u ON jh.user_id = u.id WHERE jh.job_id = ? ORDER BY jh.created_at DESC`
     ).all(jobId) as any[];
 
@@ -100,31 +110,35 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await request.json();
     const { status, assignedTo, claim } = body;
     if (!claim && !status) return NextResponse.json({ error: "Status is required" }, { status: 400 });
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const job = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+    const job = await rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-    const jobList = rawDb.prepare(`SELECT family_id FROM lists WHERE id = ?`).get(job.list_id) as any;
-    if (!jobList || jobList.family_id !== authResult.familyId)
+    const jobList = await rawDb.prepare(`SELECT household_id FROM lists WHERE id = ?`).get(job.list_id) as any;
+    if (!jobList || jobList.household_id !== authResult.householdId)
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
+
+    // A reassignment target must be a member of the same household.
+    if (assignedTo && !await rawDb.prepare(`SELECT user_id FROM memberships WHERE user_id = ? AND household_id = ?`).get(assignedTo, authResult.householdId))
+      return NextResponse.json({ error: "Assignee not found" }, { status: 404 });
 
     const now = new Date().toISOString();
 
     // Grabbing an unassigned chore: the WHERE clause keeps the check and the
     // write in one step, so two kids racing for it cannot both win.
     if (claim) {
-      const claimed = rawDb.prepare(
+      const claimed = await rawDb.prepare(
         `UPDATE jobs SET assigned_to = ?, updated_at = ? WHERE id = ? AND assigned_to IS NULL AND status = 'todo'`
       ).run(authResult.userId, now, jobId);
       if (claimed.changes === 0) {
         return NextResponse.json({ error: "This chore has already been grabbed." }, { status: 409 });
       }
-      rawDb.prepare(
+      await rawDb.prepare(
         `INSERT INTO job_history (id, job_id, action, details, user_id, created_at) VALUES (?, ?, 'claimed', ?, ?, ?)`
       ).run(`jh-${crypto.randomUUID()}`, jobId, "Grabbed from the open pool", authResult.userId, now);
-      const grabbed = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+      const grabbed = await rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
       return NextResponse.json({ success: true, job: serializeJob(grabbed) });
     }
 
@@ -136,7 +150,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Chores that need verification can only be closed by a parent.
-    const isReviewer = authResult.role === "parent" || authResult.role === "admin";
+    const isReviewer = canApprove(authResult);
     if (status === "done" && job.verify_required && !isReviewer) {
       return NextResponse.json(
         { error: "This chore needs a parent to approve it before it can be marked done." },
@@ -156,18 +170,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (firstCompletion) { updateFields.push("completed_at = ?"); updateValues.push(now); }
     if (needsReviewStamp) { updateFields.push("reviewed_at = ?"); updateValues.push(now); }
     updateValues.push(jobId);
-    rawDb.prepare(`UPDATE jobs SET ${updateFields.join(", ")} WHERE id = ?`).run(...updateValues);
+    await rawDb.prepare(`UPDATE jobs SET ${updateFields.join(", ")} WHERE id = ?`).run(...updateValues);
 
-    const updatedJob = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+    const updatedJob = await rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
 
     if (status !== job.status) {
-      rawDb.prepare(
+      await rawDb.prepare(
         `INSERT INTO job_history (id, job_id, action, details, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`
       ).run(`jh-${crypto.randomUUID()}`, jobId, `status_${job.status}_to_${status}`, `Status changed from ${job.status} to ${status}`, authResult.userId, now);
 
       if (firstCompletion && updatedJob.assigned_to) {
-        rawDb.prepare(`UPDATE users SET points_total = points_total + ? WHERE id = ?`)
-          .run(updatedJob.points || 0, updatedJob.assigned_to);
+        await rawDb.prepare(`UPDATE memberships SET points_total = points_total + ? WHERE user_id = ? AND household_id = ?`)
+          .run(updatedJob.points || 0, updatedJob.assigned_to, authResult.householdId);
       }
     }
 
@@ -191,23 +205,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { content } = body;
     if (!content || typeof content !== "string" || !content.trim())
       return NextResponse.json({ error: "Comment content is required" }, { status: 400 });
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const job = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+    const job = await rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-    const jobList = rawDb.prepare(`SELECT family_id FROM lists WHERE id = ?`).get(job.list_id) as any;
-    if (!jobList || jobList.family_id !== authResult.familyId)
+    const jobList = await rawDb.prepare(`SELECT household_id FROM lists WHERE id = ?`).get(job.list_id) as any;
+    if (!jobList || jobList.household_id !== authResult.householdId)
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
 
     const now = new Date().toISOString();
     const commentId = `cmt-${crypto.randomUUID()}`;
-    rawDb.prepare(
+    await rawDb.prepare(
       `INSERT INTO comments (id, job_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?)`
     ).run(commentId, jobId, authResult.userId, content.trim(), now);
 
-    const user = rawDb.prepare(`SELECT name FROM users WHERE id = ?`).get(authResult.userId) as any;
+    const user = await rawDb.prepare(`SELECT name FROM users WHERE id = ?`).get(authResult.userId) as any;
     return NextResponse.json({
       success: true,
       comment: { id: commentId, content: content.trim(), userId: authResult.userId,

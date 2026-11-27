@@ -1,6 +1,6 @@
 async function main() {
-  const { getRawDb } = await import("../src/db/drizzle.ts");
-  const rawDb = getRawDb();
+  const { getDb } = await import("../src/db/drizzle.ts");
+  const rawDb = getDb();
 
   // Clean up all test data created during debugging sessions
   console.log("Cleaning up test data...");
@@ -50,11 +50,11 @@ async function main() {
   rawDb.prepare("DELETE FROM users WHERE role = 'child' OR email LIKE '%choretle%'").run();
   console.log(`  Deleted child/choretle users (kept ${userCount.count} total before)`);
 
-  // Delete family if it's our test family
-  const famCount = rawDb.prepare("SELECT COUNT(*) as count FROM families WHERE slug = 'my-family'").get() as any;
+  // Delete household if it's our test household
+  const famCount = rawDb.prepare("SELECT COUNT(*) as count FROM households WHERE slug = 'my-household'").get() as any;
   if (famCount.count > 0) {
-    rawDb.prepare("DELETE FROM families WHERE slug = 'my-family'").run();
-    console.log(`  Deleted test family`);
+    rawDb.prepare("DELETE FROM households WHERE slug = 'my-household'").run();
+    console.log(`  Deleted test household`);
   }
 
   // Reset auto-increment counters

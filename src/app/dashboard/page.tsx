@@ -93,7 +93,7 @@ function formatRelative(iso: string): string {
 
 // ─── Parent View ────────────────────────────────────────────────────────
 
-interface FamilyMember {
+interface HouseholdMember {
   id: string;
   name: string;
   role: string;
@@ -101,11 +101,11 @@ interface FamilyMember {
 
 /**
  * A one-off chore is a single job with no slate behind it. Leaving the assignee
- * on "Anyone" puts it in the family's open pool for someone to grab.
+ * on "Anyone" puts it in the household's open pool for someone to grab.
  */
 function OneOffChoreForm() {
   const [open, setOpen] = useState(false);
-  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [name, setName] = useState("");
   const [points, setPoints] = useState(10);
   const [assignedTo, setAssignedTo] = useState("");
@@ -545,7 +545,7 @@ export default function DashboardPage() {
             </h1>
             <p className="text-ink/60 text-sm mt-1">
               {role === "parent"
-                ? "Manage tasks, slates, and monitor your family's progress."
+                ? "Manage tasks, slates, and monitor your household's progress."
                 : "Complete chores, earn points, and track your streaks!"}
             </p>
           </div>

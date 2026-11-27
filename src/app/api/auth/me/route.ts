@@ -1,92 +1,70 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseMiddlewareClient } from "@/lib/supabase";
-import { DEV_COOKIE_NAME, verifyDevSession } from "@/lib/dev-auth";
-import { getRawDb } from "@/db/drizzle";
+import { verifyAuth, verifyPicker } from "@/lib/auth";
+import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
+import { noCache } from "@/lib/http";
 
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
-interface DbUser {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  family_id: string | null;
-}
-
-function readDbUser(column: "id" | "email", value: string): DbUser | null {
-  const rawDb = getRawDb();
-  if (!rawDb) return null;
-  try {
-    return (rawDb.prepare(`SELECT id, email, name, role, family_id FROM users WHERE ${column} = ?`).get(value) as DbUser) || null;
-  } catch {
-    return null;
-  }
-}
-
-function readFamilyName(familyId: string | null): string | null {
-  if (!familyId) return null;
-  const rawDb = getRawDb();
-  if (!rawDb) return null;
-  try {
-    const row = rawDb.prepare(`SELECT name FROM families WHERE id = ?`).get(familyId) as { name?: string } | undefined;
-    return row?.name || null;
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Identity for the current request. Resolves adults (Supabase / dev cookie),
+ * PIN sessions (kid, tablet adult) and picker tablets, which only ever learn the
+ * household name so the lobby screen has something to render.
+ */
 export async function GET(request: NextRequest) {
   try {
-    if (process.env.AUTH_MODE === "dev") {
-      const cookieHeader = request.headers.get("cookie") || "";
-      const setCookie = cookieHeader.split(";").find((c: string) => c.includes(DEV_COOKIE_NAME));
-      if (!setCookie) return NextResponse.json({ authenticated: false });
-      const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
-      const sessionUser = await verifyDevSession(value);
-      if (!sessionUser) return NextResponse.json({ authenticated: false });
+    const auth = await verifyAuth(request);
 
-      // Look up by email instead of user ID — the auto-created session id is not
-      // the database id until the user signs up, but the email is stable.
-      const dbUser = readDbUser("email", (sessionUser.email || "").toLowerCase());
-      return NextResponse.json({
+    if (!auth) {
+      const picker = await verifyPicker(request);
+      if (picker) {
+        const household = (await getDb()
+          .prepare(`select name from households where id = ?`)
+          .get(picker.householdId)) as { name?: string } | undefined;
+        return noCache(
+          NextResponse.json({
+            authenticated: false,
+            picker: { householdId: picker.householdId, householdName: household?.name ?? null },
+          }),
+        );
+      }
+      return noCache(NextResponse.json({ authenticated: false }));
+    }
+
+    const db = getDb();
+    const user = (await db
+      .prepare(`select id, email, name from users where id = ?`)
+      .get(auth.userId)) as { id: string; email: string | null; name: string } | undefined;
+    const household = (await db
+      .prepare(`select id, name from households where id = ?`)
+      .get(auth.householdId)) as { id: string; name: string } | undefined;
+
+    // Every household this person can act in, so the UI can offer a switcher.
+    const households = (await db
+      .prepare(
+        `select m.household_id, m.role, h.name
+           from memberships m
+           join households h on h.id = m.household_id
+          where m.user_id = ?
+          order by m.joined_at asc`,
+      )
+      .all(auth.userId)) as { household_id: string; role: string; name: string }[];
+
+    return noCache(
+      NextResponse.json({
         authenticated: true,
         user: {
-          id: dbUser?.id || sessionUser.id,
-          email: dbUser?.email || sessionUser.email,
-          name: dbUser?.name || sessionUser.name || "",
-          role: dbUser?.role || sessionUser.role || "child",
+          id: auth.userId,
+          email: user?.email ?? null,
+          name: user?.name ?? "",
+          role: auth.role,
         },
-        familyId: dbUser?.family_id || null,
-        familyName: readFamilyName(dbUser?.family_id || null),
-      });
-    }
-
-    if (!hasSupabaseConfig()) {
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
-    }
-
-    const supabase = await getSupabaseMiddlewareClient(request);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ authenticated: false });
-    }
-
-    // Resolve the family here: middleware runs on the edge and cannot open SQLite.
-    const dbUser = readDbUser("id", session.user.id);
-    return NextResponse.json({
-      authenticated: true,
-      user: {
-        id: session.user.id,
-        email: session.user.email,
-        name: dbUser?.name || session.user.user_metadata?.name || "",
-        role: dbUser?.role || session.user.user_metadata?.role || "child",
-      },
-      familyId: dbUser?.family_id || null,
-      familyName: readFamilyName(dbUser?.family_id || null),
-    });
+        householdId: auth.householdId,
+        householdName: household?.name ?? null,
+        role: auth.role,
+        membershipId: auth.membershipId,
+        kind: auth.kind,
+        households: households.map((row) => ({ id: row.household_id, name: row.name, role: row.role })),
+      }),
+    );
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Auth/me GET failed");
     return NextResponse.json({ error: "Failed to get auth status" }, { status: 500 });

@@ -6,12 +6,12 @@
 - Always check which branches exist and what's ahead/behind before pushing anywhere except `main`.
 
 ## Objective
-Complete Choretle's core workflow, auto-generation, and scoring logic while enabling a seamless local SQLite fallback for development without requiring PostgreSQL/Supabase setup.
+Choretle is a multi-household SaaS: Postgres is the only data layer, the household is the tenant, and children sign in with a PIN rather than an email.
 
 ## Important Details
 - Next.js 16.3.1 with App Router, Turbopack (default), TypeScript, Tailwind CSS, Drizzle ORM, and Vitest.
-- Database strategy: SQLite (`better-sqlite3`) is the only runtime driver. `SQLITE_PATH` points at a file that must live on persistent storage; tests use an in-memory database.
-- Native addon resolution issue resolved: `better-sqlite3` native bindings are now properly excluded from client-side bundling by using dynamic imports and API-only server code paths.
+- Database strategy: Postgres (`pg`) configured by `DATABASE_URL`; tests use PGlite. Migrations live in `db/migrations` and run via `npm run db:migrate`, never on a request path.
+- Database drivers (`pg`, PGlite) are imported dynamically inside `src/db/index.ts`, and only API routes touch the database, so nothing server-only reaches a client bundle.
 - All database initialization logic moved into `src/db/drizzle.ts` with lazy `initDb()` export to prevent top-level module evaluation in client components.
 - **Supabase Auth** is now the primary authentication system (migrated from custom JWT).
 

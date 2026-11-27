@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 import { currentStreakFromDays } from "@/lib/streak";
@@ -16,68 +16,68 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const familyId = auth.familyId;
+    const householdId = auth.householdId;
     const userId = auth.userId;
 
-    if (!familyId || !userId) {
-      return NextResponse.json({ error: "Family ID and User ID required" }, { status: 400 });
+    if (!householdId || !userId) {
+      return NextResponse.json({ error: "Household ID and User ID required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json([]);
     }
 
-    const familyLists = `(SELECT id FROM lists WHERE family_id = ?)`;
+    const householdLists = `(SELECT id FROM lists WHERE household_id = ?)`;
 
-    const totalPoints = rawDb.prepare(
-      `SELECT points_total FROM users WHERE id = ? AND family_id = ?`
-    ).get(userId, familyId) as any;
+    const totalPoints = await rawDb.prepare(
+      `SELECT points_total FROM memberships WHERE user_id = ? AND household_id = ?`
+    ).get(userId, householdId) as any;
 
-    const completions = rawDb.prepare(
+    const completions = await rawDb.prepare(
       `SELECT completed_at, points FROM jobs
        WHERE assigned_to = ? AND status = 'done' AND completed_at IS NOT NULL
-         AND list_id IN ${familyLists}
+         AND list_id IN ${householdLists}
        ORDER BY completed_at ASC`
-    ).all(userId, familyId) as Completion[];
+    ).all(userId, householdId) as Completion[];
 
-    const days = rawDb.prepare(
-      `SELECT DISTINCT DATE(completed_at) as day FROM jobs
+    const days = await rawDb.prepare(
+      `SELECT DISTINCT to_char(completed_at, 'YYYY-MM-DD') as day FROM jobs
        WHERE assigned_to = ? AND status = 'done' AND completed_at IS NOT NULL
-         AND list_id IN ${familyLists}
+         AND list_id IN ${householdLists}
        ORDER BY day DESC`
-    ).all(userId, familyId) as Array<{ day: string }>;
+    ).all(userId, householdId) as Array<{ day: string }>;
 
-    const weeklyPeak = rawDb.prepare(
+    const weeklyPeak = await rawDb.prepare(
       `SELECT MAX(week_count) as peak FROM (
          SELECT COUNT(*) as week_count FROM jobs
          WHERE assigned_to = ? AND status = 'done' AND completed_at IS NOT NULL
-           AND list_id IN ${familyLists}
-         GROUP BY strftime('%Y-%W', DATE(completed_at))
+           AND list_id IN ${householdLists}
+         GROUP BY to_char(completed_at, 'IYYY-IW')
        )`
-    ).get(userId, familyId) as any;
+    ).get(userId, householdId) as any;
 
-    const peakWeek = rawDb.prepare(
-      `SELECT strftime('%Y-%W', DATE(completed_at)) as week, MIN(completed_at) as first_at, COUNT(*) as cnt
+    const peakWeek = await rawDb.prepare(
+      `SELECT to_char(completed_at, 'IYYY-IW') as week, MIN(completed_at) as first_at, COUNT(*) as cnt
        FROM jobs
        WHERE assigned_to = ? AND status = 'done' AND completed_at IS NOT NULL
-         AND list_id IN ${familyLists}
+         AND list_id IN ${householdLists}
        GROUP BY week ORDER BY cnt DESC LIMIT 1`
-    ).get(userId, familyId) as any;
+    ).get(userId, householdId) as any;
 
-    const consistencyWeeks = rawDb.prepare(
-      `SELECT COUNT(DISTINCT strftime('%Y-%W', DATE(completed_at))) as weeks FROM jobs
+    const consistencyWeeks = await rawDb.prepare(
+      `SELECT COUNT(DISTINCT to_char(completed_at, 'IYYY-IW')) as weeks FROM jobs
        WHERE assigned_to = ? AND status = 'done' AND completed_at IS NOT NULL
-         AND completed_at >= datetime('now', '-364 days')
-         AND list_id IN ${familyLists}`
-    ).get(userId, familyId) as any;
+         AND completed_at >= now() - interval '364 days'
+         AND list_id IN ${householdLists}`
+    ).get(userId, householdId) as any;
 
-    // Position by points within the family: 1 + number of members ahead.
-    const leaderboardRank = rawDb.prepare(
-      `SELECT 1 + COUNT(*) as rank FROM users
-       WHERE family_id = ?
-         AND points_total > (SELECT points_total FROM users WHERE id = ?)`
-    ).get(familyId, userId) as any;
+    // Position by points within the household: 1 + number of members ahead.
+    const leaderboardRank = await rawDb.prepare(
+      `SELECT 1 + COUNT(*) as rank FROM memberships
+       WHERE household_id = ?
+         AND points_total > (SELECT points_total FROM memberships WHERE user_id = ?)`
+    ).get(householdId, userId) as any;
 
     const totalCompleted = completions.length;
     const streakCount = currentStreakFromDays((days || []).map((d) => String(d.day)));

@@ -76,9 +76,9 @@ export default function AuthPage() {
       info({ data }, "[AUTH PAGE] Response data");
 
       if (response.ok) {
-        // Kids land on their chores; adults on the dashboard, or the family
-        // page when their account still needs a family.
-        const target = data.role === "child" ? "/jobs" : data.familyId ? "/dashboard" : "/family";
+        // Kids land on their chores; adults on the dashboard, or the household
+        // page when their account still needs a household.
+        const target = data.role === "child" ? "/jobs" : data.householdId ? "/dashboard" : "/household";
         window.location.href = target;
       } else {
         setError(data.error || `${mode === "signin" ? "Sign in" : "Sign up"} failed`);
@@ -134,7 +134,7 @@ export default function AuthPage() {
             {mode === "signup" && (
               <input
                 type="text"
-                placeholder="Family code (from your parent)"
+                placeholder="Household code (from your parent)"
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value)}
                 className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-2.5 font-bold text-ink placeholder:text-ink/40 focus:border-grape focus:outline-none"

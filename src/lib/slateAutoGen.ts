@@ -5,7 +5,7 @@ import { calculateRotationAssignment } from "./rotation";
 
 export interface SlateGenerationContext {
   slateId: string;
-  familyId: string;
+  householdId: string;
   date: Date;
 }
 
@@ -25,7 +25,7 @@ export interface GeneratedJob {
 /**
  * Get or create a list for a slate on the target date.
  */
-export async function getOrCreateList(slateId: string, familyId: string, date: Date): Promise<any> {
+export async function getOrCreateList(slateId: string, householdId: string, date: Date): Promise<any> {
   const { getListBySlateAndDate, createList } = await import("@/lib/db/service");
 
   const existing = await getListBySlateAndDate(slateId, date);
@@ -36,7 +36,7 @@ export async function getOrCreateList(slateId: string, familyId: string, date: D
 
   const list = await createList({
     slateId,
-    familyId,
+    householdId,
     name: `List - ${date.toISOString().slice(0, 10)}`,
     startDate: date,
     endDate,
@@ -53,7 +53,7 @@ export async function getOrCreateList(slateId: string, familyId: string, date: D
  */
 export async function generateJobsFromSlate(
   slateId: string,
-  familyId: string,
+  householdId: string,
   targetDate: Date,
 ): Promise<GeneratedJob[]> {
   // Skip if list already exists for this slate/date (exact calendar day match)
@@ -76,7 +76,7 @@ export async function generateJobsFromSlate(
 
   const list = await createList({
     slateId,
-    familyId,
+    householdId,
     name: `List - ${targetDate.toISOString().slice(0, 10)}`,
     startDate: targetDate,
     endDate,
@@ -201,17 +201,17 @@ function toGeneratedJob(job: any, dueDate: Date): GeneratedJob {
  * Auto-generate jobs for all active slates that need them on the given date.
  */
 export async function autoGenerateJobs(
-  familyId: string,
+  householdId: string,
   targetDate?: Date,
 ): Promise<GeneratedJob[]> {
-  const { getSlatesByFamily } = await import("@/lib/db/service");
+  const { getSlatesByHousehold } = await import("@/lib/db/service");
 
   const date = targetDate || new Date();
-  const rawSlates = await getSlatesByFamily(familyId);
+  const rawSlates = await getSlatesByHousehold(householdId);
 
   if (!rawSlates || rawSlates.length === 0) return [];
 
-  console.log(`[autoGen] familyId=${familyId} date=${date.toISOString()} slates=${rawSlates.length}`);
+  console.log(`[autoGen] householdId=${householdId} date=${date.toISOString()} slates=${rawSlates.length}`);
 
   // Normalize snake_case DB columns to camelCase for shouldGenerateList
   const slates = rawSlates.map((s: any) => ({
@@ -231,7 +231,7 @@ export async function autoGenerateJobs(
   for (const slate of activeSlates) {
     try {
       console.log(`[autoGen] Generating for slate ${slate.id} (${slate.name})`);
-      const jobs = await generateJobsFromSlate(slate.id, familyId, date);
+      const jobs = await generateJobsFromSlate(slate.id, householdId, date);
       console.log(`[autoGen] Generated ${jobs.length} jobs for slate ${slate.id}`);
       allJobs.push(...jobs);
     } catch (err) {

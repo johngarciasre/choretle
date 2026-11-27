@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { verifyAuth } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 import { currentStreakFromDays } from "@/lib/streak";
@@ -11,15 +11,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const familyId = auth.familyId;
+    const householdId = auth.householdId;
     const userId = auth.userId;
     const role = auth.role || "child";
 
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    if (!householdId) {
+      return NextResponse.json({ error: "Household ID required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ parent: {}, kid: {} });
     }
@@ -27,50 +27,39 @@ export async function GET(request: NextRequest) {
     // ─── Parent data ──────────────────────────────────────────────────────
 
     // Active lists with job status counts
-    const activeLists = rawDb.prepare(`
+    const activeLists = await rawDb.prepare(`
       SELECT l.id, l.name, l.start_date, l.end_date, l.status,
-        COALESCE(todo.cnt, 0) as todo_count,
-        COALESCE(doing.cnt, 0) as doing_count,
-        COALESCE(done.cnt, 0) as done_count,
-        COUNT(j.id) as total_jobs
+        (SELECT COUNT(*) FROM jobs j WHERE j.list_id = l.id AND j.status = 'todo') as todo_count,
+        (SELECT COUNT(*) FROM jobs j WHERE j.list_id = l.id AND j.status = 'doing') as doing_count,
+        (SELECT COUNT(*) FROM jobs j WHERE j.list_id = l.id AND j.status = 'done') as done_count,
+        (SELECT COUNT(*) FROM jobs j WHERE j.list_id = l.id) as total_jobs
       FROM lists l
-      LEFT JOIN (
-        SELECT list_id, COUNT(*) as cnt FROM jobs WHERE status = 'todo' GROUP BY list_id
-      ) todo ON l.id = todo.list_id
-      LEFT JOIN (
-        SELECT list_id, COUNT(*) as cnt FROM jobs WHERE status = 'doing' GROUP BY list_id
-      ) doing ON l.id = doing.list_id
-      LEFT JOIN (
-        SELECT list_id, COUNT(*) as cnt FROM jobs WHERE status = 'done' GROUP BY list_id
-      ) done ON l.id = done.list_id
-      LEFT JOIN jobs j ON l.id = j.list_id
-      WHERE l.family_id = ? AND l.status = 'active'
-      GROUP BY l.id
+      WHERE l.household_id = ? AND l.status = 'active'
       ORDER BY l.start_date DESC
       LIMIT 10
-    `).all(familyId) as any[];
+    `).all(householdId) as any[];
 
     // Task and slate counts
-    const taskCount = rawDb.prepare(`SELECT COUNT(*) as cnt FROM tasks WHERE family_id = ?`).get(familyId) as any;
-    const slateCount = rawDb.prepare(`SELECT COUNT(*) as cnt FROM slates WHERE family_id = ?`).get(familyId) as any;
+    const taskCount = await rawDb.prepare(`SELECT COUNT(*) as cnt FROM tasks WHERE household_id = ?`).get(householdId) as any;
+    const slateCount = await rawDb.prepare(`SELECT COUNT(*) as cnt FROM slates WHERE household_id = ?`).get(householdId) as any;
 
     // Recent completed jobs (last 7 days)
-    const recentDone = rawDb.prepare(`
+    const recentDone = await rawDb.prepare(`
       SELECT j.name, j.completed_at, u.name as user_name
       FROM jobs j
       LEFT JOIN users u ON j.assigned_to = u.id
-      WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+      WHERE j.list_id IN (SELECT id FROM lists WHERE household_id = ?)
         AND j.status = 'done' AND j.completed_at IS NOT NULL
-        AND j.completed_at >= datetime('now', '-7 days')
+        AND j.completed_at >= now() - interval '7 days'
       ORDER BY j.completed_at DESC
       LIMIT 10
-    `).all(familyId) as any[];
+    `).all(householdId) as any[];
 
     // ─── Kid data ─────────────────────────────────────────────────────────
 
     if (role === "child" && userId) {
       // Outstanding jobs (todo + doing) assigned to this kid
-      const outstandingJobs = rawDb.prepare(`
+      const outstandingJobs = await rawDb.prepare(`
         SELECT j.id, j.name, j.description, j.points, j.status, j.due_date,
           s.name as slate_name
         FROM jobs j
@@ -78,12 +67,12 @@ export async function GET(request: NextRequest) {
         LEFT JOIN slates s ON st.slate_id = s.id
         WHERE j.assigned_to = ?
           AND j.status IN ('todo', 'doing')
-          AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+          AND j.list_id IN (SELECT id FROM lists WHERE household_id = ?)
         ORDER BY j.due_date ASC, j.created_at ASC
-      `).all(userId, familyId) as any[];
+      `).all(userId, householdId) as any[];
 
       // Jobs requiring verification: verify_required lives on tasks, not slates.
-      const pendingVerification = rawDb.prepare(`
+      const pendingVerification = await rawDb.prepare(`
         SELECT j.id, j.name, j.points, j.updated_at,
           CASE WHEN EXISTS (
             SELECT 1 FROM job_history h
@@ -92,44 +81,44 @@ export async function GET(request: NextRequest) {
         FROM jobs j
         JOIN slate_tasks st ON st.id = j.slate_task_id
         JOIN tasks t ON t.id = st.task_id
-        WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+        WHERE j.list_id IN (SELECT id FROM lists WHERE household_id = ?)
           AND j.assigned_to = ?
           AND j.status != 'done'
           AND t.verify_required = 1
         ORDER BY j.updated_at DESC
-      `).all(familyId, userId) as any[];
+      `).all(householdId, userId) as any[];
 
       // Recently completed (last 30 days) for badges
-      const recentlyCompleted = rawDb.prepare(`
+      const recentlyCompleted = await rawDb.prepare(`
         SELECT j.name, j.points, j.completed_at
         FROM jobs j
-        WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+        WHERE j.list_id IN (SELECT id FROM lists WHERE household_id = ?)
           AND j.assigned_to = ?
           AND j.status = 'done' AND j.completed_at IS NOT NULL
-          AND j.completed_at >= datetime('now', '-30 days')
+          AND j.completed_at >= now() - interval '30 days'
         ORDER BY j.completed_at DESC
-      `).all(familyId, userId) as any[];
+      `).all(householdId, userId) as any[];
 
       // User stats for streaks/badges
-      const userStats = rawDb.prepare(`
+      const userStats = await rawDb.prepare(`
         SELECT points_total,
           (SELECT COUNT(*) FROM jobs j2
            WHERE j2.assigned_to = ? AND j2.status = 'done' AND j2.completed_at IS NOT NULL
-             AND j2.completed_at >= datetime('now', '-7 days')) as weekly_done,
+             AND j2.completed_at >= now() - interval '7 days') as weekly_done,
           (SELECT COUNT(*) FROM jobs j3
            WHERE j3.assigned_to = ? AND j3.status = 'done' AND j3.completed_at IS NOT NULL
-             AND j3.completed_at >= datetime('now', '-30 days')) as monthly_done
-        FROM users WHERE id = ? AND family_id = ?
-      `).get(userId, userId, userId, familyId) as any;
+             AND j3.completed_at >= now() - interval '30 days') as monthly_done
+        FROM memberships WHERE user_id = ? AND household_id = ?
+      `).get(userId, userId, userId, householdId) as any;
 
       // Current streak: consecutive days with at least one done job.
-      const dayRows = rawDb.prepare(`
-        SELECT DISTINCT DATE(j.completed_at) as day
+      const dayRows = await rawDb.prepare(`
+        SELECT DISTINCT to_char(j.completed_at, 'YYYY-MM-DD') as day
         FROM jobs j
         WHERE j.assigned_to = ? AND j.status = 'done' AND j.completed_at IS NOT NULL
-          AND j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+          AND j.list_id IN (SELECT id FROM lists WHERE household_id = ?)
         ORDER BY day DESC
-      `).all(userId, familyId) as any[];
+      `).all(userId, householdId) as any[];
       const streak = currentStreakFromDays((dayRows || []).map((r: any) => String(r.day)));
 
       // Recent wins (badges from recently completed jobs)

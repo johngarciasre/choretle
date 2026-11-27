@@ -23,18 +23,18 @@ interface Schedule {
   dayOfWeek?: number;
 }
 
-async function getFamilyId(): Promise<string> {
+async function getHouseholdId(): Promise<string> {
   const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
   if (data.authenticated === false) throw new Error("Not authenticated");
-  if (!data.familyId) throw new Error(data.authenticated ? "No family ID" : "Not authenticated");
-  return data.familyId;
+  if (!data.householdId) throw new Error(data.authenticated ? "No household ID" : "Not authenticated");
+  return data.householdId;
 }
 
 const fetchTags = async () => {
-  const fid = await getFamilyId();
-  const res = await fetch(`/api/tags?familyId=${fid}`, { credentials: "include" });
+  const fid = await getHouseholdId();
+  const res = await fetch(`/api/tags?householdId=${fid}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch tags");
   return await res.json();
 };
@@ -63,9 +63,9 @@ export default function NewTaskPage() {
     if (!formData.name.trim()) return;
 
     try {
-      const familyId = await getFamilyId();
+      const householdId = await getHouseholdId();
 
-      const res = await fetch(`/api/tasks?familyId=${familyId}`, {
+      const res = await fetch(`/api/tasks?householdId=${householdId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

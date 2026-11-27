@@ -7,34 +7,34 @@ import type { UserRotation, SlateWithRotations, RotationAssignment } from "@/com
 import { error } from "@/lib/logger";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
-interface Family {
+interface Household {
   id: string;
   name: string;
 }
 
 export default function RotationsPage() {
   const authChecked = useAuthRedirect();
-  const [family, setFamily] = useState<Family | null>(null);
+  const [household, setHousehold] = useState<Household | null>(null);
   const [users, setUsers] = useState<UserRotation[]>([]);
   const [slates, setSlates] = useState<SlateWithRotations[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function loadRotationData() {
+  async function loadRotationData(allowMock = false) {
     try {
-      // Get family ID from auth endpoint
+      // Get household ID from auth endpoint
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
-      const familyId = authData.familyId;
+      const householdId = authData.householdId;
 
-      if (!familyId) {
-        throw new Error("No family ID");
+      if (!householdId) {
+        throw new Error("No household ID");
       }
 
-      const response = await fetch(`/api/rotations?familyId=${familyId}`, { credentials: "include" });
+      const response = await fetch(`/api/rotations?householdId=${householdId}`, { credentials: "include" });
       if (response.ok) {
         const data = await response.json();
-        setFamily(data.family || null);
+        setHousehold(data.household || null);
         setUsers(data.users || []);
         setSlates(data.slates || []);
         setLoading(false);
@@ -44,7 +44,12 @@ export default function RotationsPage() {
       // Fall through to mock data
     }
 
-    const mockFamily: Family = { id: "mock-family", name: "Demo Family" };
+    if (!allowMock) {
+      setLoading(false);
+      return;
+    }
+
+    const mockHousehold: Household = { id: "mock-household", name: "Demo Household" };
     const mockUsers: UserRotation[] = [
       {
         id: "u1",
@@ -143,7 +148,7 @@ export default function RotationsPage() {
       },
     ];
 
-    setFamily(mockFamily);
+    setHousehold(mockHousehold);
     setUsers(mockUsers);
     setSlates(mockSlates);
     setLoading(false);
@@ -152,19 +157,19 @@ export default function RotationsPage() {
   useEffect(() => {
     if (!authChecked) return;
     if (typeof window !== "undefined") document.title = "Choretle - Rotations";
-    loadRotationData();
+    loadRotationData(true);
   }, [authChecked]);
 
-  const handleSave = async (assignments: RotationAssignment[]) => {
+  const handleSave = async (assignments: RotationAssignment[], removedIds: string[]) => {
     try {
-      // Get family ID from auth endpoint
+      // Get household ID from auth endpoint
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
-      const familyId = authData.familyId;
+      const householdId = authData.householdId;
 
       for (const assignment of assignments) {
-        await fetch(`/api/rotations?familyId=${familyId}`, {
+        const res = await fetch(`/api/rotations?householdId=${householdId}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -172,7 +177,21 @@ export default function RotationsPage() {
           body: JSON.stringify(assignment),
           credentials: "include",
         });
+        if (!res.ok) throw new Error(`Saving rotation failed: ${res.status} ${await res.text()}`);
       }
+
+      for (const id of removedIds) {
+        const res = await fetch(`/api/rotations/${id}?householdId=${householdId}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        if (!res.ok && res.status !== 404) {
+          throw new Error(`Removing rotation failed: ${res.status} ${await res.text()}`);
+        }
+      }
+
+      // Re-read the server's state so saved rows get their real ids.
+      await loadRotationData();
     } catch (err) {
       error({ err: err }, "Failed to save rotation");
       throw err;
@@ -186,7 +205,7 @@ export default function RotationsPage() {
     <PageShell>
       <PageHeader
         title="Rotations"
-        subtitle={`Family: ${family?.name || "No family"} · ${users.length + slates.reduce((acc, s) => acc + s.assignments.length, 0)} assignments`}
+        subtitle={`Household: ${household?.name || "No household"} · ${users.length + slates.reduce((acc, s) => acc + s.assignments.length, 0)} assignments`}
         actions={
           <span className="text-sm text-ink/60">{slates.length} slates configured</span>
         }
@@ -194,7 +213,7 @@ export default function RotationsPage() {
 
       <main className="space-y-8">
         <RotationBoard
-          familyName={family?.name || ""}
+          householdName={household?.name || ""}
           users={users}
           slates={slates}
           onSave={handleSave}

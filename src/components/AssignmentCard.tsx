@@ -30,23 +30,27 @@ export interface SlateWithRotations {
 interface AssignmentCardProps {
   assignment: UserRotation;
   onDragStart: (e: React.DragEvent, userId: string) => void;
+  onDragEnd?: () => void;
   onEditInterval: (intervalDays: number) => void;
   onRemove?: () => void;
 }
 
-export default function AssignmentCard({ assignment, onDragStart, onEditInterval, onRemove }: AssignmentCardProps) {
+export default function AssignmentCard({ assignment, onDragStart, onDragEnd, onEditInterval, onRemove }: AssignmentCardProps) {
   const hasAvatar = !!assignment.userAvatarUrl;
   const emojiFallback = !hasAvatar && assignment.userId ? getAvatarEmoji(assignment.userId) : null;
   const avatarUrl = assignment.userAvatarUrl || "";
+  const intervalId = `interval-${assignment.slateId}-${assignment.userId}`;
 
   return (
     <div
       draggable
       onDragStart={(e) => {
         e.dataTransfer?.setData("userId", assignment.userId);
+        e.dataTransfer?.setData("fromSlateId", assignment.slateId);
+        if (assignment.id) e.dataTransfer?.setData("assignmentId", assignment.id);
         onDragStart(e, assignment.userId);
       }}
-      onDragEnd={() => {}}
+      onDragEnd={() => onDragEnd?.()}
       className="flex items-center gap-3 bg-white rounded-xl border-2 border-ink/10 p-3 shadow-sm hover:shadow-md hover:border-grape/40 transition-all group cursor-grab active:cursor-grabbing"
     >
       <span className="text-ink/30 cursor-grab active:cursor-grabbing" aria-hidden="true">
@@ -54,7 +58,7 @@ export default function AssignmentCard({ assignment, onDragStart, onEditInterval
       </span>
 
       {hasAvatar ? (
-        <img src={avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
+        <img src={avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0" draggable={false} />
       ) : emojiFallback ? (
         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${emojiFallback.bgClass}`}>
           {emojiFallback.emoji}
@@ -67,12 +71,12 @@ export default function AssignmentCard({ assignment, onDragStart, onEditInterval
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        <label htmlFor={`interval-${assignment.id}`} className="text-xs text-ink/60">Every</label>
+        <label htmlFor={intervalId} className="text-xs text-ink/60">Every</label>
         <input
           type="number"
-          id={`interval-${assignment.id}`}
+          id={intervalId}
           min={1}
-          value={assignment.intervalDays}
+          value={assignment.intervalDays ?? ""}
           onChange={(e) => onEditInterval(Number(e.target.value))}
           className="w-12 text-center text-sm rounded-md border-2 border-ink/10 bg-white focus:ring-grape focus:border-grape font-bold"
         />

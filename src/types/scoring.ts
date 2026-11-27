@@ -125,7 +125,7 @@ export const MEDAL_DEFINITIONS: MedalDefinition[] = [
     type: "leaderboard",
     name: "Leaderboard",
     emoji: "\u{1F3AB}",
-    description: "Family rank by points",
+    description: "Household rank by points",
     thresholds: { bronze: 3, silver: 2, gold: 1, diamond: 1 },
   },
 ];

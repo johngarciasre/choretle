@@ -3,9 +3,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install native deps (better-sqlite3 needs build tools)
-RUN apk add --no-cache python3 make g++
-
+# Postgres is the only data layer now, so no native build toolchain is needed.
 COPY package.json package-lock.json ./
 RUN npm ci 2>&1
 
@@ -19,21 +17,22 @@ FROM node:20-alpine AS runner
 # Supabase credentials (or set a signed dev session only on your own machine).
 ENV NODE_ENV=production \
     PORT=3000 \
-    SQLITE_PATH=/data/choretle.db
+    AUTO_MIGRATE=0
 
 WORKDIR /app
 
-# Install production deps only (no dev deps)
 COPY package.json package-lock.json ./
-RUN apk add --no-cache python3 make g++ \
-    && npm install --production 2>&1 \
-    && rm -rf /root/.npm /root/.node-gyp /root/.cache \
-    && apk del python3 make g++
+RUN npm ci --omit=dev 2>&1 && rm -rf /root/.npm /root/.cache
 
-# Copy built output from builder
+# Built output plus what the runtime needs to read at start-up: SQL migrations
+# (only used by the migrate job) and the bundled seed portraits in private/.
 COPY --from=builder /app/next.config.ts .
 COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/private ./private
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/db ./db
+COPY --from=builder /app/scripts ./scripts
 
 EXPOSE 3000
 

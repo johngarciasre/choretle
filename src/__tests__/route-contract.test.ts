@@ -3,7 +3,7 @@
  * that exports the method the client uses.
  *
  * This is the check that was missing when /api/users PUT+DELETE, PATCH on
- * /api/family/[familyId] and /api/family/swap-meet silently 404/405'd while the
+ * /api/household/[householdId] and /api/household/swap-meet silently 404/405'd while the
  * suite stayed green: integration tests only exercise the routes they name.
  */
 import { describe, it, expect } from "vitest";

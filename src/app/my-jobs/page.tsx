@@ -71,10 +71,10 @@ export default function MyJobsPage() {
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
-      const familyId = authData.familyId;
-      if (!familyId) throw new Error("No family ID");
+      const householdId = authData.householdId;
+      if (!householdId) throw new Error("No household ID");
 
-      const res = await fetch(`/api/jobs/kanban?familyId=${familyId}`, { credentials: "include" });
+      const res = await fetch(`/api/jobs/kanban?householdId=${householdId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch kanban");
       const json = await res.json();
       setData(json);

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
-import { signInAndGetFamily } from "./fixtures";
+import { resetDb } from "@/db";
+import { signInAndGetHousehold } from "./fixtures";
 
 async function createSlate(harness: TestHarness, body: Record<string, unknown>) {
   const res = await harness.invokeHandler("/api/slates", "POST", body);
@@ -16,23 +16,23 @@ async function listSlates(harness: TestHarness): Promise<any[]> {
 }
 
 describe("Slates API", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
-  it("creates a slate with weekly defaults in the caller's family", async () => {
+  it("creates a slate with weekly defaults in the caller's household", async () => {
     const harness = new TestHarness();
-    const { familyId } = await signInAndGetFamily(harness);
+    const { householdId } = await signInAndGetHousehold(harness);
 
     const slate = await createSlate(harness, { name: "Weekly Chores" });
 
-    expect(slate).toMatchObject({ name: "Weekly Chores", frequency: "weekly", interval: 1, family_id: familyId });
+    expect(slate).toMatchObject({ name: "Weekly Chores", frequency: "weekly", interval: 1, household_id: householdId });
     expect(slate.is_active).toBe(1);
   });
 
   it("persists custom frequency, interval, description and room", async () => {
     const harness = new TestHarness();
-    await signInAndGetFamily(harness);
+    await signInAndGetHousehold(harness);
 
     const slate = await createSlate(harness, {
       name: "Biweekly Bathroom",
@@ -60,7 +60,7 @@ describe("Slates API", () => {
 
   it("rejects a missing name", async () => {
     const harness = new TestHarness();
-    await signInAndGetFamily(harness);
+    await signInAndGetHousehold(harness);
 
     const res = await harness.invokeHandler("/api/slates", "POST", {});
 
@@ -68,13 +68,13 @@ describe("Slates API", () => {
     expect(res.body.error).toMatch(/name/);
   });
 
-  it("lists only this family's slates", async () => {
+  it("lists only this household's slates", async () => {
     const mine = new TestHarness();
-    await signInAndGetFamily(mine);
+    await signInAndGetHousehold(mine);
     await createSlate(mine, { name: "Mine" });
 
     const other = new TestHarness();
-    await signInAndGetFamily(other, "other@choretle.dev");
+    await signInAndGetHousehold(other, "other@choretle.dev");
     await createSlate(other, { name: "Theirs" });
 
     expect((await listSlates(mine)).map((s) => s.name)).toEqual(["Mine"]);
@@ -83,7 +83,7 @@ describe("Slates API", () => {
 
   it("deletes a slate and stops listing it", async () => {
     const harness = new TestHarness();
-    await signInAndGetFamily(harness);
+    await signInAndGetHousehold(harness);
     const slate = await createSlate(harness, { name: "Disposable" });
 
     const res = await harness.invokeHandler("/api/slates/[slateId]", "DELETE", undefined, { slateId: slate.id });
@@ -92,12 +92,12 @@ describe("Slates API", () => {
     expect(await listSlates(harness)).toHaveLength(0);
   });
 
-  it("cannot read another family's slate by id", async () => {
+  it("cannot read another household's slate by id", async () => {
     const mine = new TestHarness();
-    await signInAndGetFamily(mine);
+    await signInAndGetHousehold(mine);
 
     const other = new TestHarness();
-    await signInAndGetFamily(other, "other@choretle.dev");
+    await signInAndGetHousehold(other, "other@choretle.dev");
     const foreign = await createSlate(other, { name: "Theirs" });
 
     const res = await mine.invokeHandler("/api/slates/[slateId]", "GET", undefined, { slateId: foreign.id });

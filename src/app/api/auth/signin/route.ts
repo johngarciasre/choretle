@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { DEV_COOKIE_NAME, setDevSessionCookie, verifyDevSession } from "@/lib/dev-auth";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { clientKey, clearAttempts, tooManyAttempts } from "@/lib/rate-limit";
+import { getMembership } from "@/lib/membership";
 
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -20,68 +21,91 @@ export async function POST(request: NextRequest) {
     const { email, password } = body;
 
     if (process.env.AUTH_MODE === "dev") {
-      const rawDb = getRawDb();
-      if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
-
-      const userRow = rawDb.prepare(`SELECT * FROM users WHERE email = ?`).get(email?.toLowerCase()) as any;
+      const db = getDb();
+      const userRow = (await db
+        .prepare(`select id, email, name from users where email = ?`)
+        .get(String(email || "").toLowerCase())) as
+        | { id: string; email: string | null; name: string }
+        | undefined;
       if (!userRow) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
       clearAttempts(attemptKey);
+      const membership = await getMembership(userRow.id);
       const response = NextResponse.json({
         ok: true,
         userId: userRow.id,
         email: userRow.email,
         name: userRow.name,
-        role: userRow.role || "child",
-        familyId: userRow.family_id,
+        role: membership?.role ?? "child",
+        householdId: membership?.householdId ?? null,
+        household_id: membership?.householdId ?? null,
       });
       await setDevSessionCookie(response.headers, {
         user: {
           id: userRow.id,
           email: userRow.email || "",
           name: userRow.name || "",
-          role: userRow.role || "child",
-          familyId: userRow.family_id,
+          role: membership?.role ?? "child",
+          householdId: membership?.householdId ?? null,
         },
       });
       return response;
     }
 
-    // Production Mode: Use Supabase Auth
+    // Production mode: Supabase Auth.
     if (!hasSupabaseConfig()) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
-    const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError || !user) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
-    // Sync user to our database if not present. A user that exists in Supabase but
-    // not locally gets their own family; never the first family in the table.
-    let familyId: string | null = null;
+    // Sync the Supabase identity to a local person on first sign-in. A user that
+    // exists in Supabase but not locally gets their own household.
+    let householdId: string | null = null;
     let role = "parent";
     try {
-      const rawDb = getRawDb();
-      if (rawDb) {
-        const existingUser = rawDb.prepare(`SELECT family_id, role FROM users WHERE id = ?`).get(user.id) as any;
-        if (!existingUser) {
-          const now = new Date().toISOString();
-          familyId = `family-${crypto.randomUUID()}`;
-          rawDb.prepare(
-            `INSERT INTO families (id, name, slug, week_start_day, teams_enabled, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
-          ).run(familyId, `${user.email?.split("@")[0] || "My"}'s Family`, familyId, now, now);
+      const db = getDb();
+      const linked = (await db
+        .prepare(`select user_id from auth_identities where provider = 'supabase' and provider_uid = ?`)
+        .get(user.id)) as { user_id: string } | undefined;
 
-          rawDb.prepare(
-            `INSERT INTO users (id, email, name, role, avatar_url, family_id, points_total, created_at, updated_at) VALUES (?, ?, ?, 'parent', NULL, ?, 0, ?, ?)`
-          ).run(user.id, user.email || "", body?.name || user.user_metadata?.name || "", familyId, now, now);
-        } else {
-          familyId = existingUser.family_id || null;
-          role = existingUser.role || "child";
-          rawDb.prepare(`UPDATE users SET updated_at = ? WHERE id = ?`).run(new Date().toISOString(), user.id);
-        }
+      const name = body?.name || user.user_metadata?.name || "";
+      const now = new Date().toISOString();
+      let userId = linked?.user_id;
+
+      if (!userId) {
+        userId = `user-${crypto.randomUUID()}`;
+        householdId = `household-${crypto.randomUUID()}`;
+        await db
+          .prepare(
+            `insert into households (id, name, slug, week_start_day, teams_enabled, created_at, updated_at)
+             values (?, ?, ?, 0, false, ?, ?)`,
+          )
+          .run(householdId, `${user.email?.split("@")[0] || "My"}'s Household`, householdId, now, now);
+        await db
+          .prepare(`insert into users (id, email, name, avatar_url, created_at, updated_at) values (?, ?, ?, NULL, ?, ?)`)
+          .run(userId, user.email || null, name, now, now);
+        await db
+          .prepare(
+            `insert into auth_identities (id, user_id, provider, provider_uid, email) values (?, ?, 'supabase', ?, ?)`,
+          )
+          .run(`ident-${crypto.randomUUID()}`, userId, user.id, user.email ?? null);
+        await db
+          .prepare(`insert into memberships (id, household_id, user_id, role, points_total) values (?, ?, ?, ?, 0)`)
+          .run(`mem-${crypto.randomUUID()}`, householdId, userId, role);
+      } else {
+        const membership = await getMembership(userId);
+        householdId = membership?.householdId ?? null;
+        role = membership?.role ?? "child";
+        await db.prepare(`update users set updated_at = ? where id = ?`).run(now, userId);
       }
     } catch (dbError) {
       error({ err: dbError }, "[SIGNIN] Database sync failed");
@@ -93,7 +117,8 @@ export async function POST(request: NextRequest) {
       email: user.email,
       name: user.user_metadata?.name || "",
       role,
-      familyId,
+      householdId,
+      household_id: householdId,
     });
   } catch {
     error("[SIGNIN] Unhandled error");
@@ -110,7 +135,10 @@ export async function GET(request: NextRequest) {
       const value = setCookie.replace(`${DEV_COOKIE_NAME}=`, "").trim();
       const user = await verifyDevSession(value);
       if (user) {
-        return NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, role: user.role || "child", name: user.name || "" } });
+        return NextResponse.json({
+          authenticated: true,
+          user: { id: user.id, email: user.email, role: user.role || "child", name: user.name || "" },
+        });
       }
       return NextResponse.json({ authenticated: false });
     }
@@ -120,10 +148,19 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = await getSupabaseMiddlewareClient(request);
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (session) {
-      return NextResponse.json({ authenticated: true, user: { id: session.user.id, email: session.user.email,
-        role: session.user.user_metadata?.role || "child", name: session.user.user_metadata?.name || "" } });
+      return NextResponse.json({
+        authenticated: true,
+        user: {
+          id: session.user.id,
+          email: session.user.email,
+          role: session.user.user_metadata?.role || "child",
+          name: session.user.user_metadata?.name || "",
+        },
+      });
     }
     return NextResponse.json({ authenticated: false });
   } catch {

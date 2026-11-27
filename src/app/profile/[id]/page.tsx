@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { PageShell, StatCard, Loading, Badge, Button, Card, PageHeader } from "@/components/ui";
-import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight } from "lucide-react";
+import { Award, Trophy, TrendingUp, TrendingDown, Flame, Clock, Star, BarChart3, CheckCircle2, ChevronRight, Camera } from "lucide-react";
 import { getAvatarEmoji } from "@/lib/avatar";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 import {
@@ -15,13 +15,31 @@ import {
   type ProfileUser as UserProfile,
 } from "@/lib/profile-view";
 
-async function getFamilyId(): Promise<string> {
+async function getViewer(): Promise<{ householdId: string; userId: string; role: string }> {
   const authRes = await fetch("/api/auth/me", { credentials: "include" });
   if (!authRes.ok) throw new Error("Not authenticated");
   const authData = await authRes.json();
-  const familyId = authData.familyId;
-  if (!familyId) throw new Error("No family ID");
-  return familyId;
+  const householdId = authData.householdId;
+  if (!householdId) throw new Error("No household ID");
+  return { householdId, userId: authData.user?.id || "", role: authData.user?.role || "child" };
+}
+
+/**
+ * Downscale a chosen picture to a 256px square JPEG. There is no file storage,
+ * so the photo travels to the API as a data URL — this keeps it small.
+ */
+async function fileToAvatarDataUrl(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+  // Faces usually sit in the upper part of a portrait, so crop closer to the top.
+  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) * 0.25, side, side, 0, 0, 256, 256);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
 export default function UserProfilePage() {
@@ -49,14 +67,24 @@ export default function UserProfilePage() {
   const [completions, setCompletions] = useState<JobCompletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [viewerId, setViewerId] = useState("");
+  const [viewerRole, setViewerRole] = useState("child");
+  // Photo editor: null = closed, otherwise the draft URL.
+  const [photoDraft, setPhotoDraft] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState("");
+  const [savingPhoto, setSavingPhoto] = useState(false);
   // Captured once when the data arrives so the 7-day chart stays stable across
   // re-renders (reading Date.now() during render is impure).
   const [nowMs, setNowMs] = useState(0);
 
   useEffect(() => {
     if (typeof window !== "undefined") document.title = "Choretle - User Profile";
-    getFamilyId()
-      .then((familyId) => fetch(`/api/profile/${userId}?familyId=${familyId}`, { credentials: "include" }))
+    getViewer()
+      .then((viewer) => {
+        setViewerId(viewer.userId);
+        setViewerRole(viewer.role);
+        return fetch(`/api/profile/${userId}?householdId=${viewer.householdId}`, { credentials: "include" });
+      })
       .then((res) => {
         if (!res.ok) throw new Error(`Profile request failed: ${res.status}`);
         return res.json();
@@ -102,6 +130,39 @@ export default function UserProfilePage() {
 
   const maxDayPoints = useMemo(() => Math.max(...last7Days.map((d) => d.points), 1), [last7Days]);
 
+  const canEditPhoto = viewerId !== "" && (viewerId === userId || viewerRole === "parent");
+
+  async function pickPhotoFile(file: File | undefined) {
+    if (!file) return;
+    setPhotoError("");
+    try {
+      setPhotoDraft(await fileToAvatarDataUrl(file));
+    } catch {
+      setPhotoError("Couldn't read that picture. Try a JPG or PNG.");
+    }
+  }
+
+  async function savePhoto(next: string | null) {
+    setSavingPhoto(true);
+    setPhotoError("");
+    try {
+      const res = await fetch(`/api/profile/${userId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save the photo.");
+      setUser((current) => ({ ...current, avatarUrl: data.user?.avatarUrl || undefined }));
+      setPhotoDraft(null);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Could not save the photo.");
+    } finally {
+      setSavingPhoto(false);
+    }
+  }
+
   if (!authChecked) return <PageShell><Loading label="Checking authentication..." /></PageShell>;
 
   if (loading) return <Loading label="Loading profile..." />;
@@ -143,14 +204,29 @@ export default function UserProfilePage() {
           {/* Avatar & Name */}
           <div className="relative flex items-center gap-6">
             {/* Avatar */}
-            <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold bg-white/90 text-ink shadow-lg">
-              {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt={user.name} className="w-full h-full rounded-full object-cover" />
-              ) : user.id ? (() => {
-                  const e = getAvatarEmoji(user.id);
-                  return <span className={`${e.bgClass} w-full h-full rounded-full flex items-center justify-center`}>{e.emoji}</span>;
-                })() : (
-                user.name.charAt(0).toUpperCase()
+            <div className="relative shrink-0">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold bg-white/90 text-ink shadow-lg">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="w-full h-full rounded-full object-cover object-top" />
+                ) : user.id ? (() => {
+                    const e = getAvatarEmoji(user.id);
+                    return <span className={`${e.bgClass} w-full h-full rounded-full flex items-center justify-center`}>{e.emoji}</span>;
+                  })() : (
+                  user.name.charAt(0).toUpperCase()
+                )}
+              </div>
+              {canEditPhoto && (
+                <button
+                  type="button"
+                  aria-label="Change profile photo"
+                  onClick={() => {
+                    setPhotoDraft(user.avatarUrl || "");
+                    setPhotoError("");
+                  }}
+                  className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white text-ink shadow-md flex items-center justify-center hover:bg-cream transition-colors"
+                >
+                  <Camera size={15} />
+                </button>
               )}
             </div>
 
@@ -370,6 +446,48 @@ export default function UserProfilePage() {
           </Card>
         </section>
       </main>
+
+      {photoDraft !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-display text-xl font-bold text-ink mb-1">Profile photo</h3>
+            <p className="text-sm text-ink/60 mb-4">Pick a picture of yourself. Only your household can see it.</p>
+            {photoDraft && (
+              <img
+                src={photoDraft}
+                alt=""
+                className="w-20 h-20 rounded-full object-cover mx-auto mb-4 bg-cream"
+              />
+            )}
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <label className="px-4 py-2 rounded-full font-bold bg-white text-ink border-2 border-ink/15 hover:border-grape/40 cursor-pointer transition-colors">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => pickPhotoFile(e.target.files?.[0])}
+                  disabled={savingPhoto}
+                />
+                Choose a file
+              </label>
+            </div>
+            {photoError && <p className="text-sm text-coral mt-2">{photoError}</p>}
+            <div className="flex flex-wrap gap-3 justify-end pt-4">
+              {user.avatarUrl && (
+                <Button variant="ghost" onClick={() => savePhoto(null)} disabled={savingPhoto}>
+                  Remove photo
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => setPhotoDraft(null)} disabled={savingPhoto}>
+                Cancel
+              </Button>
+              <Button onClick={() => savePhoto(photoDraft)} disabled={savingPhoto}>
+                {savingPhoto ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

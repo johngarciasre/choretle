@@ -58,10 +58,10 @@ const fetchTask = async (id: string) => {
     const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
-    const familyId = authData.familyId;
-    if (!familyId) throw new Error("No family ID");
+    const householdId = authData.householdId;
+    if (!householdId) throw new Error("No household ID");
 
-    const res = await fetch(`/api/tasks/${id}?familyId=${familyId}`, { credentials: "include" });
+    const res = await fetch(`/api/tasks/${id}?householdId=${householdId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch task");
     return await res.json();
   } catch (err) {
@@ -75,10 +75,10 @@ const fetchTags = async () => {
     const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
-    const familyId = authData.familyId;
-    if (!familyId) throw new Error("No family ID");
+    const householdId = authData.householdId;
+    if (!householdId) throw new Error("No household ID");
 
-    const res = await fetch(`/api/tags?familyId=${familyId}`, { credentials: "include" });
+    const res = await fetch(`/api/tags?householdId=${householdId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch tags");
     return await res.json();
   } catch (err) {
@@ -92,10 +92,10 @@ const fetchSubtasks = async (taskId: string) => {
     const authRes = await fetch("/api/auth/me", { credentials: "include" });
     if (!authRes.ok) throw new Error("Not authenticated");
     const authData = await authRes.json();
-    const familyId = authData.familyId;
-    if (!familyId) throw new Error("No family ID");
+    const householdId = authData.householdId;
+    if (!householdId) throw new Error("No household ID");
 
-    const res = await fetch(`/api/tasks/subtasks?taskId=${taskId}&familyId=${familyId}`, { credentials: "include" });
+    const res = await fetch(`/api/tasks/subtasks?taskId=${taskId}&householdId=${householdId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch subtasks");
     return await res.json();
   } catch (err) {
@@ -167,9 +167,9 @@ export default function TaskPage() {
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
-      const familyId = authData.familyId;
+      const householdId = authData.householdId;
 
-      const res = await fetch(`/api/tasks/${taskId}?familyId=${familyId}`, {
+      const res = await fetch(`/api/tasks/${taskId}?householdId=${householdId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -204,9 +204,9 @@ export default function TaskPage() {
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
-      const familyId = authData.familyId;
+      const householdId = authData.householdId;
 
-      const res = await fetch(`/api/tasks/${taskId}?familyId=${familyId}`, {
+      const res = await fetch(`/api/tasks/${taskId}?householdId=${householdId}`, {
         method: "DELETE",
       });
 
@@ -225,9 +225,9 @@ export default function TaskPage() {
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
-      const familyId = authData.familyId;
+      const householdId = authData.householdId;
 
-      const res = await fetch(`/api/tasks/subtasks?familyId=${familyId}`, {
+      const res = await fetch(`/api/tasks/subtasks?householdId=${householdId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -254,9 +254,9 @@ export default function TaskPage() {
       const authRes = await fetch("/api/auth/me", { credentials: "include" });
       if (!authRes.ok) throw new Error("Not authenticated");
       const authData = await authRes.json();
-      const familyId = authData.familyId;
+      const householdId = authData.householdId;
 
-      const res = await fetch(`/api/tasks/subtasks/${subtaskId}?familyId=${familyId}`, {
+      const res = await fetch(`/api/tasks/subtasks/${subtaskId}?householdId=${householdId}`, {
         method: "DELETE",
       });
 

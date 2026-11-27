@@ -8,6 +8,9 @@ const PUBLIC_ROUTES = [
   "/favicon.ico",
   "/manifest.json",
   "/apple-touch-icon.png",
+  // PIN sign-in screens: no session yet, and the picker must render before one exists.
+  "/profiles",
+  "/enroll",
 ];
 
 const PUBLIC_API_ROUTES = [
@@ -16,16 +19,50 @@ const PUBLIC_API_ROUTES = [
   "/api/auth/signout",
   "/api/auth/me",
   "/api/auth/websudo",
-  "/api/family/join",
+  // Picker tablets and PIN sign-in carry their own session cookie; verifyAuth
+  // and verifyPicker resolve it inside the handler.
+  "/api/auth/profiles",
+  "/api/auth/kid",
+  "/api/auth/touch",
+  "/api/auth/enroll/consume",
+  // Kiosk payloads are read-only and available to a picker tablet.
+  "/api/kiosk",
 ];
 
+/**
+ * Cookies that identify a PIN session or an enrolled tablet. Middleware runs on
+ * the edge and cannot read the sessions table, so their presence only means
+ * "let the request through and let the handler decide".
+ */
+const SESSION_COOKIES = ["cs-kid", "cs-tablet", "cs-device", "__Host-cs-kid", "__Host-cs-tablet", "__Host-cs-device"];
+
+function hasSessionCookie(request: NextRequest): boolean {
+  return SESSION_COOKIES.some((name) => !!request.cookies.get(name)?.value);
+}
+
+/**
+ * Identity lives in these headers, and every route trusts them. A client must
+ * never be able to supply them itself, so on routes that skip session checks
+ * the incoming values are removed before the handler sees the request.
+ */
+const AUTH_HEADERS = ["x-user-id", "x-email", "x-role", "x-household-id"];
+
 const WEBSUDO_COOKIE = "webserversudo-session";
+
+/** Public route without trusting any client-supplied identity headers. */
+function passthroughWithoutAuthHeaders(request: NextRequest): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  for (const header of AUTH_HEADERS) requestHeaders.delete(header);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("x-middleware-test", "running");
+  return response;
+}
 
 interface AuthHeaders {
   userId: string;
   email: string;
   role: string;
-  familyId: string;
+  householdId: string;
 }
 
 function hasSupabaseConfig(): boolean {
@@ -108,7 +145,7 @@ function nextWithAuth(request: NextRequest, auth: AuthHeaders): NextResponse {
   requestHeaders.set("x-user-id", auth.userId);
   requestHeaders.set("x-email", auth.email);
   requestHeaders.set("x-role", auth.role);
-  requestHeaders.set("x-family-id", auth.familyId);
+  requestHeaders.set("x-household-id", auth.householdId || request.cookies.get("ch-household")?.value || "");
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("x-middleware-test", "running");
@@ -125,9 +162,7 @@ export async function middleware(request: NextRequest) {
   const isPublicApiRoute = PUBLIC_API_ROUTES.some((route) => pathname.startsWith(route));
 
   if (isPublicRoute || isPublicApiRoute) {
-    const response = NextResponse.next();
-    response.headers.set("x-middleware-test", "running");
-    return response;
+    return passthroughWithoutAuthHeaders(request);
   }
 
   // ─── Production Mode: Verify Supabase session and set auth headers ──
@@ -138,7 +173,7 @@ export async function middleware(request: NextRequest) {
         userId: String(websudo.userId || ""),
         email: String(websudo.email || ""),
         role: "superadmin",
-        familyId: "",
+        householdId: "",
       });
     }
 
@@ -148,19 +183,25 @@ export async function middleware(request: NextRequest) {
       const user = result.data.session.user;
 
       if (pathname === "/") {
-        const redirect = NextResponse.redirect(new URL("/family", request.url));
+        const redirect = NextResponse.redirect(new URL("/household", request.url));
         setNoCacheHeaders(redirect);
         return redirect;
       }
 
-      // familyId and the authoritative role are resolved from the database by
+      // householdId and the authoritative role are resolved from the database by
       // verifyAuth(); middleware runs on the edge and cannot open SQLite.
       return nextWithAuth(request, {
         userId: user?.id || "",
         email: user?.email || "",
         role: (user?.user_metadata?.role as string) || "child",
-        familyId: "",
+        householdId: "",
       });
+    }
+
+    // No Supabase session — a PIN session or an enrolled tablet may still be
+    // present. Let it through; `verifyAuth`/`verifyPicker` are the authority.
+    if (hasSessionCookie(request)) {
+      return passthroughWithoutAuthHeaders(request);
     }
 
     // No valid session — redirect to signin
@@ -170,6 +211,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Dev Mode: Check or auto-create dev session cookie ──────────────
+  // A PIN session or picker tablet wins over the dev auto-login; otherwise the
+  // auto-created identity would shadow the kid cookie on every request.
+  if (hasSessionCookie(request)) {
+    return passthroughWithoutAuthHeaders(request);
+  }
+
   let devUser = await getDevUserFromRequest(request);
   let newSession = null;
 
@@ -179,9 +226,9 @@ export async function middleware(request: NextRequest) {
     devUser = newSession.user;
   }
 
-  // Redirect dev users from landing page to family
+  // Redirect dev users from landing page to household
   if (pathname === "/") {
-    const redirectUrl = devUser.familyId ? `/family/${devUser.familyId}` : "/family";
+    const redirectUrl = devUser.householdId ? `/household/${devUser.householdId}` : "/household";
     const redirect = NextResponse.redirect(new URL(redirectUrl, request.url));
     setNoCacheHeaders(redirect);
     if (newSession) await setDevSessionCookie(redirect.headers, newSession);
@@ -193,7 +240,7 @@ export async function middleware(request: NextRequest) {
     userId: devUser.id,
     email: devUser.email,
     role: devUser.role,
-    familyId: devUser.familyId || "",
+    householdId: devUser.householdId || "",
   });
 
   if (newSession) {

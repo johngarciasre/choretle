@@ -1,0 +1,58 @@
+# Dev / demo stack: Postgres plus the app. Production uses the Helm chart.
+#
+#   docker compose up -d postgres     # database only, for `npm run dev`
+#   docker compose up -d              # whole stack on http://localhost:3000
+#
+# Works with `podman compose` as well as Docker.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-choretle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-choretle}
+      POSTGRES_DB: ${POSTGRES_DB:-choretle}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - choretle-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-choretle} -d ${POSTGRES_DB:-choretle}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+    command: ["node", "scripts/migrate.mjs"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-choretle}:${POSTGRES_PASSWORD:-choretle}@postgres:5432/${POSTGRES_DB:-choretle}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      # Never set AUTH_MODE=dev anywhere a real person can reach.
+      AUTH_MODE: ${AUTH_MODE:-}
+      DATABASE_URL: postgres://${POSTGRES_USER:-choretle}:${POSTGRES_PASSWORD:-choretle}@postgres:5432/${POSTGRES_DB:-choretle}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      WEBSUDO_SECRET: ${WEBSUDO_SECRET:-}
+      # Migrations run in the `migrate` service, never on request paths.
+      AUTO_MIGRATE: "0"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  choretle-postgres:

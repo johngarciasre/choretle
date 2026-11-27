@@ -1,0 +1,63 @@
+{{- if and .Values.backup.enabled .Values.postgres.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "choretle.fullname" . }}-backup
+  labels:
+    {{- include "choretle.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-dump
+              image: {{ .Values.postgres.image }}
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  export PGPASSWORD="$POSTGRES_PASSWORD"
+                  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+                  pg_dump --host={{ include "choretle.postgresService" . }} \
+                          --username={{ .Values.postgres.username }} \
+                          --dbname={{ .Values.postgres.database }} \
+                          --format=custom --file=/backup/choretle-$stamp.dump
+                  find /backup -name 'choretle-*.dump' -mtime +{{ .Values.backup.retentionDays }} -delete
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "choretle.secretName" . }}
+                      key: POSTGRES_PASSWORD
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "choretle.fullname" . }}-backup
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "choretle.fullname" . }}-backup
+  labels:
+    {{- include "choretle.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.postgres.storageClass }}
+  storageClassName: {{ .Values.postgres.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: 5Gi
+{{- end }}

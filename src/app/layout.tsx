@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Baloo_2, Nunito } from "next/font/google";
 import "./globals.css";
+import { IdleGuard } from "@/components/IdleGuard";
 
 const baloo = Baloo_2({
   variable: "--font-baloo",
@@ -14,16 +15,19 @@ const nunito = Nunito({
 
 export const metadata: Metadata = {
   title: "Choretle",
-  description: "Chores, points & fun for the whole family",
+  description: "Chores, points & fun for the whole household",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       className={`${baloo.variable} ${nunito.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <IdleGuard />
+      </body>
     </html>
   );
 }

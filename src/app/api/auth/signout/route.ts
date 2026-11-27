@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseMiddlewareClient } from "@/lib/supabase";
 import { verifyDevSession, DEV_COOKIE_NAME } from "@/lib/dev-auth";
 import { error } from "@/lib/logger.server";
+import { verifyAuth } from "@/lib/auth";
+import { cookieOptions, revokeSession, sessionCookieNames } from "@/lib/session";
+
+/** Clear the PIN and picker cookies alongside the Supabase session. */
+function clearSessionCookies(response: NextResponse): NextResponse {
+  const names = sessionCookieNames();
+  for (const name of [names.kid, names.tablet, names.device]) {
+    response.cookies.set(name, "", cookieOptions(0));
+  }
+  return response;
+}
 
 /**
  * Check if Supabase credentials are properly configured.
@@ -20,12 +31,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const isGlobal = body.type === "global";
 
+    // A PIN session is revoked server-side; clearing the cookie alone would
+    // leave a live row behind on a tablet that was walked away from.
+    const sessionAuth = await verifyAuth(request);
+    if (sessionAuth?.sessionId) await revokeSession(sessionAuth.sessionId);
+
     // ─── Dev Mode: Clear dev session cookie & set signout flag ────────────────
     if (process.env.AUTH_MODE === "dev") {
       const response = NextResponse.json(
-        { 
-          ok: true, 
-          message: "Successfully logged out (dev mode)" 
+        {
+          ok: true,
+          message: "Successfully logged out (dev mode)"
         },
         { status: 200 }
       );
@@ -35,7 +51,7 @@ export async function POST(request: NextRequest) {
       response.headers.append("Set-Cookie", `${DEV_COOKIE_NAME}=; path=/; secure=false; httpOnly=true`);
       response.headers.append("Set-Cookie", "dev-signout=true; path=/; secure=false; httpOnly=true");
       response.headers.append("Set-Cookie", "choretle_mode=; path=/; secure=false; httpOnly=true");
-      return response;
+      return clearSessionCookies(response);
     }
 
     // ─── Production Mode: Use Supabase Auth ────────────────
@@ -74,7 +90,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return response;
+    return clearSessionCookies(response);
   } catch (e) {
     error("Sign out failed", { err: e });
     

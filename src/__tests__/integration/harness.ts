@@ -74,7 +74,7 @@ export class TestHarness {
     const headers = new Headers();
     headers.set("cookie", cookiesStr.join("; "));
     
-    // Also add any non-cookie headers from the jar (e.g., x-family-id, x-user-id)
+    // Also add any non-cookie headers from the jar (e.g., x-household-id, x-user-id)
     for (const [name, value] of this.jar.cookies) {
       if (name.startsWith("x-")) {
         headers.set(name, value);
@@ -145,7 +145,7 @@ export class TestHarness {
     const headers = new Headers();
     headers.set("cookie", cookiesStr.join("; "));
     
-    // Also add any non-cookie headers from the jar (e.g., x-family-id, x-user-id)
+    // Also add any non-cookie headers from the jar (e.g., x-household-id, x-user-id)
     for (const [name, value] of this.jar.cookies) {
       if (name.startsWith("x-")) {
         headers.set(name, value);
@@ -281,10 +281,10 @@ export class TestHarness {
   /**
    * Create a mock slate via the API.
    */
-  async createSlate(name: string, familyId: string, frequency = "weekly", interval = 1): Promise<string> {
+  async createSlate(name: string, householdId: string, frequency = "weekly", interval = 1): Promise<string> {
     const res = await this.invokeHandler("/api/slates", "POST", {
       name,
-      familyId,
+      householdId,
       frequency,
       interval,
     });
@@ -293,23 +293,23 @@ export class TestHarness {
   }
 
   /**
-   * Set the family ID cookie (simulates middleware x-family-id header).
+   * Set the household ID cookie (simulates middleware x-household-id header).
    */
-  setFamilyId(familyId: string): void {
-    this.jar.cookies.set("x-family-id", familyId);
+  setHouseholdId(householdId: string): void {
+    this.jar.cookies.set("x-household-id", householdId);
   }
 
   /**
-   * Clear the family ID cookie.
+   * Clear the household ID cookie.
    */
-  clearFamilyId(): void {
-    this.jar.cookies.delete("x-family-id");
+  clearHouseholdId(): void {
+    this.jar.cookies.delete("x-household-id");
   }
 
   /**
-   * Get the current family ID from cookies, if set.
+   * Get the current household ID from cookies, if set.
    */
-  getFamilyId(): string | null {
-    return this.jar.cookies.get("x-family-id") || null;
+  getHouseholdId(): string | null {
+    return this.jar.cookies.get("x-household-id") || null;
   }
 }

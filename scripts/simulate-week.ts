@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --import=tsx
 /**
- * Simulate one week of typical user activity for a single family.
+ * Simulate one week of typical user activity for a single household.
  *
  * Usage (from project root):
  *   npx tsx scripts/simulate-week.ts
@@ -8,7 +8,7 @@
  * Requires: the Next.js dev server running on port 3000 (or set NEXT_PUBLIC_API_URL).
  *
  * What it does:
- *   Day 0 — Setup: family, parent + 2 children, tasks, slates, rotations
+ *   Day 0 — Setup: household, parent + 2 children, tasks, slates, rotations
  *   Day 1–7 — Jobs auto-generate; children complete them; parents award points
  *
  * Output: summary of jobs created/completed and scores per user.
@@ -79,7 +79,7 @@ class Session {
     const r = await fetch(`${BASE}/api/auth/me`, {
       headers: this.cookieHeader(),
     });
-    return (await r.json()) as { user: { id: string; email: string; role: string }; familyId: string };
+    return (await r.json()) as { user: { id: string; email: string; role: string }; householdId: string };
   }
 
   async get(path: string) {
@@ -135,21 +135,21 @@ function dayOffset(n: number) {
 async function setup() {
   console.log("━━━ Day 0 — Setup ─");
 
-  // Ensure parent exists and has a family
+  // Ensure parent exists and has a household
   const parent = new Session();
   // Sign up the admin user first (idempotent in dev mode)
   await parent.signUp("admin@choretle.dev", "Admin");
   await parent.login("admin@choretle.dev");
   let me = await parent.me();
-  let familyId = me.familyId;
+  let householdId = me.householdId;
 
-  if (!familyId) {
-    console.log("  Creating family...");
-    const fam = await parent.post("/api/family", { name: "My Family", slug: "my-family" });
-    familyId = (fam as { id: string }).id;
+  if (!householdId) {
+    console.log("  Creating household...");
+    const fam = await parent.post("/api/household", { name: "My Household", slug: "my-household" });
+    householdId = (fam as { id: string }).id;
     me = await parent.me();
   }
-  console.log(`  Family: ${familyId}`);
+  console.log(`  Household: ${householdId}`);
 
   // Create children if they don't exist
   const childEmails = ["child1@choretle.dev", "child2@choretle.dev"];
@@ -179,7 +179,7 @@ async function setup() {
   const tasks: { id: string; name: string }[] = [];
   for (const t of taskDefs) {
     const created = await parent.post("/api/tasks", {
-      familyId, name: t.name, points: t.points, icon: t.icon, archtype: "job", isActive: true, verifyRequired: false,
+      householdId, name: t.name, points: t.points, icon: t.icon, archtype: "job", isActive: true, verifyRequired: false,
     });
     tasks.push({ id: (created as { id: string }).id, name: t.name });
   }
@@ -196,7 +196,7 @@ async function setup() {
   const slates: { id: string; name: string }[] = [];
   for (const s of slateDefs) {
     const created = await parent.post("/api/slates", {
-      familyId, name: s.name, frequency: s.frequency, interval: s.interval,
+      householdId, name: s.name, frequency: s.frequency, interval: s.interval,
     });
     slates.push({ id: (created as { id: string }).id, name: s.name });
   }
@@ -238,13 +238,13 @@ async function setup() {
   for (const r of rotationDefs) {
     console.log(`   Creating rotation: slateId=${r.slateId}, userId=${r.userId}`);
     await parent.post("/api/rotations", {
-      familyId, slateId: r.slateId, userId: r.userId, order: 0, intervalDays: 1, isActive: true,
+      householdId, slateId: r.slateId, userId: r.userId, order: 0, intervalDays: 1, isActive: true,
     });
   }
   console.log(`  Created ${rotationDefs.length} rotations`);
 
   // Store IDs for later use
-  return { familyId, children, slates, tasks };
+  return { householdId, children, slates, tasks };
 }
 
 // ── Days 1–7: Simulate activity ──────────────────────────────────────
@@ -252,7 +252,7 @@ async function setup() {
 async function simulateWeek(weekData: Awaited<ReturnType<typeof setup>>) {
   console.log("\n━━━ Days 1–7 — Activity Simulation ─");
 
-  const { familyId, children } = weekData;
+  const { householdId, children } = weekData;
 
   // Parent generates jobs for each day of the week
   const parent = new Session();
@@ -268,7 +268,7 @@ async function simulateWeek(weekData: Awaited<ReturnType<typeof setup>>) {
     const genResRaw = await fetch(`${BASE}/api/schedules/generate`, {
       method: "POST",
       headers: { ...parent.cookieHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({ familyId, date: dateStr }),
+      body: JSON.stringify({ householdId, date: dateStr }),
     });
     const genRes = await genResRaw.json();
     if (!genResRaw.ok) {

@@ -1,4 +1,4 @@
-// Curated list of fun, family-friendly emojis for profile avatars
+// Curated list of fun, household-friendly emojis for profile avatars
 const AVATAR_EMOJIS = [
   "\u{1F60A}", // smiley face
   "\u{1F60E}", // smiling face with sunglasses

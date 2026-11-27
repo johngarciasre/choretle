@@ -1,5 +1,5 @@
 /**
- * Family-friendly adjective-noun pairs for generating join codes.
+ * Household-friendly adjective-noun pairs for generating join codes.
  * Format: "adjective-noun" (e.g., "beautiful-doorway")
  */
 

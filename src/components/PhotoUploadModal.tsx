@@ -23,10 +23,10 @@ export default function PhotoUploadModal({ isOpen, onClose, objectType, objectId
     setUploading(true);
 
     try {
-      const familyId = localStorage.getItem("familyId") || "";
+      const householdId = localStorage.getItem("householdId") || "";
       await fetch("/api/photos", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(familyId ? { "x-family-id": familyId } : {}) },
+        headers: { "Content-Type": "application/json", ...(householdId ? { "x-household-id": householdId } : {}) },
         body: JSON.stringify({ objectType, objectId, url, title, isProbative }),
       });
       setUrl("");

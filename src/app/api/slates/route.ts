@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
-import { verifyAuth } from "@/lib/auth";
+import { getDb } from "@/db";
+import { verifyAuth, canAuthor } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 
 export async function GET(request: NextRequest) {
@@ -10,27 +10,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    // Accept familyId from query param as fallback (dev mode without middleware headers)
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) {
+      return NextResponse.json({ error: "Household ID required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    // Get slates with task counts using raw SQL (Drizzle ORM fails on SQLite joins+groupBy)
-    const stmt = rawDb.prepare(`
-      SELECT s.*, COUNT(DISTINCT st.id) as taskCount
+    // Get slates with task counts
+    const slates = (await rawDb
+      .prepare(
+        `SELECT s.*, COUNT(DISTINCT st.id) as "taskCount"
       FROM slates s
       LEFT JOIN slate_tasks st ON s.id = st.slate_id
-      WHERE s.family_id = ?
-      GROUP BY s.id
-    `);
-
-    const slates = stmt.all(familyId) as any[];
+      WHERE s.household_id = ?
+      GROUP BY s.id`,
+      )
+      .all(householdId)) as any[];
 
     // Normalize snake_case to camelCase for frontend
     const normalizedSlates = slates.map((s: any) => ({
@@ -59,24 +58,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
     const body = await request.json();
     const { name, description, roomLocation, frequency, interval, schedule, defaultDueDateOffset, isActive } = body;
 
-    // Accept familyId from query param as fallback (dev mode without middleware headers)
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) {
+      return NextResponse.json({ error: "Household ID required" }, { status: 400 });
     }
 
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
@@ -85,14 +83,14 @@ export async function POST(request: NextRequest) {
 
     // Use raw SQL to avoid Drizzle ORM issues with boolean/int conversion
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
-    const stmt = rawDb.prepare(
-      `INSERT INTO slates (id, name, family_id, description, room_location, frequency, interval, schedule, default_due_date_offset, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    const stmt = await rawDb.prepare(
+      `INSERT INTO slates (id, name, household_id, description, room_location, frequency, interval, schedule, default_due_date_offset, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     stmt.run(
       slateId,
       name,
-      familyId,
+      householdId,
       description || null,
       roomLocation || null,
       frequency || "weekly",
@@ -102,7 +100,7 @@ export async function POST(request: NextRequest) {
       (isActive !== false) ? 1 : 0,
     );
 
-    const slate = rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(slateId);
+    const slate = await rawDb.prepare(`SELECT * FROM slates WHERE id = ?`).get(slateId);
 
     return NextResponse.json(slate, { status: 201 });
   } catch (err) {

@@ -41,23 +41,23 @@ interface HistoryEntry {
 
 const jobId = typeof window !== "undefined" ? new URL(window.location.href).pathname.split("/")[2] : "";
 
-let cachedSession: { familyId: string; role: string } | null = null;
+let cachedSession: { householdId: string; role: string } | null = null;
 
-async function getSession(): Promise<{ familyId: string; role: string }> {
+async function getSession(): Promise<{ householdId: string; role: string }> {
   if (cachedSession) return cachedSession;
   const authRes = await fetch("/api/auth/me", { credentials: "include" });
   if (!authRes.ok) throw new Error("Not authenticated");
   const authData = await authRes.json();
-  const familyId = authData.familyId;
-  if (!familyId) throw new Error("No family ID");
-  cachedSession = { familyId, role: authData.user?.role || "child" };
+  const householdId = authData.householdId;
+  if (!householdId) throw new Error("No household ID");
+  cachedSession = { householdId, role: authData.user?.role || "child" };
   return cachedSession;
 }
 
 const fetchJob = async () => {
   try {
-    const { familyId } = await getSession();
-    const res = await fetch(`/api/jobs/${jobId}?familyId=${familyId}`, { credentials: "include" });
+    const { householdId } = await getSession();
+    const res = await fetch(`/api/jobs/${jobId}?householdId=${householdId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch job");
     return await res.json();
   } catch (err) {
@@ -68,8 +68,8 @@ const fetchJob = async () => {
 
 const fetchPhotos = async (objectType: string, objectId: string) => {
   try {
-    const { familyId } = await getSession();
-    const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}&familyId=${familyId}`, { credentials: "include" });
+    const { householdId } = await getSession();
+    const res = await fetch(`/api/photos?objectType=${objectType}&objectId=${objectId}&householdId=${householdId}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch photos");
     return await res.json();
   } catch (err) {
@@ -116,8 +116,8 @@ export default function JobPage() {
     if (!job) return;
 
     try {
-      const { familyId } = await getSession();
-      const res = await fetch(`/api/jobs/${job.id}?familyId=${familyId}`, {
+      const { householdId } = await getSession();
+      const res = await fetch(`/api/jobs/${job.id}?householdId=${householdId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),

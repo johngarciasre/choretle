@@ -1,37 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, canAuthor } from "@/lib/auth";
 import { canTransition } from "@/lib/jobStatus";
 
-/** A list is only usable when it belongs to the caller's family. */
-function listBelongsToFamily(rawDb: any, listId: string, familyId: string): boolean {
-  const row = rawDb.prepare(`SELECT id FROM lists WHERE id = ? AND family_id = ?`).get(listId, familyId);
+/** A list is only usable when it belongs to the caller's household. */
+async function listBelongsToHousehold(rawDb: any, listId: string, householdId: string): Promise<boolean> {
+  const row = await rawDb.prepare(`SELECT id FROM lists WHERE id = ? AND household_id = ?`).get(listId, householdId);
   return !!row;
 }
 
 /**
  * One-off chores have no slate, but a job must belong to a list and every
- * family scope check goes through lists. Give each family one hidden list,
+ * household scope check goes through lists. Give each household one hidden list,
  * keyed by a slate_id no real slate uses, created the first time it is needed.
  */
-function getOrCreateOneOffList(rawDb: any, familyId: string): string {
-  const slateKey = `one-off-${familyId}`;
-  const existing = rawDb.prepare(
-    `SELECT id FROM lists WHERE family_id = ? AND slate_id = ?`
-  ).get(familyId, slateKey) as any;
+async function getOrCreateOneOffList(rawDb: any, householdId: string): Promise<string> {
+  const slateKey = `one-off-${householdId}`;
+  const existing = await rawDb.prepare(
+    `SELECT id FROM lists WHERE household_id = ? AND slate_id = ?`
+  ).get(householdId, slateKey) as any;
   if (existing) return existing.id;
 
   const id = `list-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  rawDb.prepare(
-    `INSERT OR IGNORE INTO lists (id, slate_id, family_id, name, start_date, end_date, period, status, created_at)
-     VALUES (?, ?, ?, 'One-off chores', ?, NULL, 'one-off', 'active', ?)`
-  ).run(id, slateKey, familyId, now, now);
+  await rawDb.prepare(
+    `INSERT INTO lists (id, slate_id, household_id, name, start_date, end_date, period, status, created_at)
+     VALUES (?, ?, ?, 'One-off chores', ?, NULL, 'one-off', 'active', ?)
+     ON CONFLICT DO NOTHING`
+  ).run(id, slateKey, householdId, now, now);
 
-  const created = rawDb.prepare(
-    `SELECT id FROM lists WHERE family_id = ? AND slate_id = ?`
-  ).get(familyId, slateKey) as any;
+  const created = await rawDb.prepare(
+    `SELECT id FROM lists WHERE household_id = ? AND slate_id = ?`
+  ).get(householdId, slateKey) as any;
   return created.id;
 }
 
@@ -42,25 +43,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const familyId = auth.familyId;
+    const householdId = auth.householdId;
     const listId = request.headers.get("x-list-id") || request.nextUrl.searchParams.get("listId") || "";
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json([]);
     }
 
     // If listId is provided, fetch jobs for that specific list — but only ours.
     if (listId) {
-      if (!listBelongsToFamily(rawDb, listId, familyId)) {
+      if (!(await listBelongsToHousehold(rawDb, listId, householdId))) {
         return NextResponse.json({ error: "List not found" }, { status: 404 });
       }
-      const jobs = rawDb.prepare(`SELECT * FROM jobs WHERE list_id = ?`).all(listId) as any[];
+      const jobs = await rawDb.prepare(`SELECT * FROM jobs WHERE list_id = ?`).all(listId) as any[];
       return NextResponse.json(jobs);
     }
 
-    // Otherwise, fetch all jobs for the family
-    const jobsRaw = rawDb.prepare(
+    // Otherwise, fetch all jobs for the household
+    const jobsRaw = await rawDb.prepare(
       `SELECT j.*, s.name as slate_name, t.name as task_name, t.points as task_points,
               u.name as assignee_name
          FROM jobs j
@@ -68,9 +69,9 @@ export async function GET(request: NextRequest) {
          LEFT JOIN slates s ON st.slate_id = s.id
          LEFT JOIN tasks t ON st.task_id = t.id
          LEFT JOIN users u ON j.assigned_to = u.id
-         WHERE j.list_id IN (SELECT id FROM lists WHERE family_id = ?)
+         WHERE j.list_id IN (SELECT id FROM lists WHERE household_id = ?)
          ORDER BY j.created_at DESC`
-    ).all(familyId);
+    ).all(householdId);
 
     return NextResponse.json(jobsRaw);
   } catch (err) {
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
@@ -96,33 +97,40 @@ export async function POST(request: NextRequest) {
     // No listId means a one-off chore, created directly instead of by a slate.
     let listId = body?.listId as string | undefined;
     if (!listId) {
-      if (auth.role !== "parent") {
+      if (!canAuthor(auth)) {
         return NextResponse.json({ error: "Parent access required" }, { status: 403 });
       }
       if (!String(body?.name || "").trim()) {
         return NextResponse.json({ error: "name is required" }, { status: 400 });
       }
       if (body?.assignedTo) {
-        const member = rawDb.prepare(
-          `SELECT id FROM users WHERE id = ? AND family_id = ?`
-        ).get(body.assignedTo, auth.familyId);
+        const member = await rawDb.prepare(
+          `SELECT user_id FROM memberships WHERE user_id = ? AND household_id = ?`
+        ).get(body.assignedTo, auth.householdId);
         if (!member) {
-          return NextResponse.json({ error: "assignedTo must be a member of your family" }, { status: 400 });
+          return NextResponse.json({ error: "assignedTo must be a member of your household" }, { status: 400 });
         }
       }
       if (body?.dueDate && isNaN(new Date(body.dueDate).getTime())) {
         return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
       }
-      listId = getOrCreateOneOffList(rawDb, auth.familyId);
-    } else if (!listBelongsToFamily(rawDb, listId, auth.familyId)) {
+      listId = await getOrCreateOneOffList(rawDb, auth.householdId);
+    } else if (!(await listBelongsToHousehold(rawDb, listId, auth.householdId))) {
       return NextResponse.json({ error: "List not found" }, { status: 404 });
+    }
+
+    // A job may point at a slate task, and that task must belong to this household.
+    if (body.slateTaskId && !await rawDb.prepare(
+      `SELECT st.id FROM slate_tasks st JOIN slates s ON s.id = st.slate_id WHERE st.id = ? AND s.household_id = ?`
+    ).get(body.slateTaskId, auth.householdId)) {
+      return NextResponse.json({ error: "slateTaskId must belong to your household" }, { status: 400 });
     }
 
     const now = new Date().toISOString();
     const jobId = `job-${crypto.randomUUID()}`;
     const points = Number.isFinite(Number(body.points)) ? Math.trunc(Number(body.points)) : 0;
 
-    rawDb.prepare(
+    await rawDb.prepare(
       `INSERT INTO jobs (id, list_id, slate_task_id, assigned_to, name, description, points, status, due_date, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?)`
     ).run(
@@ -138,7 +146,7 @@ export async function POST(request: NextRequest) {
       now,
     );
 
-    const job = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
+    const job = await rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId) as any;
     return NextResponse.json(job);
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Create job failed");
@@ -158,14 +166,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "id and status are required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    const job = rawDb.prepare(
-      `SELECT j.* FROM jobs j JOIN lists l ON j.list_id = l.id WHERE j.id = ? AND l.family_id = ?`
-    ).get(body.id, auth.familyId) as any;
+    const job = await rawDb.prepare(
+      `SELECT j.* FROM jobs j JOIN lists l ON j.list_id = l.id WHERE j.id = ? AND l.household_id = ?`
+    ).get(body.id, auth.householdId) as any;
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
     if (!canTransition(job.status, body.status)) {
@@ -175,10 +183,10 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    rawDb.prepare(`UPDATE jobs SET status = ?, updated_at = ? WHERE id = ?`)
+    await rawDb.prepare(`UPDATE jobs SET status = ?, updated_at = ? WHERE id = ?`)
       .run(body.status, new Date().toISOString(), body.id);
 
-    const updated = rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(body.id) as any;
+    const updated = await rawDb.prepare(`SELECT * FROM jobs WHERE id = ?`).get(body.id) as any;
     return NextResponse.json(updated);
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Update job failed");
@@ -198,14 +206,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    const result = rawDb.prepare(
-      `DELETE FROM jobs WHERE id = ? AND list_id IN (SELECT id FROM lists WHERE family_id = ?)`
-    ).run(body.id, auth.familyId);
+    const result = await rawDb.prepare(
+      `DELETE FROM jobs WHERE id = ? AND list_id IN (SELECT id FROM lists WHERE household_id = ?)`
+    ).run(body.id, auth.householdId);
 
     if (result.changes === 0) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });

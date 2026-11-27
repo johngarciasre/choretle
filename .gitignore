@@ -57,3 +57,5 @@ supabase/
 
 # local SQLite databases (dev fallback)
 data/*.db
+data/*.db-wal
+data/*.db-shm

@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { routeTable, clientCalls, resolveRoute } from "../api-inventory";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
+import { resetDb } from "@/db";
 
 interface Target {
   method: "GET" | "POST" | "PUT" | "DELETE";
@@ -38,8 +38,8 @@ function smokeTargets(): Target[] {
 const targets = smokeTargets();
 
 describe("API route smoke", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
   it("covers the client's routes and methods", () => {

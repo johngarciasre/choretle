@@ -1,32 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, canAuthor } from "@/lib/auth";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) return NextResponse.json({ error: "Household ID required" }, { status: 400 });
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const taskId = (await params).taskId;
 
     // Fetch task with tags
-    const taskWithTags = rawDb.prepare(
-      `SELECT t.*, GROUP_CONCAT(tt.tag_id) as tag_ids FROM tasks t LEFT JOIN task_tags tt ON t.id = tt.task_id WHERE t.id = ? AND t.family_id = ?`
-    ).get(taskId, familyId) as any;
+    const taskWithTags = await rawDb.prepare(
+      `SELECT t.*, (SELECT string_agg(tt.tag_id, ',') FROM task_tags tt WHERE tt.task_id = t.id) as tag_ids FROM tasks t WHERE t.id = ? AND t.household_id = ?`
+    ).get(taskId, householdId) as any;
 
     if (!taskWithTags) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
     const tags = taskWithTags.tag_ids ? taskWithTags.tag_ids.split(",") : [];
-    const tagDetails = rawDb.prepare(`SELECT * FROM tags WHERE id IN (${tags.map(() => "?").join(",")})`).all(...tags) as any[];
+    const tagDetails = tags.length
+      ? ((await rawDb
+          .prepare(`SELECT * FROM tags WHERE id IN (${tags.map(() => "?").join(",")}) AND household_id = ?`)
+          .all(...tags, householdId)) as any[])
+      : [];
 
     // Fetch subtasks
-    const subtasks = rawDb.prepare(`SELECT * FROM subtasks WHERE task_id = ? ORDER BY "order"`).all(taskId) as any[];
+    const subtasks = await rawDb.prepare(`SELECT * FROM subtasks WHERE task_id = ? ORDER BY "order"`).all(taskId) as any[];
 
     return NextResponse.json({
       id: taskWithTags.id, name: taskWithTags.name, description: taskWithTags.description,
@@ -48,48 +52,59 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) return NextResponse.json({ error: "Household ID required" }, { status: 400 });
 
     const body = await request.json();
     const { name, description, points, icon, tags, verifyRequired, schedule } = body;
     const taskId = (await params).taskId;
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    const owned = rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(taskId, familyId);
+    const owned = await rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND household_id = ?`).get(taskId, householdId);
     if (!owned) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
     // Normalize tag field name — accept both 'tags' and 'tagIds' from client
     const resolvedTags = tags ?? body.tagIds;
 
+    // Tags come from the request body, so they must be proven to be ours.
+    for (const tagId of Array.isArray(resolvedTags) ? resolvedTags : []) {
+      if (!await rawDb.prepare(`SELECT id FROM tags WHERE id = ? AND household_id = ?`).get(tagId, householdId)) {
+        return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+      }
+    }
+
     // Update task
     const updates: string[] = ["name = ?", "description = ?", "points = ?", "icon = ?", "verify_required = ?", "schedule = ?", "updated_at = ?"];
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
     const values: any[] = [name || "", description || null, points || 0, icon || null, verifyRequired ? 1 : 0, scheduleStr || null, new Date().toISOString()];
-    values.push(taskId, familyId);
-    rawDb.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ? AND family_id = ?`).run(...values);
+    values.push(taskId, householdId);
+    await rawDb.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ? AND household_id = ?`).run(...values);
 
     // Update tags if provided
     if (resolvedTags !== undefined) {
-      rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ?`).run(taskId);
+      await rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ?`).run(taskId);
       for (const tagId of (resolvedTags || [])) {
-        rawDb.prepare(`INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`).run(`tt-${crypto.randomUUID()}`, taskId, tagId);
+        await rawDb.prepare(`INSERT INTO task_tags (id, task_id, tag_id) VALUES (?, ?, ?)`).run(`tt-${crypto.randomUUID()}`, taskId, tagId);
       }
     }
 
     // Fetch updated task with tags
-    const updatedTaskWithTags = rawDb.prepare(
-      `SELECT t.*, GROUP_CONCAT(tt.tag_id) as tag_ids FROM tasks t LEFT JOIN task_tags tt ON t.id = tt.task_id WHERE t.id = ?`
+    const updatedTaskWithTags = await rawDb.prepare(
+      `SELECT t.*, (SELECT string_agg(tt.tag_id, ',') FROM task_tags tt WHERE tt.task_id = t.id) as tag_ids FROM tasks t WHERE t.id = ?`
     ).get(taskId) as any;
 
     const tagIds = updatedTaskWithTags?.tag_ids ? updatedTaskWithTags.tag_ids.split(",") : [];
-    const tagDetails = rawDb.prepare(`SELECT * FROM tags WHERE id IN (${tagIds.map(() => "?").join(",")})`).all(...tagIds) as any[];
+    const tagDetails = tagIds.length
+      ? ((await rawDb
+          .prepare(`SELECT * FROM tags WHERE id IN (${tagIds.map(() => "?").join(",")}) AND household_id = ?`)
+          .all(...tagIds, householdId)) as any[])
+      : [];
 
     return NextResponse.json({
       id: updatedTaskWithTags.id, name: updatedTaskWithTags.name, description: updatedTaskWithTags.description,
@@ -108,25 +123,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) return NextResponse.json({ error: "Household ID required" }, { status: 400 });
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     const taskId = (await params).taskId;
 
-    // Verify task exists and belongs to family before deleting
-    const task = rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND family_id = ?`).get(taskId, familyId);
+    // Verify task exists and belongs to household before deleting
+    const task = await rawDb.prepare(`SELECT id FROM tasks WHERE id = ? AND household_id = ?`).get(taskId, householdId);
     if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-    rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ? AND family_id = ?)`).run(taskId, taskId, familyId);
-    rawDb.prepare(`DELETE FROM subtasks WHERE task_id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ? AND family_id = ?)`).run(taskId, taskId, familyId);
-    rawDb.prepare(`DELETE FROM tasks WHERE id = ? AND family_id = ?`).run(taskId, familyId);
+    await rawDb.prepare(`DELETE FROM task_tags WHERE task_id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ? AND household_id = ?)`).run(taskId, taskId, householdId);
+    await rawDb.prepare(`DELETE FROM subtasks WHERE task_id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ? AND household_id = ?)`).run(taskId, taskId, householdId);
+    await rawDb.prepare(`DELETE FROM tasks WHERE id = ? AND household_id = ?`).run(taskId, householdId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

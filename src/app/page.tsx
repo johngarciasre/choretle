@@ -19,7 +19,7 @@ export default function LandingPage() {
               Choretle
             </h1>
             <p className="text-2xl text-ink/70 font-medium">
-              Chores, points & fun for the whole family
+              Chores, points & fun for the whole household
             </p>
           </div>
 
@@ -35,7 +35,7 @@ export default function LandingPage() {
             <Card accent="coral" className="text-center py-8 transition hover:-translate-y-1">
               <Heart className="size-10 text-coral mx-auto mb-4" />
               <h3 className="font-display text-xl font-bold text-ink mb-2">Set It Up Once</h3>
-              <p className="text-ink/60 text-sm">Create your family, add chores, and assign them in minutes.</p>
+              <p className="text-ink/60 text-sm">Create your household, add chores, and assign them in minutes.</p>
             </Card>
             <Card accent="teal" className="text-center py-8 transition hover:-translate-y-1">
               <Smile className="size-10 text-teal mx-auto mb-4" />
@@ -51,7 +51,7 @@ export default function LandingPage() {
 
           {/* Testimonial / tagline */}
           <div className="mt-16 text-ink/50 text-sm italic">
-            <p>&quot;Finally — a chore app our whole family actually wants to use.&quot;</p>
+            <p>&quot;Finally — a chore app our whole household actually wants to use.&quot;</p>
           </div>
         </div>
       </main>

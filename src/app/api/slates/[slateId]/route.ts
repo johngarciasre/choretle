@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
-import { verifyAuth } from "@/lib/auth";
+import { getDb } from "@/db";
+import { verifyAuth, canAuthor } from "@/lib/auth";
 import { error } from "@/lib/logger.server";
 
-function ownedSlate(rawDb: any, slateId: string, familyId: string): any {
-  return rawDb.prepare(`SELECT * FROM slates WHERE id = ? AND family_id = ?`).get(slateId, familyId);
+async function ownedSlate(rawDb: any, slateId: string, householdId: string): Promise<any> {
+  return await rawDb.prepare(`SELECT * FROM slates WHERE id = ? AND household_id = ?`).get(slateId, householdId);
 }
 
 function normalize(slate: any) {
@@ -27,12 +27,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    const slate = ownedSlate(rawDb, (await params).slateId, auth.familyId);
+    const slate = await ownedSlate(rawDb, (await params).slateId, auth.householdId);
     if (!slate) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
@@ -51,17 +51,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     const slateId = (await params).slateId;
-    if (!ownedSlate(rawDb, slateId, auth.familyId)) {
+    if (!await ownedSlate(rawDb, slateId, auth.householdId)) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
 
@@ -70,11 +70,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const scheduleStr = typeof schedule === "string" ? schedule : JSON.stringify(schedule);
 
-    rawDb.prepare(
-      `UPDATE slates SET name = ?, description = ?, room_location = ?, frequency = ?, interval = ?, schedule = ?, default_due_date_offset = ?, is_active = ? WHERE id = ? AND family_id = ?`
-    ).run(name, description || null, roomLocation || null, frequency, interval, scheduleStr || null, defaultDueDateOffset, (isActive !== false) ? 1 : 0, slateId, auth.familyId);
+    await rawDb.prepare(
+      `UPDATE slates SET name = ?, description = ?, room_location = ?, frequency = ?, interval = ?, schedule = ?, default_due_date_offset = ?, is_active = ? WHERE id = ? AND household_id = ?`
+    ).run(name, description || null, roomLocation || null, frequency, interval, scheduleStr || null, defaultDueDateOffset, (isActive !== false) ? 1 : 0, slateId, auth.householdId);
 
-    const updated = ownedSlate(rawDb, slateId, auth.familyId);
+    const updated = await ownedSlate(rawDb, slateId, auth.householdId);
     return NextResponse.json(normalize(updated));
   } catch (err) {
     error({ err: String(err), stack: (err as Error).stack }, "Slate PUT failed");
@@ -89,25 +89,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     const slateId = (await params).slateId;
-    if (!ownedSlate(rawDb, slateId, auth.familyId)) {
+    if (!await ownedSlate(rawDb, slateId, auth.householdId)) {
       return NextResponse.json({ error: "Slate not found" }, { status: 404 });
     }
 
     // Delete associated entries first (no FK cascades in the SQLite schema)
-    rawDb.prepare(`DELETE FROM slate_tasks WHERE slate_id = ?`).run(slateId);
-    rawDb.prepare(`DELETE FROM slate_tags WHERE slate_id = ?`).run(slateId);
-    rawDb.prepare(`DELETE FROM rotations WHERE slate_id = ?`).run(slateId);
-    rawDb.prepare(`DELETE FROM slates WHERE id = ? AND family_id = ?`).run(slateId, auth.familyId);
+    await rawDb.prepare(`DELETE FROM slate_tasks WHERE slate_id = ?`).run(slateId);
+    await rawDb.prepare(`DELETE FROM slate_tags WHERE slate_id = ?`).run(slateId);
+    await rawDb.prepare(`DELETE FROM rotations WHERE slate_id = ?`).run(slateId);
+    await rawDb.prepare(`DELETE FROM slates WHERE id = ? AND household_id = ?`).run(slateId, auth.householdId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

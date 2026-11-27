@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb, getRawDb } from "@/db/drizzle";
-import { signInAndGetFamily, createListFixture } from "./fixtures";
+import { resetDb, getDb } from "@/db";
+import { signInAndGetHousehold, createListFixture } from "./fixtures";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
 describe("E2E — Full Workflow: tasks → slate → rotation → generated jobs → points", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
   it("generates a job from a slate, assigns it, completes it and scores it once", async () => {
     const harness = new TestHarness();
-    const { userId } = await signInAndGetFamily(harness, "parent@choretle.dev");
+    const { userId } = await signInAndGetHousehold(harness, "parent@choretle.dev");
 
     // A task worth 7 points
     const taskRes = await harness.invokeHandler("/api/tasks", "POST", { name: "Wash dishes", points: 7 });
@@ -43,7 +43,7 @@ describe("E2E — Full Workflow: tasks → slate → rotation → generated jobs
     expect(job.assignedTo).toBe(userId);
 
     // The job must point at a real slate_tasks row, not at the task id
-    const slateTask = getRawDb()!.prepare(`SELECT id, task_id FROM slate_tasks WHERE id = ?`).get(job.slateTaskId) as any;
+    const slateTask = await getDb()!.prepare(`SELECT id, task_id FROM slate_tasks WHERE id = ?`).get(job.slateTaskId) as any;
     expect(slateTask).toBeTruthy();
     expect(slateTask.task_id).toBe(taskId);
 
@@ -52,7 +52,7 @@ describe("E2E — Full Workflow: tasks → slate → rotation → generated jobs
     const done = await harness.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "done" }, { jobId: job.id });
     expect(done.status).toBe(200);
 
-    const points = getRawDb()!.prepare(`SELECT points_total FROM users WHERE id = ?`).get(userId) as any;
+    const points = await getDb()!.prepare(`SELECT points_total FROM memberships WHERE user_id = ?`).get(userId) as any;
     expect(points.points_total).toBe(7);
 
     // Reports: the done job is counted on the completion date, and per-task stats are non-zero
@@ -69,23 +69,23 @@ describe("E2E — Full Workflow: tasks → slate → rotation → generated jobs
     expect(again.body.count).toBe(0);
   });
 
-  it("keeps two families' generated jobs apart", async () => {
+  it("keeps two households' generated jobs apart", async () => {
     const first = new TestHarness();
-    const firstIdentity = await signInAndGetFamily(first, "first@choretle.dev");
+    const firstIdentity = await signInAndGetHousehold(first, "first@choretle.dev");
 
     const second = new TestHarness();
-    const secondIdentity = await signInAndGetFamily(second, "second@choretle.dev");
+    const secondIdentity = await signInAndGetHousehold(second, "second@choretle.dev");
 
-    expect(firstIdentity.familyId).not.toBe(secondIdentity.familyId);
+    expect(firstIdentity.householdId).not.toBe(secondIdentity.householdId);
 
     const job = await first.invokeHandler("/api/jobs", "POST", {
-      listId: createListFixture(firstIdentity.familyId),
-      name: "First family job",
+      listId: await createListFixture(firstIdentity.householdId),
+      name: "First household job",
       points: 3,
     });
     expect(job.status).toBe(200);
 
-    // The second family cannot read or complete it
+    // The second household cannot read or complete it
     const read = await second.invokeHandler("/api/jobs/[jobId]", "GET", undefined, { jobId: job.body.id });
     expect(read.status).toBe(403);
 

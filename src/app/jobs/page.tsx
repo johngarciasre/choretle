@@ -56,10 +56,10 @@ async function fetchKanban(): Promise<KanbanData> {
   const authRes = await fetch("/api/auth/me", { credentials: "include" });
   if (!authRes.ok) throw new Error("Not authenticated");
   const authData = await authRes.json();
-  const familyId = authData.familyId;
-  if (!familyId) throw new Error("No family ID");
+  const householdId = authData.householdId;
+  if (!householdId) throw new Error("No household ID");
 
-  const res = await fetch(`/api/jobs/kanban?familyId=${familyId}`, { credentials: "include" });
+  const res = await fetch(`/api/jobs/kanban?householdId=${householdId}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch kanban data");
   const data = await res.json();
 
@@ -67,7 +67,7 @@ async function fetchKanban(): Promise<KanbanData> {
   const userId = authData.user?.id || "";
   let streakDays = 0;
   try {
-    const profileRes = await fetch(`/api/profile/${userId}?familyId=${familyId}`, { credentials: "include" });
+    const profileRes = await fetch(`/api/profile/${userId}?householdId=${householdId}`, { credentials: "include" });
     if (profileRes.ok) {
       const profileData = await profileRes.json();
       streakDays = profileData?.user?.streakCount || 0;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import crypto from "crypto";
 import { error } from "@/lib/logger.server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { clientKey, clearAttempts, tooManyAttempts } from "@/lib/rate-limit";
 
 const WEBSUDO_COOKIE = "webserversudo-session";
@@ -112,8 +112,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Only a parent/admin may elevate. Role comes from our users table.
-  const rawDb = getRawDb();
-  const dbUser = rawDb?.prepare(`SELECT role FROM users WHERE id = ?`).get(session.user.id) as any;
+  const rawDb = getDb();
+  const dbUser = rawDb?.prepare(`SELECT role FROM memberships WHERE user_id = ?`).get(session.user.id) as any;
   if (!dbUser || !["parent", "admin"].includes(dbUser.role)) {
     return NextResponse.json({ error: "Parent access required" }, { status: 403 });
   }

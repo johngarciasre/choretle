@@ -17,7 +17,7 @@ export interface DevUser {
   email: string;
   name: string;
   role: string;
-  familyId: string | null;
+  householdId: string | null;
 }
 
 export interface DevSession {
@@ -65,7 +65,7 @@ export function createDevSession(options?: { userId?: string }): DevSession {
       email: options?.userId ? `${options.userId}@choretle.dev` : `user-${Math.random().toString(36).substring(2, 8)}@choretle.dev`,
       name: options?.userId || "Dev User",
       role: "child", // default; actual role determined by DB on first signup
-      familyId: null,
+      householdId: null,
     }
   };
 }
@@ -86,7 +86,7 @@ export function parseDevSession(cookieValue?: string): DevUser | null {
       email: u.email,
       name: u.name,
       role: u.role,
-      familyId: u.familyId,
+      householdId: u.householdId,
     };
   } catch {
     return null;

@@ -9,7 +9,7 @@
  *
  * This script:
  *   1. Signs in as admin@choretle.dev (dev mode)
- *   2. Ensures a family exists
+ *   2. Ensures a household exists
  *   3. Deletes all resources via API routes (tasks, slates, tags, jobs, teams, etc.)
  *   4. Signs out
  *   5. Prints localStorage keys to clear in the browser console
@@ -81,16 +81,16 @@ async function api(path: string, method = "GET", body?: unknown) {
 async function main() {
   console.log("🧹 Choretle — clearing database and cache\n");
 
-  // Step 1: Sign in as the admin user to get family context
+  // Step 1: Sign in as the admin user to get household context
   console.log("Signing in...");
   try { await api("/api/auth/signout", "POST"); } catch { /* ignore */ }
   await api("/api/auth/signin", "POST", { email: "admin@choretle.dev", password: "test" });
 
-  const me = (await api("/api/auth/me", "GET")) as { familyId: string };
-  if (!me?.familyId) {
-    console.log("  No family found. Creating one...");
-    const fam = await api("/api/family", "POST", { name: "Demo Family", slug: "demo" });
-    console.log(`   Created family ${fam.id}`);
+  const me = (await api("/api/auth/me", "GET")) as { householdId: string };
+  if (!me?.householdId) {
+    console.log("  No household found. Creating one...");
+    const fam = await api("/api/household", "POST", { name: "Demo Household", slug: "demo" });
+    console.log(`   Created household ${fam.id}`);
   }
 
   // Step 2: Delete all resources via API routes
@@ -105,16 +105,16 @@ async function main() {
         if (base === "/api/slates") await api(`/api/slates/${id}`, "DELETE");
         else if (["/api/tags", "/api/tasks", "/api/jobs", "/api/teams"].includes(base))
           await api("/api/tags", "DELETE", { id });
-        else if (base === "/api/family/join")
-          await api(`/api/family/join/${id}`, "DELETE");
+        else if (base === "/api/household/join")
+          await api(`/api/household/join/${id}`, "DELETE");
       } catch (err) {
         console.log(`   ⚠ ${base}/${id}: ${(err as Error).message}`);
       }
     }
   }
 
-  const famPath = "/api/family/join?familyId=" + me.familyId;
-  const teamsPath = "/api/teams?familyId=" + me.familyId;
+  const famPath = "/api/household/join?householdId=" + me.householdId;
+  const teamsPath = "/api/teams?householdId=" + me.householdId;
 
   console.log("Deleting resources...");
   for (const p of ["/api/photos", "/api/reviews", "/api/rotations", "/api/slates", "/api/tags", "/api/tasks", famPath, "/api/jobs", teamsPath]) {
@@ -126,7 +126,7 @@ async function main() {
 
   console.log("\n✅ Database cleared.\n");
   console.log("Browser localStorage keys to clear (run in DevTools console):");
-  for (const k of ["familyId", "choretle_mode", "choretle_remember_email", "choretle_saved_email", "choretle_debug"]) {
+  for (const k of ["householdId", "choretle_mode", "choretle_remember_email", "choretle_saved_email", "choretle_debug"]) {
     console.log(`  localStorage.removeItem("${k}");`);
   }
   console.log("\nThen reload the page for a clean start.");

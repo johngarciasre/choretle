@@ -34,25 +34,25 @@ interface RotationEntry {
 interface SwapMeetEntry {
   id: string;
   slateId: string;
-  sharingFamilyId: string;
+  sharingHouseholdId: string;
   requestedBy: string;
   status: "pending" | "accepted" | "rejected";
   createdAt: string;
 }
 
-async function getFamilyId(): Promise<string> {
+async function getHouseholdId(): Promise<string> {
   const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
-  if (!data.familyId) throw new Error("No family ID");
-  return data.familyId;
+  if (!data.householdId) throw new Error("No household ID");
+  return data.householdId;
 }
 
 export default function SwapMeetPage() {
   const authChecked = useAuthRedirect();
   const [schedule, setSchedule] = useState<SlateSchedule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [familyId, setFamilyId] = useState("");
+  const [householdId, setHouseholdId] = useState("");
   const [daysAhead] = useState(30);
 
   // Swap UI state
@@ -64,13 +64,13 @@ export default function SwapMeetPage() {
 
   // Share slate state
   const [showShareModal, setShowShareModal] = useState(false);
-  const [requestingFamilyId, setRequestingFamilyId] = useState("");
+  const [requestingHouseholdId, setRequestingHouseholdId] = useState("");
   const [selectedSlateIdsForSharing, setSelectedSlateIdsForSharing] = useState<string[]>([]);
 
   const fetchSchedule = async (fid: string, days: number) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/swap-meet?familyId=${fid}&daysAhead=${days}`, { credentials: "include" });
+      const response = await fetch(`/api/swap-meet?householdId=${fid}&daysAhead=${days}`, { credentials: "include" });
       const data = await response.json();
 
       if (!response.ok) {
@@ -93,7 +93,7 @@ export default function SwapMeetPage() {
 
   const fetchRotations = async (fid: string, slateId: string) => {
     try {
-      const response = await fetch(`/api/rotations?familyId=${fid}&slateId=${slateId}`, { credentials: "include" });
+      const response = await fetch(`/api/rotations?householdId=${fid}&slateId=${slateId}`, { credentials: "include" });
       if (!response.ok) return;
       const data = await response.json();
       setRotations(data.rotations || []);
@@ -104,7 +104,7 @@ export default function SwapMeetPage() {
 
   const fetchSwaps = async (fid: string) => {
     try {
-      const response = await fetch(`/api/family/swap-meet?familyId=${fid}`, { credentials: "include" });
+      const response = await fetch(`/api/household/swap-meet?householdId=${fid}`, { credentials: "include" });
       if (!response.ok) return;
       const data = await response.json();
       setSwaps(data.swaps || []);
@@ -115,14 +115,14 @@ export default function SwapMeetPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") document.title = "Choretle - Swap Meet";
-    getFamilyId().then((fid) => {
-      setFamilyId(fid);
+    getHouseholdId().then((fid) => {
+      setHouseholdId(fid);
       fetchSchedule(fid, daysAhead);
       fetchSwaps(fid);
     }).catch(() => {
       setLoading(false);
     });
-    // The fetchers read familyId from the request and daysAhead from this dep.
+    // The fetchers read householdId from the request and daysAhead from this dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysAhead]);
 
@@ -130,14 +130,14 @@ export default function SwapMeetPage() {
     setSelectedSlateId(slateId);
 
     // Fetch rotations for this slate if not already loaded
-    if (rotations.length === 0 && familyId) {
-      await fetchRotations(familyId, slateId);
+    if (rotations.length === 0 && householdId) {
+      await fetchRotations(householdId, slateId);
     }
   };
 
   const handleSwap = async () => {
-    if (!familyId || !selectedSlateId || !rotation1Id || !rotation2Id) {
-      alert("Please select a family ID, slate, and two rotation entries to swap.");
+    if (!householdId || !selectedSlateId || !rotation1Id || !rotation2Id) {
+      alert("Please select a household ID, slate, and two rotation entries to swap.");
       return;
     }
 
@@ -153,7 +153,7 @@ export default function SwapMeetPage() {
           ...(token ? { "Cookie": `auth-token=${token}` } : {})
         },
         body: JSON.stringify({
-          familyId,
+          householdId,
           slateId: selectedSlateId,
           rotationId1: rotation1Id,
           rotationId2: rotation2Id,
@@ -164,7 +164,7 @@ export default function SwapMeetPage() {
 
       if (response.ok) {
         alert("Rotations swapped successfully!");
-        fetchSchedule(familyId, daysAhead);
+        fetchSchedule(householdId, daysAhead);
         setRotation1Id("");
         setRotation2Id("");
       } else {
@@ -177,8 +177,8 @@ export default function SwapMeetPage() {
   };
 
   const handleShareSlate = async () => {
-    if (!familyId || !requestingFamilyId || selectedSlateIdsForSharing.length === 0) {
-      alert("Please enter a family ID and select at least one slate to share.");
+    if (!householdId || !requestingHouseholdId || selectedSlateIdsForSharing.length === 0) {
+      alert("Please enter a household ID and select at least one slate to share.");
       return;
     }
 
@@ -193,8 +193,8 @@ export default function SwapMeetPage() {
           ...(token ? { "Cookie": `auth-token=${token}` } : {})
         },
         body: JSON.stringify({
-          sharingFamilyId: familyId,
-          requestingFamilyId,
+          sharingHouseholdId: householdId,
+          requestingHouseholdId,
           slateIds: selectedSlateIdsForSharing,
         }),
       });
@@ -204,12 +204,12 @@ export default function SwapMeetPage() {
       if (response.ok) {
         alert("Slate(s) shared successfully!");
         setShowShareModal(false);
-        setRequestingFamilyId("");
+        setRequestingHouseholdId("");
         setSelectedSlateIdsForSharing([]);
 
         // Refresh swaps list
-        if (familyId) {
-          await fetchSwaps(familyId);
+        if (householdId) {
+          await fetchSwaps(householdId);
         }
       } else {
         alert(data.error || "Failed to share slate.");
@@ -221,15 +221,15 @@ export default function SwapMeetPage() {
   };
 
   const openShareModal = async () => {
-    if (!familyId) return;
+    if (!householdId) return;
 
-    // Fetch family ID from another family
+    // Fetch household ID from another household
     try {
       setShowShareModal(true);
-      setRequestingFamilyId("");
+      setRequestingHouseholdId("");
       setSelectedSlateIdsForSharing([]);
 
-      await fetchSwaps(familyId);
+      await fetchSwaps(householdId);
     } catch (err) {
       error({ err: err }, "Failed to open share modal");
     }
@@ -237,20 +237,20 @@ export default function SwapMeetPage() {
 
   const closeShareModal = () => {
     setShowShareModal(false);
-    setRequestingFamilyId("");
+    setRequestingHouseholdId("");
     setSelectedSlateIdsForSharing([]);
   };
 
   if (!authChecked) return <PageShell><PageLoader label="Checking authentication..." /></PageShell>;
 
-  if (!familyId) {
+  if (!householdId) {
     return (
       <PageShell>
         <main className="max-w-xl mx-auto p-8 space-y-4">
-          <h2 className="text-xl font-semibold mb-4">Join a Family</h2>
-          <p className="text-ink/60 mb-4">You need to join a family before you can use Swap Meet. Go to the Family page to set one up.</p>
-          <Link href="/family" className="bg-grape text-white px-4 py-2 rounded inline-block">
-            Go to Family Settings
+          <h2 className="text-xl font-semibold mb-4">Join a Household</h2>
+          <p className="text-ink/60 mb-4">You need to join a household before you can use Swap Meet. Go to the Household page to set one up.</p>
+          <Link href="/household" className="bg-grape text-white px-4 py-2 rounded inline-block">
+            Go to Household Settings
           </Link>
         </main>
       </PageShell>
@@ -268,7 +268,7 @@ export default function SwapMeetPage() {
               {[7, 14, 30, 60].map((days) => (
                 <button
                   key={days}
-                  onClick={() => fetchSchedule(familyId, days)}
+                  onClick={() => fetchSchedule(householdId, days)}
                   className={`px-3 py-1 rounded text-sm ${
                     days === daysAhead
                       ? "bg-indigo-600 text-white"
@@ -287,7 +287,7 @@ export default function SwapMeetPage() {
             <p className="text-ink/60">Loading schedule...</p>
           ) : schedule.length === 0 ? (
             <div className="bg-white p-6 rounded-lg shadow text-center">
-              <p className="text-ink/60">No rotation schedule found. Set up rotations in your family settings.</p>
+              <p className="text-ink/60">No rotation schedule found. Set up rotations in your household settings.</p>
             </div>
           ) : (
             schedule.map((slate) => (
@@ -331,11 +331,11 @@ export default function SwapMeetPage() {
           <div className="bg-white p-6 rounded-lg shadow space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Family ID</label>
+                <label className="block text-sm font-medium mb-1">Household ID</label>
                 <input
                   type="text"
-                  value={familyId}
-                  onChange={(e) => setFamilyId(e.target.value)}
+                  value={householdId}
+                  onChange={(e) => setHouseholdId(e.target.value)}
                   className="border p-2 rounded w-full"
                 />
               </div>
@@ -393,7 +393,7 @@ export default function SwapMeetPage() {
 
             <button
               onClick={handleSwap}
-              disabled={!selectedSlateId || !rotation1Id || !rotation2Id || !familyId}
+              disabled={!selectedSlateId || !rotation1Id || !rotation2Id || !householdId}
               className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Swap Rotations
@@ -404,7 +404,7 @@ export default function SwapMeetPage() {
         {/* Share Slate Section */}
         <section className="mt-12">
           <h2 className="text-xl font-semibold mb-4">Share Slates</h2>
-          <p className="text-ink/60 mb-4">Share your slates with another family for swap meet.</p>
+          <p className="text-ink/60 mb-4">Share your slates with another household for swap meet.</p>
 
           <div className="bg-white p-6 rounded-lg shadow space-y-4">
             <button
@@ -424,7 +424,7 @@ export default function SwapMeetPage() {
                         <div>
                           <p className="text-sm font-medium">Slate: {swap.slateId}</p>
                           <p className="text-xs text-ink/60">
-                            Requested by family ID: {swap.requestedBy}
+                            Requested by household ID: {swap.requestedBy}
                           </p>
                         </div>
                         <span className={`px-2 py-1 rounded text-xs ${
@@ -451,12 +451,12 @@ export default function SwapMeetPage() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Enter other family&apos;s ID</label>
+                  <label className="block text-sm font-medium mb-1">Enter other household&apos;s ID</label>
                   <input
                     type="text"
-                    value={requestingFamilyId}
-                    onChange={(e) => setRequestingFamilyId(e.target.value)}
-                    placeholder="Enter family ID"
+                    value={requestingHouseholdId}
+                    onChange={(e) => setRequestingHouseholdId(e.target.value)}
+                    placeholder="Enter household ID"
                     className="border p-2 rounded w-full"
                   />
                 </div>
@@ -487,7 +487,7 @@ export default function SwapMeetPage() {
                 <div className="flex gap-2 pt-4">
                   <button
                     onClick={handleShareSlate}
-                    disabled={!requestingFamilyId || selectedSlateIdsForSharing.length === 0}
+                    disabled={!requestingHouseholdId || selectedSlateIdsForSharing.length === 0}
                     className="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Share

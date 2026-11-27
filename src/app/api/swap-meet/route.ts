@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
 import { verifyAuth } from "@/lib/auth";
 
@@ -11,17 +11,17 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const daysAhead = parseInt(url.searchParams.get("daysAhead") || "30", 10);
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
-    // Only this family's schedule — the family id comes from the session, never the query.
-    const slates = rawDb.prepare(`SELECT * FROM slates WHERE family_id = ?`).all(auth.familyId) as any[];
+    // Only this household's schedule — the household id comes from the session, never the query.
+    const slates = await rawDb.prepare(`SELECT * FROM slates WHERE household_id = ?`).all(auth.householdId) as any[];
     if (!slates || slates.length === 0) return NextResponse.json({ assignments: [] });
 
     const schedule: any[] = [];
     const today = new Date();
     for (const slate of slates) {
-      const rotations = rawDb.prepare(`SELECT * FROM rotations WHERE slate_id = ?`).all(slate.id) as any[];
+      const rotations = await rawDb.prepare(`SELECT * FROM rotations WHERE slate_id = ?`).all(slate.id) as any[];
       if (!rotations || rotations.length === 0) continue;
       const assignments = calculateUpcomingAssignments(rotations, today, daysAhead);
       schedule.push({ slateId: slate.id, slateName: slate.name, frequency: slate.frequency,
@@ -41,47 +41,47 @@ export async function POST(request: NextRequest) {
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
     const body = await request.json();
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
 
     // ─── Swap two rotation entries (the "swap" control on the page) ─────
     if (body?.rotationId1 && body?.rotationId2) {
       const { slateId, rotationId1, rotationId2 } = body;
-      const slate = rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, auth.familyId) as any;
+      const slate = await rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND household_id = ?`).get(slateId, auth.householdId) as any;
       if (!slate) return NextResponse.json({ error: "Slate not found" }, { status: 404 });
 
-      const first = rawDb.prepare(`SELECT id, user_id FROM rotations WHERE id = ? AND slate_id = ?`).get(rotationId1, slateId) as any;
-      const second = rawDb.prepare(`SELECT id, user_id FROM rotations WHERE id = ? AND slate_id = ?`).get(rotationId2, slateId) as any;
+      const first = await rawDb.prepare(`SELECT id, user_id FROM rotations WHERE id = ? AND slate_id = ?`).get(rotationId1, slateId) as any;
+      const second = await rawDb.prepare(`SELECT id, user_id FROM rotations WHERE id = ? AND slate_id = ?`).get(rotationId2, slateId) as any;
       if (!first || !second) return NextResponse.json({ error: "Rotation not found" }, { status: 404 });
 
-      rawDb.prepare(`UPDATE rotations SET user_id = ? WHERE id = ?`).run(second.user_id, first.id);
-      rawDb.prepare(`UPDATE rotations SET user_id = ? WHERE id = ?`).run(first.user_id, second.id);
+      await rawDb.prepare(`UPDATE rotations SET user_id = ? WHERE id = ?`).run(second.user_id, first.id);
+      await rawDb.prepare(`UPDATE rotations SET user_id = ? WHERE id = ?`).run(first.user_id, second.id);
 
       return NextResponse.json({ success: true, message: "Rotations swapped successfully" });
     }
 
-    // ─── Share slates with another family ───────────────────────────────
-    const { sharingFamilyId, requestingFamilyId, slateIds, messages } = body;
+    // ─── Share slates with another household ───────────────────────────────
+    const { sharingHouseholdId, requestingHouseholdId, slateIds, messages } = body;
 
-    if (!sharingFamilyId || !requestingFamilyId || !Array.isArray(slateIds)) {
-      return NextResponse.json({ error: "sharingFamilyId, requestingFamilyId, and slateIds (array) are required" }, { status: 400 });
+    if (!sharingHouseholdId || !requestingHouseholdId || !Array.isArray(slateIds)) {
+      return NextResponse.json({ error: "sharingHouseholdId, requestingHouseholdId, and slateIds (array) are required" }, { status: 400 });
     }
-    if (sharingFamilyId !== auth.familyId) {
-      return NextResponse.json({ error: "You can only share your own family's slates" }, { status: 403 });
+    if (sharingHouseholdId !== auth.householdId) {
+      return NextResponse.json({ error: "You can only share your own household's slates" }, { status: 403 });
     }
 
-    const requestingFamily = rawDb.prepare(`SELECT id FROM families WHERE id = ?`).get(requestingFamilyId) as any;
-    if (!requestingFamily) return NextResponse.json({ error: "Requesting family not found" }, { status: 404 });
+    const requestingHousehold = await rawDb.prepare(`SELECT id FROM households WHERE id = ?`).get(requestingHouseholdId) as any;
+    if (!requestingHousehold) return NextResponse.json({ error: "Requesting household not found" }, { status: 404 });
 
     const createdEntries: any[] = [];
     for (const slateId of slateIds) {
-      const slate = rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND family_id = ?`).get(slateId, sharingFamilyId) as any;
-      if (!slate) return NextResponse.json({ error: `Slate ${slateId} not found in your family` }, { status: 404 });
+      const slate = await rawDb.prepare(`SELECT id FROM slates WHERE id = ? AND household_id = ?`).get(slateId, sharingHouseholdId) as any;
+      if (!slate) return NextResponse.json({ error: `Slate ${slateId} not found in your household` }, { status: 404 });
 
       const swapMeetId = `sm-${crypto.randomUUID()}`;
-      rawDb.prepare(
-        `INSERT INTO swap_meet (id, sharing_family_id, requesting_family_id, slate_id, message, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)`
-      ).run(swapMeetId, sharingFamilyId, requestingFamilyId, slateId, messages?.[slateId] || null, new Date().toISOString());
+      await rawDb.prepare(
+        `INSERT INTO swap_meet (id, sharing_household_id, requesting_household_id, slate_id, message, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)`
+      ).run(swapMeetId, sharingHouseholdId, requestingHouseholdId, slateId, messages?.[slateId] || null, new Date().toISOString());
 
       createdEntries.push({ id: swapMeetId, slateId });
     }

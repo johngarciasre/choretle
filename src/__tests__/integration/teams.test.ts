@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
-import { signInAndGetFamily, signInAsChild } from "./fixtures";
+import { resetDb } from "@/db";
+import { signInAndGetHousehold, signInAsChild } from "./fixtures";
 
 async function createTeam(harness: TestHarness, name: string) {
   const res = await harness.invokeHandler("/api/teams", "POST", { name });
@@ -16,16 +16,16 @@ async function listTeams(harness: TestHarness): Promise<any[]> {
 }
 
 describe("Teams API", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
-  it("creates a team in the caller's family and lists it with members", async () => {
+  it("creates a team in the caller's household and lists it with members", async () => {
     const harness = new TestHarness();
-    const { familyId } = await signInAndGetFamily(harness);
+    const { householdId } = await signInAndGetHousehold(harness);
 
     const team = await createTeam(harness, "Chores Team");
-    expect(team).toMatchObject({ name: "Chores Team", family_id: familyId });
+    expect(team).toMatchObject({ name: "Chores Team", household_id: householdId });
 
     const teams = await listTeams(harness);
     expect(teams.map((t) => t.name)).toEqual(["Chores Team"]);
@@ -34,7 +34,7 @@ describe("Teams API", () => {
 
   it("rejects a missing name", async () => {
     const harness = new TestHarness();
-    await signInAndGetFamily(harness);
+    await signInAndGetHousehold(harness);
 
     const res = await harness.invokeHandler("/api/teams", "POST", {});
 
@@ -44,7 +44,7 @@ describe("Teams API", () => {
 
   it("renames and deletes a team", async () => {
     const harness = new TestHarness();
-    await signInAndGetFamily(harness);
+    await signInAndGetHousehold(harness);
     const team = await createTeam(harness, "Team A");
 
     const renamed = await harness.invokeHandler("/api/teams", "PUT", { id: team.id, name: "Team B" });
@@ -59,9 +59,9 @@ describe("Teams API", () => {
 
   it("children cannot create, manage or assign teams but can read them", async () => {
     const parent = new TestHarness();
-    const { familyId } = await signInAndGetFamily(parent);
+    const { householdId } = await signInAndGetHousehold(parent);
     const team = await createTeam(parent, "Adults Only");
-    const { harness: child, childId } = await signInAsChild(familyId);
+    const { harness: child, childId } = await signInAsChild(householdId);
 
     const create = await child.invokeHandler("/api/teams", "POST", { name: "Kid Team" });
     expect(create.status).toBe(403);
@@ -73,17 +73,17 @@ describe("Teams API", () => {
     expect(remove.status).toBe(403);
 
     const nestedCreate = await child.invokeHandler(
-      "/api/family/[familyId]/teams", "POST", { name: "Nested" }, { familyId },
+      "/api/household/[householdId]/teams", "POST", { name: "Nested" }, { householdId },
     );
     expect(nestedCreate.status).toBe(403);
 
     const addSelf = await child.invokeHandler(
-      "/api/family/[familyId]/teams/[teamId]/members", "POST", { userId: childId }, { familyId, teamId: team.id },
+      "/api/household/[householdId]/teams/[teamId]/members", "POST", { userId: childId }, { householdId, teamId: team.id },
     );
     expect(addSelf.status).toBe(403);
 
     const removeSelf = await child.invokeHandler(
-      "/api/family/[familyId]/teams/[teamId]/members", "DELETE", { userId: childId }, { familyId, teamId: team.id },
+      "/api/household/[householdId]/teams/[teamId]/members", "DELETE", { userId: childId }, { householdId, teamId: team.id },
     );
     expect(removeSelf.status).toBe(403);
 
@@ -92,13 +92,13 @@ describe("Teams API", () => {
     expect(read.status).toBe(200);
   });
 
-  it("keeps teams inside their family", async () => {
+  it("keeps teams inside their household", async () => {
     const mine = new TestHarness();
-    await signInAndGetFamily(mine);
+    await signInAndGetHousehold(mine);
     const mineTeam = await createTeam(mine, "Mine");
 
     const other = new TestHarness();
-    await signInAndGetFamily(other, "other@choretle.dev");
+    await signInAndGetHousehold(other, "other@choretle.dev");
     await createTeam(other, "Theirs");
 
     expect((await listTeams(mine)).map((t) => t.name)).toEqual(["Mine"]);

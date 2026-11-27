@@ -7,18 +7,26 @@ import AssignmentCard from "./AssignmentCard";
 import { getAvatarEmoji } from "@/lib/avatar";
 
 interface RotationBoardProps {
-  familyName: string;
+  householdName: string;
   users: UserRotation[];
   slates: SlateWithRotations[];
-  onSave: (assignments: RotationAssignment[]) => Promise<void>;
+  onSave: (assignments: RotationAssignment[], removedIds: string[]) => Promise<void>;
   onSlatesChange: (slates: SlateWithRotations[]) => void;
 }
 
-const accentColors = ["coral", "teal", "sunny", "grape", "bubblegum", "coral", "teal"] as const;
+// Static class strings — Tailwind cannot generate interpolated class names.
+const accentStyles = [
+  { over: "border-coral bg-coral/5", badge: "bg-coral/15 text-ink border-coral/30", zone: "text-coral/70 border-coral/40" },
+  { over: "border-teal bg-teal/5", badge: "bg-teal/15 text-ink border-teal/30", zone: "text-teal/70 border-teal/40" },
+  { over: "border-sunny bg-sunny/10", badge: "bg-sunny/25 text-ink border-sunny/50", zone: "text-ink/50 border-sunny/60" },
+  { over: "border-grape bg-grape/5", badge: "bg-grape/15 text-ink border-grape/30", zone: "text-grape/70 border-grape/40" },
+  { over: "border-bubblegum bg-bubblegum/5", badge: "bg-bubblegum/15 text-ink border-bubblegum/30", zone: "text-bubblegum/70 border-bubblegum/40" },
+] as const;
 
 export default function RotationBoard({ users, slates, onSave, onSlatesChange }: RotationBoardProps) {
   const [draggedUserId, setDraggedUserId] = useState<string | null>(null);
   const [dragOverSlate, setDragOverSlate] = useState<string | null>(null);
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
@@ -31,6 +39,10 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
     e.dataTransfer.setData("userId", userId);
     setDraggedUserId(userId);
   }, []);
+
+  const assignedUserIds = new Set(
+    slates.flatMap((s) => s.assignments.filter((a) => a.isActive !== false).map((a) => a.userId)),
+  );
 
   const renderUser = (user: UserRotation) => (
     <div
@@ -45,7 +57,7 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
       </span>
 
       {user.userAvatarUrl ? (
-        <img src={user.userAvatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" draggable={false} />
+        <img src={user.userAvatarUrl} alt="" className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0" draggable={false} />
       ) : user.userId ? (() => {
           const e = getAvatarEmoji(user.userId);
           return (
@@ -60,7 +72,7 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
         <p className="text-xs text-ink/60 capitalize">{user.userRole} &middot; {user.userPointsTotal} pts</p>
       </div>
 
-      {user.id && (
+      {assignedUserIds.has(user.userId) && (
         <span className="font-bold px-2 py-0.5 rounded-full bg-grape/15 text-grape text-xs">
           Active
         </span>
@@ -87,54 +99,74 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
     setDragOverSlate(null);
 
     const slateToDropOn = slates.find((s) => s.id === targetSlateId);
-    const isDroppingOnUsersColumn = !slateToDropOn;
+    if (!slateToDropOn) return;
 
-    if (isDroppingOnUsersColumn) return;
+    // A drag that started on an existing assignment card moves that row; a drag
+    // from the users sidebar only adds the person to the slate.
+    const movedId = e.dataTransfer.getData("assignmentId");
+    const fromSlateId = e.dataTransfer.getData("fromSlateId");
+    const moved = movedId
+      ? slates.flatMap((s) => s.assignments).find((a) => a.id === movedId)
+      : undefined;
+
+    let dropped: string | null = null;
 
     const newSlates = slates.map((slate) => {
-      if (slate.id === targetSlateId) {
-        // If user is already assigned to this slate, just move them to the end
-        const existingIndex = slate.assignments.findIndex((a) => a.userId === userId);
-        if (existingIndex >= 0) {
-          const assignments = [...slate.assignments];
-          const [assignment] = assignments.splice(existingIndex, 1);
-          assignments.push(assignment);
-          return { ...slate, assignments: assignments.map((a, i) => ({ ...a, order: i + 1 })) };
-        }
+      // The moved row leaves whichever slate it came from — a row that has no
+      // id yet (not saved) is matched by its source slate and user instead.
+      const remaining = slate.assignments.filter((a) => {
+        if (moved) return a.id !== moved.id;
+        return !(fromSlateId && fromSlateId !== targetSlateId && slate.id === fromSlateId && a.userId === userId);
+      });
 
-        // Add user to this slate at the end (keep existing assignments from other users)
-        const newUserRotation: UserRotation = {
-          id: undefined,
-          userId,
-          slateId: targetSlateId,
-          order: slate.assignments.length + 1,
-          intervalDays: 7,
-          isActive: true,
-          userName: "",
-          userAvatarUrl: "",
-          userPointsTotal: 0,
-          userRole: "child",
-        };
-        const userData = users.find((u) => u.userId === userId);
-        if (userData) {
-          newUserRotation.userName = userData.userName;
-          newUserRotation.userAvatarUrl = userData.userAvatarUrl;
-          newUserRotation.userPointsTotal = userData.userPointsTotal;
-          newUserRotation.userRole = userData.userRole;
-        }
-        const reordered = [...slate.assignments, newUserRotation].map((a, i) => ({ ...a, order: i + 1 }));
-        return { ...slate, assignments: reordered };
+      if (slate.id !== targetSlateId) {
+        return { ...slate, assignments: remaining.map((a, i) => ({ ...a, order: i + 1 })) };
       }
 
-      // Reorder all assignments in this slate
-      const reordered = slate.assignments.map((a, i) => ({ ...a, order: i + 1 }));
-      return { ...slate, assignments: reordered };
+      const existingIndex = remaining.findIndex((a) => a.userId === userId);
+      if (existingIndex >= 0) {
+        // Already on this slate: drag to the end of the rotation cycle.
+        const assignments = [...remaining];
+        const [existing] = assignments.splice(existingIndex, 1);
+        assignments.push(existing);
+        return { ...slate, assignments: assignments.map((a, i) => ({ ...a, order: i + 1 })) };
+      }
+
+      if (moved) {
+        dropped = moved.id ?? null;
+        return {
+          ...slate,
+          assignments: [...remaining, { ...moved, slateId: targetSlateId }].map((a, i) => ({ ...a, order: i + 1 })),
+        };
+      }
+
+      const userData = users.find((u) => u.userId === userId);
+      const newUserRotation: UserRotation = {
+        id: undefined,
+        userId,
+        slateId: targetSlateId,
+        order: remaining.length + 1,
+        intervalDays: 7,
+        isActive: true,
+        userName: userData?.userName ?? "",
+        userAvatarUrl: userData?.userAvatarUrl ?? "",
+        userPointsTotal: userData?.userPointsTotal ?? 0,
+        userRole: userData?.userRole ?? "child",
+      };
+      return { ...slate, assignments: [...remaining, newUserRotation].map((a, i) => ({ ...a, order: i + 1 })) };
     });
+
+    // If the moved row was deduplicated away (the person was already on the
+    // target slate), it is a real delete rather than a move.
+    if (moved?.id && dropped !== moved.id) {
+      setRemovedIds((ids) => [...ids, moved.id as string]);
+    }
 
     onSlatesChange(newSlates);
   }, [slates, users, onSlatesChange]);
 
   const handleRemoveAssignment = useCallback((assignmentId: string | undefined, userId: string, slateId: string) => {
+    if (assignmentId) setRemovedIds((ids) => [...ids, assignmentId]);
     const newSlates = slates.map((slate) => {
       if (slate.id !== slateId) return slate;
       const assignmentsAfterRemove = slate.assignments.filter((a) => a.userId !== userId);
@@ -144,34 +176,40 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
     onSlatesChange(newSlates);
   }, [slates, onSlatesChange]);
 
-  const handleEditInterval = useCallback((assignmentId: string | undefined, intervalDays: number) => {
-    for (const slate of slates) {
-      const assignment = slate.assignments.find((a) => a.id === assignmentId);
-      if (assignment) {
-        assignment.intervalDays = intervalDays;
-        break;
-      }
-    }
-  }, [slates]);
+  const handleEditInterval = useCallback((slateId: string, userId: string, intervalDays: number) => {
+    const next = Number.isFinite(intervalDays) && intervalDays >= 1 ? Math.floor(intervalDays) : 1;
+    onSlatesChange(
+      slates.map((slate) =>
+        slate.id !== slateId
+          ? slate
+          : {
+              ...slate,
+              assignments: slate.assignments.map((a) =>
+                a.userId === userId ? { ...a, intervalDays: next } : a,
+              ),
+            },
+      ),
+    );
+  }, [slates, onSlatesChange]);
 
   const handleSave = async () => {
     setSaving(true);
     setSaveStatus("idle");
 
-    const allAssignments: RotationAssignment[] = [];
-
-    for (const slate of slates) {
-      for (const assignment of slate.assignments) {
-        if (assignment.id) {
-          allAssignments.push({ id: assignment.id, ...assignment });
-        } else {
-          allAssignments.push({ ...assignment });
-        }
-      }
-    }
+    const allAssignments: RotationAssignment[] = slates.flatMap((slate) =>
+      slate.assignments.map((assignment) => ({
+        id: assignment.id,
+        slateId: slate.id,
+        userId: assignment.userId,
+        order: assignment.order,
+        intervalDays: assignment.intervalDays,
+        isActive: assignment.isActive,
+      })),
+    );
 
     try {
-      await onSave(allAssignments);
+      await onSave(allAssignments, removedIds);
+      setRemovedIds([]);
       setSaveStatus("success");
       setTimeout(() => setSaveStatus("idle"), 3000);
     } catch {
@@ -240,7 +278,7 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
 
           <div className="space-y-4">
             {slates.map((slate, slateIndex) => {
-              const accent = accentColors[slateIndex % accentColors.length];
+              const accent = accentStyles[slateIndex % accentStyles.length];
               return (
                 <div
                   key={slate.id}
@@ -248,9 +286,7 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
                   onDrop={(e) => handleDrop(e, slate.id)}
                   onDragLeave={handleDragLeave}
                   className={`bg-white rounded-2xl p-3 border-2 transition-all ${
-                    dragOverSlate === slate.id
-                      ? `border-${accent}-400 bg-${accent}/5`
-                      : "border-ink/10 hover:border-grape/40"
+                    dragOverSlate === slate.id ? accent.over : "border-ink/10 hover:border-grape/40"
                   }`}
                 >
                   {/* Slate Header */}
@@ -273,7 +309,7 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
 
                   {/* Slate Meta */}
                   <div className="flex items-center gap-4 mb-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full bg-${accent}-100 text-${accent} capitalize font-bold border border-${accent}/20`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-bold border ${accent.badge}`}>
                       {slate.frequency}
                     </span>
                     <span className="text-xs flex items-center gap-1 text-ink/60">
@@ -296,8 +332,9 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
                         key={assignment.id ?? `${assignment.userId}-${slate.id}`}
                         assignment={assignment}
                         onDragStart={handleDragStart}
+                        onDragEnd={() => setDraggedUserId(null)}
                         onEditInterval={(intervalDays: number) => {
-                          handleEditInterval(assignment.id, intervalDays);
+                          handleEditInterval(slate.id, assignment.userId, intervalDays);
                         }}
                         onRemove={() => handleRemoveAssignment(assignment.id, assignment.userId, slate.id)}
                       />
@@ -305,7 +342,7 @@ export default function RotationBoard({ users, slates, onSave, onSlatesChange }:
 
                     {/* Empty drop zone indicator */}
                     {slate.assignments.length === 0 && (
-                      <div className={`flex items-center justify-center py-4 text-${accent}/50 text-sm border-2 border-dashed border-${accent}/40 rounded-xl`}>
+                      <div className={`flex items-center justify-center py-4 text-sm border-2 border-dashed rounded-xl ${accent.zone}`}>
                         Drop users here
                       </div>
                     )}

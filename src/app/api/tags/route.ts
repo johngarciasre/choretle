@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRawDb } from "@/db/drizzle";
+import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, canAuthor } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,25 +10,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    // Accept familyId from query param as fallback (dev mode without middleware headers)
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) {
+      return NextResponse.json({ error: "Household ID required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
     // Get tags with task counts using raw SQL (Drizzle ORM fails on SQLite joins+groupBy)
-    const tagsWithCounts = rawDb.prepare(`
-      SELECT t.*, COUNT(DISTINCT tt.id) as taskCount
+    const tagsWithCounts = await rawDb.prepare(`
+      SELECT t.*, COUNT(DISTINCT tt.id) as "taskCount"
       FROM tags t
       LEFT JOIN task_tags tt ON t.id = tt.tag_id
-      WHERE t.family_id = ?
+      WHERE t.household_id = ?
       GROUP BY t.id
-    `).all(familyId) as any[];
+    `).all(householdId) as any[];
 
     return NextResponse.json(tagsWithCounts);
   } catch (err) {
@@ -44,43 +43,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
     const body = await request.json();
     const { name, color } = body;
 
-    // Accept familyId from query param as fallback (dev mode without middleware headers)
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) {
+      return NextResponse.json({ error: "Household ID required" }, { status: 400 });
     }
 
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    // Check for duplicate tag name within the same family
-    const existing = rawDb.prepare(
-      `SELECT * FROM tags WHERE family_id = ? AND name = ? LIMIT 1`
-    ).get(familyId, name) as any;
+    // Check for duplicate tag name within the same household
+    const existing = await rawDb.prepare(
+      `SELECT * FROM tags WHERE household_id = ? AND name = ? LIMIT 1`
+    ).get(householdId, name) as any;
 
     if (existing) {
-      return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
+      return NextResponse.json({ error: `Tag name "${name}" already exists in this household` }, { status: 409 });
     }
 
     const tagId = `tag-${crypto.randomUUID()}`;
-    rawDb.prepare(
-      `INSERT INTO tags (id, name, family_id, color, created_at) VALUES (?, ?, ?, ?, ?)`
-    ).run(tagId, name, familyId, color || null, new Date().toISOString());
+    await rawDb.prepare(
+      `INSERT INTO tags (id, name, household_id, color, created_at) VALUES (?, ?, ?, ?, ?)`
+    ).run(tagId, name, householdId, color || null, new Date().toISOString());
 
-    const tag = rawDb.prepare(`SELECT * FROM tags WHERE id = ?`).get(tagId) as any;
+    const tag = await rawDb.prepare(`SELECT * FROM tags WHERE id = ?`).get(tagId) as any;
 
     return NextResponse.json(tag, { status: 201 });
   } catch (err) {
@@ -96,14 +94,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
-    // Accept familyId from query param as fallback (dev mode without middleware headers)
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) {
+      return NextResponse.json({ error: "Household ID required" }, { status: 400 });
     }
 
     const body = await request.json();
@@ -113,15 +110,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    // Get existing tag to check family and new name
-    const existingTag = rawDb.prepare(
-      `SELECT * FROM tags WHERE id = ? AND family_id = ?`
-    ).get(id, familyId) as any;
+    // Get existing tag to check household and new name
+    const existingTag = await rawDb.prepare(
+      `SELECT * FROM tags WHERE id = ? AND household_id = ?`
+    ).get(id, householdId) as any;
 
     if (!existingTag) {
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });
@@ -129,20 +126,20 @@ export async function PUT(request: NextRequest) {
 
     // Check for duplicate name (only if name is changing)
     if (name && name !== existingTag.name) {
-      const duplicate = rawDb.prepare(
-        `SELECT * FROM tags WHERE family_id = ? AND name = ? AND id != ? LIMIT 1`
-      ).get(familyId, name, id) as any;
+      const duplicate = await rawDb.prepare(
+        `SELECT * FROM tags WHERE household_id = ? AND name = ? AND id != ? LIMIT 1`
+      ).get(householdId, name, id) as any;
 
       if (duplicate) {
-        return NextResponse.json({ error: `Tag name "${name}" already exists in this family` }, { status: 409 });
+        return NextResponse.json({ error: `Tag name "${name}" already exists in this household` }, { status: 409 });
       }
     }
 
-    rawDb.prepare(
-      `UPDATE tags SET name = ?, color = ? WHERE id = ? AND family_id = ?`
-    ).run(name, color || null, id, familyId);
+    await rawDb.prepare(
+      `UPDATE tags SET name = ?, color = ? WHERE id = ? AND household_id = ?`
+    ).run(name, color || null, id, householdId);
 
-    const updated = rawDb.prepare(`SELECT * FROM tags WHERE id = ? AND family_id = ?`).get(id, familyId) as any;
+    const updated = await rawDb.prepare(`SELECT * FROM tags WHERE id = ? AND household_id = ?`).get(id, householdId) as any;
 
     return NextResponse.json(updated);
   } catch (err) {
@@ -158,14 +155,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
-    // Accept familyId from query param as fallback (dev mode without middleware headers)
-    const familyId = auth.familyId || request.nextUrl.searchParams.get("familyId");
-    if (!familyId) {
-      return NextResponse.json({ error: "Family ID required" }, { status: 400 });
+    const householdId = auth.householdId;
+    if (!householdId) {
+      return NextResponse.json({ error: "Household ID required" }, { status: 400 });
     }
 
     const body = await request.json();
@@ -175,18 +171,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const rawDb = getRawDb();
+    const rawDb = getDb();
     if (!rawDb) {
       return NextResponse.json({ error: "Database not available" }, { status: 503 });
     }
 
-    const owned = rawDb.prepare(`SELECT id FROM tags WHERE id = ? AND family_id = ?`).get(id, familyId);
+    const owned = await rawDb.prepare(`SELECT id FROM tags WHERE id = ? AND household_id = ?`).get(id, householdId);
     if (!owned) return NextResponse.json({ error: "Tag not found" }, { status: 404 });
 
     // Delete tag from junction tables first (no FK cascades in the SQLite schema)
-    rawDb.prepare(`DELETE FROM task_tags WHERE tag_id = ?`).run(id);
-    rawDb.prepare(`DELETE FROM slate_tags WHERE tag_id = ?`).run(id);
-    rawDb.prepare(`DELETE FROM tags WHERE id = ? AND family_id = ?`).run(id, familyId);
+    await rawDb.prepare(`DELETE FROM task_tags WHERE tag_id = ?`).run(id);
+    await rawDb.prepare(`DELETE FROM slate_tags WHERE tag_id = ?`).run(id);
+    await rawDb.prepare(`DELETE FROM tags WHERE id = ? AND household_id = ?`).run(id, householdId);
 
     return NextResponse.json({ success: true });
   } catch (err) {

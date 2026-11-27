@@ -28,12 +28,12 @@ interface ReviewItem {
   } | null;
 }
 
-async function getFamilyId(): Promise<string> {
+async function getHouseholdId(): Promise<string> {
   const res = await fetch("/api/auth/me", { credentials: "include" });
   if (!res.ok) throw new Error("Not authenticated");
   const data = await res.json();
-  if (!data.familyId) throw new Error("No family ID");
-  return data.familyId;
+  if (!data.householdId) throw new Error("No household ID");
+  return data.householdId;
 }
 
 export default function ReviewQueuePage() {
@@ -53,9 +53,9 @@ export default function ReviewQueuePage() {
 
   async function fetchReviews() {
     try {
-      const familyId = await getFamilyId();
+      const householdId = await getHouseholdId();
       const headers: Record<string, string> = {};
-      if (familyId) headers["x-family-id"] = familyId;
+      if (householdId) headers["x-household-id"] = householdId;
 
       const res = await fetch(`/api/reviews?status=${filter}`, {
         headers,
@@ -74,12 +74,12 @@ export default function ReviewQueuePage() {
 
   async function handleReviewAction(reviewId: string, newStatus: string) {
     try {
-      const familyId = await getFamilyId();
+      const householdId = await getHouseholdId();
       await fetch(`/api/reviews/${reviewId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...(familyId ? { "x-family-id": familyId } : {}),
+          ...(householdId ? { "x-household-id": householdId } : {}),
         },
         body: JSON.stringify({ status: newStatus, notes }),
       });

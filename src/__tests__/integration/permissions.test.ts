@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
-import { signInAndGetFamily, signInAsChild, createListFixture } from "./fixtures";
+import { resetDb } from "@/db";
+import { signInAndGetHousehold, signInAsChild, createListFixture } from "./fixtures";
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -32,9 +32,9 @@ const ADMIN_WRITES: Array<[Method, string, Record<string, string>?]> = [
   ["POST", "/api/teams"],
   ["PUT", "/api/teams"],
   ["DELETE", "/api/teams"],
-  ["POST", "/api/family/[familyId]/teams", { familyId: "own-family" }],
-  ["POST", "/api/family/[familyId]/teams/[teamId]/members", { familyId: "own-family", teamId: "missing-id" }],
-  ["DELETE", "/api/family/[familyId]/teams/[teamId]/members", { familyId: "own-family", teamId: "missing-id" }],
+  ["POST", "/api/household/[householdId]/teams", { householdId: "own-household" }],
+  ["POST", "/api/household/[householdId]/teams/[teamId]/members", { householdId: "own-household", teamId: "missing-id" }],
+  ["DELETE", "/api/household/[householdId]/teams/[teamId]/members", { householdId: "own-household", teamId: "missing-id" }],
 ];
 
 /** Reads a child is allowed to make (the chore UI depends on them). */
@@ -52,23 +52,23 @@ const CHILD_READS: Array<[string, Record<string, string>?]> = [
 
 async function parentAndChild() {
   const parent = new TestHarness();
-  const { familyId } = await signInAndGetFamily(parent);
-  const { harness: child, childId } = await signInAsChild(familyId);
-  return { parent, child, familyId, childId };
+  const { householdId } = await signInAndGetHousehold(parent);
+  const { harness: child, childId } = await signInAsChild(householdId);
+  return { parent, child, householdId, childId };
 }
 
 describe("Role permissions", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
   it("blocks a child from every admin write", async () => {
-    const { child, familyId } = await parentAndChild();
+    const { child, householdId } = await parentAndChild();
 
     const wrong: string[] = [];
     for (const [method, path, params] of ADMIN_WRITES) {
       const resolved = params
-        ? Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v === "own-family" ? familyId : v]))
+        ? Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v === "own-household" ? householdId : v]))
         : undefined;
       const res = await child.invokeHandler(path, method, method === "GET" ? undefined : {}, resolved);
       if (res.status !== 403 || !/Parent access required/.test(res.body?.error || "")) {
@@ -80,13 +80,13 @@ describe("Role permissions", () => {
   });
 
   it("does not block a parent from the same endpoints", async () => {
-    const { parent, familyId } = await parentAndChild();
+    const { parent, householdId } = await parentAndChild();
 
     // Fake ids make these 400/404; the point is that none of them is a 403.
     const wrong: string[] = [];
     for (const [method, path, params] of ADMIN_WRITES) {
       const resolved = params
-        ? Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v === "own-family" ? familyId : v]))
+        ? Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v === "own-household" ? householdId : v]))
         : undefined;
       const res = await parent.invokeHandler(path, method, method === "GET" ? undefined : {}, resolved);
       if (res.status === 403) wrong.push(`${method} ${path} -> 403 ${JSON.stringify(res.body)}`);
@@ -108,8 +108,8 @@ describe("Role permissions", () => {
   });
 
   it("lets a child complete a chore assigned to them", async () => {
-    const { parent, child, familyId, childId } = await parentAndChild();
-    const listId = createListFixture(familyId);
+    const { parent, child, householdId, childId } = await parentAndChild();
+    const listId = await createListFixture(householdId);
     const job = await parent.invokeHandler("/api/jobs", "POST", {
       listId, name: "Feed the cat", points: 5, assignedTo: childId,
     });

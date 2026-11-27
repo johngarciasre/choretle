@@ -1,23 +1,23 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb, getRawDb } from "@/db/drizzle";
-import { signInAndGetFamily, createListFixture } from "./fixtures";
+import { resetDb, getDb } from "@/db";
+import { signInAndGetHousehold, createListFixture } from "./fixtures";
 
 async function inviteFrom(harness: TestHarness): Promise<string> {
-  const res = await harness.invokeHandler("/api/family/join/generate-code", "POST", {});
+  const res = await harness.invokeHandler("/api/household/join/generate-code", "POST", {});
   expect(res.status).toBe(200);
   return res.body.invite.code;
 }
 
-function pointsOf(userId: string): number {
-  const row = getRawDb()!.prepare(`SELECT points_total FROM users WHERE id = ?`).get(userId) as any;
+async function pointsOf(userId: string): Promise<number> {
+  const row = await getDb()!.prepare(`SELECT points_total FROM memberships WHERE user_id = ?`).get(userId) as any;
   return row?.points_total ?? 0;
 }
 
-/** Parent family + invite code + a kid who signed up with it + a chore for that kid. */
+/** Parent household + invite code + a kid who signed up with it + a chore for that kid. */
 async function setupKidWithChore() {
   const parent = new TestHarness();
-  const { familyId } = await signInAndGetFamily(parent);
+  const { householdId } = await signInAndGetHousehold(parent);
   const code = await inviteFrom(parent);
 
   const kid = new TestHarness();
@@ -30,7 +30,7 @@ async function setupKidWithChore() {
   expect(signup.status).toBe(200);
   const kidId = signup.body.userId as string;
 
-  const listId = createListFixture(familyId);
+  const listId = await createListFixture(householdId);
   const created = await parent.invokeHandler("/api/jobs", "POST", {
     listId,
     name: "Feed the cat",
@@ -39,17 +39,17 @@ async function setupKidWithChore() {
   });
   expect(created.status).toBe(200);
 
-  return { parent, kid, familyId, kidId, jobId: created.body.id as string, code };
+  return { parent, kid, householdId, kidId, jobId: created.body.id as string, code };
 }
 
 describe("Kid flow", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
-  it("an invite code signs a new kid into the parent's family as a child", async () => {
+  it("an invite code signs a new kid into the parent's household as a child", async () => {
     const parent = new TestHarness();
-    const { familyId } = await signInAndGetFamily(parent);
+    const { householdId } = await signInAndGetHousehold(parent);
     const code = await inviteFrom(parent);
 
     const kid = new TestHarness();
@@ -62,11 +62,11 @@ describe("Kid flow", () => {
 
     expect(signup.status).toBe(200);
     expect(signup.body.role).toBe("child");
-    expect(signup.body.familyId).toBe(familyId);
+    expect(signup.body.householdId).toBe(householdId);
 
     const me = await kid.invokeHandler("/api/auth/me", "GET");
     expect(me.body.user.role).toBe("child");
-    expect(me.body.familyId).toBe(familyId);
+    expect(me.body.householdId).toBe(householdId);
 
     // The code is single use.
     const second = await new TestHarness().invokeHandler("/api/auth/signup", "POST", {
@@ -78,7 +78,7 @@ describe("Kid flow", () => {
     expect(second.status).toBe(400);
   });
 
-  it("rejects an unknown family code", async () => {
+  it("rejects an unknown household code", async () => {
     const res = await new TestHarness().invokeHandler("/api/auth/signup", "POST", {
       email: "kid@choretle.dev",
       password: "pw",
@@ -86,7 +86,7 @@ describe("Kid flow", () => {
       inviteCode: "made-up-code",
     });
     expect(res.status).toBe(400);
-    expect(getRawDb()!.prepare(`SELECT COUNT(*) as n FROM users`).get()).toEqual({ n: 0 });
+    expect(await getDb()!.prepare(`SELECT COUNT(*) as n FROM users`).get()).toEqual({ n: 0 });
   });
 
   it("an invited kid can read the chore detail, start it, and get paid once on done", async () => {
@@ -109,17 +109,17 @@ describe("Kid flow", () => {
     const done = await kid.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "done" }, { jobId });
     expect(done.status).toBe(200);
     expect(done.body.job.status).toBe("done");
-    expect(pointsOf(kidId)).toBe(5);
+    expect(await pointsOf(kidId)).toBe(5);
   });
 
   it("a chore needing review can only be closed by a parent", async () => {
     const { parent, kid, kidId, jobId } = await setupKidWithChore();
-    getRawDb()!.prepare(`UPDATE jobs SET verify_required = 1 WHERE id = ?`).run(jobId);
+    await getDb()!.prepare(`UPDATE jobs SET verify_required = 1 WHERE id = ?`).run(jobId);
 
     await kid.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "doing" }, { jobId });
     const kidDone = await kid.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "done" }, { jobId });
     expect(kidDone.status).toBe(403);
-    expect(pointsOf(kidId)).toBe(0);
+    expect(await pointsOf(kidId)).toBe(0);
 
     const submitted = await kid.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "under_review" }, { jobId });
     expect(submitted.status).toBe(200);
@@ -127,6 +127,6 @@ describe("Kid flow", () => {
     const approved = await parent.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "done" }, { jobId });
     expect(approved.status).toBe(200);
     expect(approved.body.job.reviewedAt).toBeTruthy();
-    expect(pointsOf(kidId)).toBe(5);
+    expect(await pointsOf(kidId)).toBe(5);
   });
 });

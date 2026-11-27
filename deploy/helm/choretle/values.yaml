@@ -1,0 +1,77 @@
+# Values for one droplet running k3s. The bundled Postgres is deliberate: a
+# single node with a local-path volume is the right shape at this size, and the
+# chart takes an external URL the moment that stops being true.
+
+replicaCount: 1
+
+image:
+  repository: choretle
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+domain: choretle.example.com
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+  tls:
+    enabled: true
+    secretName: choretle-tls
+    # Set to true once cert-manager and a ClusterIssuer exist.
+    certManager: false
+    clusterIssuer: letsencrypt-prod
+
+# Supabase is required for adult sign-in. Children use PINs and need nothing.
+supabase:
+  url: "https://your-project.supabase.co"
+  anonKey: "replace-with-anon-key"
+
+# Signs websudo elevation. Required; override in a values file you do not commit.
+websudoSecret: "replace-with-a-long-random-secret"
+
+# Point at a pre-created Secret with NEXT_PUBLIC_SUPABASE_ANON_KEY and
+# WEBSUDO_SECRET instead of putting them in values.
+existingSecret: ""
+
+postgres:
+  # true  -> this chart runs a single Postgres StatefulSet with a local-path PVC
+  # false -> set postgres.url to an external database and nothing is bundled
+  enabled: true
+  url: ""
+  image: postgres:17-alpine
+  username: choretle
+  password: choretle
+  database: choretle
+  storage: 8Gi
+  storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
+
+backup:
+  enabled: true
+  schedule: "0 3 * * *"
+  retentionDays: 14
+  # Object storage is the point; an empty value keeps dumps on the PVC only.
+  destination: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

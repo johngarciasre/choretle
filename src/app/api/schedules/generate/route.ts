@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { autoGenerateJobs } from "@/lib/slateAutoGen";
 import { error } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, canAuthor } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    if (auth.role !== "parent") {
+    if (!canAuthor(auth)) {
       return NextResponse.json({ error: "Parent access required" }, { status: 403 });
     }
 
@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid date" }, { status: 400 });
     }
 
-    // The family always comes from the session — never from the request body.
-    const jobs = await autoGenerateJobs(auth.familyId, targetDate);
+    // The household always comes from the session — never from the request body.
+    const jobs = await autoGenerateJobs(auth.householdId, targetDate);
 
     return NextResponse.json({ jobs, count: jobs.length });
   } catch (err) {

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestHarness } from "./harness";
-import { resetDb } from "@/db/drizzle";
+import { resetDb } from "@/db";
 
 describe("Auth Flow Integration", () => {
-  beforeEach(() => {
-    resetDb();
+  beforeEach(async () => {
+    await resetDb();
   });
 
   it("POST /api/auth/signin creates dev session cookie", async () => {
@@ -25,10 +25,10 @@ describe("Auth Flow Integration", () => {
     expect(res.body.role).toBe("parent");
   });
 
-  it("signing up without an invite makes you a parent of a new family", async () => {
+  it("signing up without an invite makes you a parent of a new household", async () => {
     const harness = new TestHarness();
     // Reset DB for clean state
-    resetDb();
+    await resetDb();
 
     const res = await harness.invokeHandler("/api/auth/signup", "POST", {
       email: "first@choretle.dev",
@@ -38,11 +38,11 @@ describe("Auth Flow Integration", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.role).toBe("parent");
-    expect(res.body.familyId).toBeTruthy();
+    expect(res.body.householdId).toBeTruthy();
 
     const me = await harness.invokeHandler("/api/auth/me", "GET");
     expect(me.body.user.role).toBe("parent");
-    expect(me.body.familyId).toBe(res.body.familyId);
+    expect(me.body.householdId).toBe(res.body.householdId);
   });
 
   it("GET /api/auth/me without a cookie reports unauthenticated", async () => {
@@ -56,7 +56,7 @@ describe("Auth Flow Integration", () => {
   it("GET /api/auth/me with valid cookie returns user info", async () => {
     const harness = new TestHarness();
     // Reset DB for clean state to ensure first user is parent
-    resetDb();
+    await resetDb();
     
     await harness.signIn("admin@choretle.dev");
 
@@ -70,7 +70,7 @@ describe("Auth Flow Integration", () => {
     const harness = new TestHarness();
 
     // Sign in first
-    resetDb();
+    await resetDb();
     await harness.signIn("admin@choretle.dev");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
 
@@ -85,10 +85,10 @@ describe("Auth Flow Integration", () => {
     expect(protectedRes.body.authenticated).toBe(false);
   });
 
-  it("each new account gets its own family instead of joining the first one", async () => {
+  it("each new account gets its own household instead of joining the first one", async () => {
     const harness = new TestHarness();
 
-    resetDb();
+    await resetDb();
     const first = await harness.signIn("first@choretle.dev");
     expect(first.body.role).toBe("parent");
     expect(harness.getCookieJar().get("dev-session")).toBeTruthy();
@@ -96,13 +96,13 @@ describe("Auth Flow Integration", () => {
     const second = await harness.signIn("second@choretle.dev");
     expect(second.status).toBe(200);
     expect(second.body.role).toBe("parent");
-    expect(second.body.familyId).toBeTruthy();
-    expect(second.body.familyId).not.toBe(first.body.familyId);
+    expect(second.body.householdId).toBeTruthy();
+    expect(second.body.householdId).not.toBe(first.body.householdId);
   });
 
   it("GET /api/auth/signup returns session info when logged in", async () => {
     const harness = new TestHarness();
-    resetDb();
+    await resetDb();
     await harness.signIn("admin@choretle.dev");
 
     const res = await harness.invokeHandler("/api/auth/signup", "GET");
