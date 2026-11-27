@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { canApprove, verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ reviewId: string }> }) {
   try {
@@ -29,17 +29,25 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    // Approving is parent/helper work, and never from a PIN session.
+    if (!canApprove(auth)) {
+      return NextResponse.json({ error: "Parent or helper access required" }, { status: 403 });
+    }
     const reviewId = (await params).reviewId;
     const body = await request.json();
-    const { status, notes, approvedBy } = body;
-    if (!status && !notes && !approvedBy) return NextResponse.json({ error: "At least one field to update is required" }, { status: 400 });
+    const { status, notes } = body;
+    if (!status && notes === undefined) return NextResponse.json({ error: "At least one field to update is required" }, { status: 400 });
+    if (status && !["pending", "approved", "rejected"].includes(status)) {
+      return NextResponse.json({ error: "status must be pending, approved or rejected" }, { status: 400 });
+    }
 
     const now = new Date().toISOString();
     const fields: string[] = ["updated_at = ?"];
     const values: any[] = [now];
     if (status) { fields.push("status = ?"); values.push(status); }
     if (notes !== undefined) { fields.push("notes = ?"); values.push(notes); }
-    if (approvedBy) { fields.push("approved_by = ?"); values.push(approvedBy); }
+    // The approver is the session, never a client-supplied id.
+    if (status === "approved") { fields.push("approved_by = ?", "reviewer_id = ?"); values.push(auth.userId, auth.userId); }
     values.push(reviewId, auth.householdId);
     await rawDb.prepare(`UPDATE reviews SET ${fields.join(", ")} WHERE id = ? AND household_id = ?`).run(...values);
 
@@ -59,6 +67,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const rawDb = getDb();
     if (!rawDb) return NextResponse.json({ error: "Database not available" }, { status: 503 });
+    // Approving is parent/helper work, and never from a PIN session.
+    if (!canApprove(auth)) {
+      return NextResponse.json({ error: "Parent or helper access required" }, { status: 403 });
+    }
     const reviewId = (await params).reviewId;
     const result = await rawDb.prepare(`DELETE FROM reviews WHERE id = ? AND household_id = ?`).run(reviewId, auth.householdId);
     if (result.changes === 0) return NextResponse.json({ error: "Review not found" }, { status: 404 });

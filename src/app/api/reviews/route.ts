@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { error } from "@/lib/logger.server";
-import { verifyAuth } from "@/lib/auth";
+import { canApprove, verifyAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,8 +36,17 @@ export async function POST(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     const householdId = auth.householdId;
+    // Approving is parent/helper work, and never from a PIN session.
+    if (!canApprove(auth)) {
+      return NextResponse.json({ error: "Parent or helper access required" }, { status: 403 });
+    }
     const body = await request.json();
-    const { jobId, reviewerId, notes, status } = body;
+    const { jobId, reviewerId, notes } = body;
+    const allowedStatuses = ["pending", "approved", "rejected"];
+    const status = typeof body.status === "string" ? body.status : "pending";
+    if (!allowedStatuses.includes(status)) {
+      return NextResponse.json({ error: "status must be pending, approved or rejected" }, { status: 400 });
+    }
     if (!jobId) return NextResponse.json({ error: "jobId is required" }, { status: 400 });
 
     const rawDb = getDb();

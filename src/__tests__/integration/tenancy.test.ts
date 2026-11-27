@@ -185,6 +185,84 @@ describe("Household tenancy", () => {
     expect(fallback.body.householdId).toBe(householdA);
   });
 
+  it("only parents and helpers can record or change a review", async () => {
+    const parent = new TestHarness();
+    const { householdId } = await signInAndGetHousehold(parent);
+    const kidId = await addHouseholdMember(householdId, "child", "Review Kid");
+    const helperId = await addHouseholdMember(householdId, "helper", "Review Helper");
+
+    const listId = await createListFixture(householdId);
+    const job = await parent.invokeHandler("/api/jobs", "POST", {
+      listId,
+      name: "Bins out",
+      points: 4,
+      assignedTo: kidId,
+    });
+    expect(job.status).toBe(200);
+
+    const signInAs = async (userId: string) => {
+      const row = (await getDb().prepare(`select email from users where id = ?`).get(userId)) as {
+        email: string;
+      };
+      const harness = new TestHarness();
+      const res = await harness.invokeHandler("/api/auth/signin", "POST", {
+        email: row.email,
+        password: "test",
+      });
+      expect(res.status).toBe(200);
+      return harness;
+    };
+
+    const kid = await signInAs(kidId);
+    const helper = await signInAs(helperId);
+
+    // A child cannot fabricate an approval.
+    const kidCreates = await kid.invokeHandler("/api/reviews", "POST", {
+      jobId: job.body.id,
+      status: "approved",
+    });
+    expect(kidCreates.status).toBe(403);
+
+    const created = await parent.invokeHandler("/api/reviews", "POST", {
+      jobId: job.body.id,
+      notes: "Have a look",
+    });
+    expect(created.status).toBe(200);
+    expect(created.body.status).toBe("pending");
+
+    const kidUpdates = await kid.invokeHandler("/api/reviews/[reviewId]", "PUT", { status: "approved" }, {
+      reviewId: created.body.id,
+    });
+    expect(kidUpdates.status).toBe(403);
+
+    const kidDeletes = await kid.invokeHandler(
+      "/api/reviews/[reviewId]",
+      "DELETE",
+      undefined,
+      { reviewId: created.body.id },
+    );
+    expect(kidDeletes.status).toBe(403);
+
+    // A helper approves, and the approver is the session, not a supplied id.
+    const approved = await helper.invokeHandler(
+      "/api/reviews/[reviewId]",
+      "PUT",
+      { status: "approved", approvedBy: "someone-else" },
+      { reviewId: created.body.id },
+    );
+    expect(approved.status).toBe(200);
+    expect(approved.body.status).toBe("approved");
+    expect(approved.body.approved_by).toBe(helperId);
+
+    const bogus = await parent.invokeHandler(
+      "/api/reviews/[reviewId]",
+      "PUT",
+      { status: "nonsense" },
+      { reviewId: created.body.id },
+    );
+    expect(bogus.status).toBe(400);
+  });
+
   it("never selects every column from users (pin_hash must not leak)", () => {
     const offenders: string[] = [];
     const walk = (dir: string) => {
