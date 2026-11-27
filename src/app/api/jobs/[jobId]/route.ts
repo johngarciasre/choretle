@@ -120,9 +120,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (!jobList || jobList.household_id !== authResult.householdId)
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
 
+    // A PIN session only touches its own chores; the board is the family-wide read.
+    if (isRestrictedSession(authResult) && job.assigned_to && job.assigned_to !== authResult.userId) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
     // A reassignment target must be a member of the same household.
     if (assignedTo && !await rawDb.prepare(`SELECT user_id FROM memberships WHERE user_id = ? AND household_id = ?`).get(assignedTo, authResult.householdId))
       return NextResponse.json({ error: "Assignee not found" }, { status: 404 });
+
+    // Moving a chore between people is parent work.
+    if (assignedTo && assignedTo !== job.assigned_to && !canAuthor(authResult)) {
+      return NextResponse.json({ error: "Only a parent can reassign a chore" }, { status: 403 });
+    }
 
     const now = new Date().toISOString();
 

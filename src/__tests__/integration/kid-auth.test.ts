@@ -285,6 +285,70 @@ describe("Kid and picker sessions", () => {
     expect(res.status).toBe(404);
   });
 
+  it("does not let one child move or complete another child's chore", async () => {
+    const parent = new TestHarness();
+    const { householdId } = await signInAndGetHousehold(parent);
+    const emma = await createKid(householdId, "Emma Ownerless", ["smile", "rocket", "star", "cat"]);
+    const greg = await createKid(householdId, "Greg Owner", ["dog", "moon", "pizza", "bike"]);
+    const listId = await createListFixture(householdId);
+
+    const job = await parent.invokeHandler("/api/jobs", "POST", {
+      listId,
+      name: "Greg's job",
+      points: 5,
+      assignedTo: greg,
+    });
+    expect(job.status).toBe(200);
+
+    const emmaSession = new TestHarness();
+    await giveSession(emmaSession, {
+      kind: "kid",
+      householdId,
+      membershipId: await membershipIdOf(emma, householdId),
+      mode: "own",
+    });
+
+    const touched = await emmaSession.invokeHandler("/api/jobs/[jobId]", "PUT", { status: "doing" }, {
+      jobId: job.body.id,
+    });
+    expect(touched.status).toBe(404);
+
+    const stole = await emmaSession.invokeHandler(
+      "/api/jobs/[jobId]",
+      "PUT",
+      { status: "doing", assignedTo: emma },
+      { jobId: job.body.id },
+    );
+    expect(stole.status).toBe(404);
+
+    // Even the owner cannot hand a chore to someone else.
+    const gregSession = new TestHarness();
+    await giveSession(gregSession, {
+      kind: "kid",
+      householdId,
+      membershipId: await membershipIdOf(greg, householdId),
+      mode: "own",
+    });
+    const reassigned = await gregSession.invokeHandler(
+      "/api/jobs/[jobId]",
+      "PUT",
+      { status: "doing", assignedTo: emma },
+      { jobId: job.body.id },
+    );
+    expect(reassigned.status).toBe(403);
+
+    // The open grab pool still works for a child.
+    const open = await parent.invokeHandler("/api/jobs", "POST", { listId, name: "Open job", points: 2 });
+    expect(open.status).toBe(200);
+    const claimed = await emmaSession.invokeHandler(
+      "/api/jobs/[jobId]",
+      "PUT",
+      { claim: true },
+      { jobId: open.body.id },
+    );
+    expect(claimed.status).toBe(200);
+  });
+
   it("hides adults email addresses from a PIN session", async () => {
     const parent = new TestHarness();
     const { householdId } = await signInAndGetHousehold(parent);
