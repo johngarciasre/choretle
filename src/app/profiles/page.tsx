@@ -164,7 +164,7 @@ export default function ProfilesPage() {
                   onClick={() => tapEmoji(entry.id)}
                   disabled={busy}
                   aria-label={entry.label}
-                  className="flex aspect-square items-center justify-center rounded-2xl bg-white text-2xl shadow-sm hover:bg-white/70 focus:outline-none focus-visible:ring-4 focus-visible:ring-coral/40 disabled:opacity-50"
+                  className="flex aspect-square items-center justify-center rounded-2xl bg-white text-4xl leading-none shadow-sm hover:bg-white/70 focus:outline-none focus-visible:ring-4 focus-visible:ring-coral/40 disabled:opacity-50 sm:text-5xl"
                 >
                   {entry.glyph}
                 </button>
